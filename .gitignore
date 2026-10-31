@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.idea/
+
+# Saved campaigns: characters, NPCs, mission logs, generated images
+campaigns/
+
+# Local copies of rulebooks and notes
+docs/rules/
