@@ -6,6 +6,10 @@ A local web app that runs Shadowrun 6th Edition sessions with Claude as the Game
 - Dice can be rolled physically and reported in the app, or rolled in the app with an animation.
 - Key story beats get a generated scene image in a hand-painted 1980s arcade-animation style.
 
+## Rules
+
+The numbers the engine plays by are in `server/src/data/sr6/ruleset.json`. Edit that file to change a rule; it is checked each time the rules load. Its `unverified` list names the rules that came from conflicting or secondary sources, so check those against your copy of the core rulebook.
+
 ## Development
 
 Requires Node 24+ and the `claude` CLI logged in to your Claude account.
