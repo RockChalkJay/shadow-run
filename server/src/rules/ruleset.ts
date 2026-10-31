@@ -23,8 +23,10 @@ export const Ruleset = z.object({
     baseMinorActions: z.number().int().min(0),
     minorActionsPerDie: z.number().int().min(0),
   }),
-  /** Where each rule is in the core rulebook PDF, so any value can be checked. */
+  /** Where each setting is in the core rulebook PDF, keyed by the setting's path, so any value can be checked. */
   pages: z.record(z.string(), z.string()),
+  /** Rules the engine applies in code rather than as a setting, with their rulebook PDF pages. */
+  rulesInCode: z.record(z.string(), z.string()),
   /** Rulings the engine makes where the book is silent. */
   unverified: z.array(z.string()),
 });

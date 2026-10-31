@@ -16,10 +16,14 @@
     "conditionMonitor.overflowMultiplier": "122",
     "woundModifier.boxesPerRow": "39",
     "initiative.maxDice": "40",
-    "initiative.actions": "41",
-    "fixed in code: ties go to the attacker": "36, 106",
-    "fixed in code: damage resistance rolls Body only": "106",
-    "fixed in code: initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107"
+    "initiative.majorActions": "41",
+    "initiative.baseMinorActions": "41",
+    "initiative.minorActionsPerDie": "41"
+  },
+  "rulesInCode": {
+    "ties go to the attacker": "36, 106",
+    "damage resistance rolls Body only": "106",
+    "initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107"
   },
   "unverified": [
     "exploding 6s: the extra dice can hit, but they are not counted as 1s and not counted in the pool when checking for a glitch",

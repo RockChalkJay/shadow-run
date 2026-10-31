@@ -13,10 +13,19 @@ describe("the shipped ruleset", () => {
     expect(defaultRuleset.edge).toEqual({ max: 7, maxGainPerRound: 2, ratingGapForEdge: 4 });
   });
 
-  it("says where each setting is in the rulebook", () => {
-    for (const key of ["hitMinimum", "glitch.rule", "edge.max", "conditionMonitor.overflowMultiplier", "woundModifier.boxesPerRow"]) {
-      expect(defaultRuleset.pages[key], key).toMatch(/^\d/);
-    }
+  it("cites a rulebook page for every setting, and only for settings", () => {
+    const { pages, rulesInCode, unverified, ...settings } = defaultRuleset;
+    const paths = (value: unknown, prefix = ""): string[] =>
+      typeof value === "object" && value !== null
+        ? Object.entries(value).flatMap(([key, inner]) => paths(inner, prefix ? `${prefix}.${key}` : key))
+        : [prefix];
+    expect(Object.keys(pages).sort()).toEqual(paths(settings).sort());
+    for (const [setting, page] of Object.entries(pages)) expect(page, setting).toMatch(/^\d+(, \d+)*$/);
+  });
+
+  it("cites a page for each rule it applies in code", () => {
+    expect(Object.keys(defaultRuleset.rulesInCode).length).toBeGreaterThan(0);
+    for (const [rule, page] of Object.entries(defaultRuleset.rulesInCode)) expect(page, rule).toMatch(/^\d+(, \d+)*$/);
   });
 
   it("lists only rulings the book is silent on", () => {

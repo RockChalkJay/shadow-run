@@ -15,6 +15,9 @@ export interface ConditionMonitor {
 }
 
 export function newMonitor(body: number, willpower: number, rules: Ruleset = defaultRuleset): ConditionMonitor {
+  for (const [name, value] of [["Body", body], ["Willpower", willpower]] as const) {
+    if (!Number.isInteger(value) || value < 1) throw new RangeError(`${name} must be a whole number of 1 or more, got ${value}`);
+  }
   const { baseBoxes, overflowMultiplier } = rules.conditionMonitor;
   return {
     physicalBoxes: baseBoxes + Math.ceil(body / 2),

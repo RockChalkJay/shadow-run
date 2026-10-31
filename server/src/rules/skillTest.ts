@@ -18,7 +18,10 @@ export interface OpposedTestOutcome {
   netHits: number;
 }
 
-/** The roller against an opponent's roll. A tie goes to the attacker, the one acting. */
+/**
+ * The roller against an opponent's roll. A tie typically goes to the attacker, the one acting,
+ * with no net hits. Where an effect needs net hits, a tie gives none, so check `netHits`.
+ */
 export function opposedTest(attacker: RollResult, defender: RollResult): OpposedTestOutcome {
   return attacker.hits >= defender.hits
     ? { winner: "attacker", netHits: attacker.hits - defender.hits }

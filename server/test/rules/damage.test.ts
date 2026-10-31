@@ -14,6 +14,17 @@ describe("newMonitor", () => {
     expect(newMonitor(5, 3)).toMatchObject({ physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10 });
     expect(newMonitor(4, 4)).toMatchObject({ physicalBoxes: 10, stunBoxes: 10, overflowBoxes: 8 });
   });
+
+  it.each([
+    ["Body 0", 0, 3],
+    ["a missing Body", NaN, 3],
+    ["a fractional Body", 1.5, 3],
+    ["a negative Body", -2, 3],
+    ["Willpower 0", 3, 0],
+    ["a missing Willpower", 3, NaN],
+  ])("refuses %s, which would give a character who is dead already or can never be hurt", (_name, body, will) => {
+    expect(() => newMonitor(body, will)).toThrow(RangeError);
+  });
 });
 
 describe("applyDamage", () => {
