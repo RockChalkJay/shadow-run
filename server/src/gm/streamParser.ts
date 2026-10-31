@@ -21,7 +21,7 @@ export function parseStreamLine(line: string): GmEvent[] {
         ? [{ type: "session", sessionId: msg.session_id }]
         : [];
     case "stream_event":
-      return textDelta(msg);
+      return [...textBlockStart(msg), ...textDelta(msg)];
     case "assistant":
       return toolUses(msg);
     case "rate_limit_event":
@@ -31,6 +31,15 @@ export function parseStreamLine(line: string): GmEvent[] {
     default:
       return [];
   }
+}
+
+function textBlockStart(msg: Json): GmEvent[] {
+  const { event } = msg;
+  if (msg.parent_tool_use_id != null || !isRecord(event)) return [];
+  const block = event.content_block;
+  return event.type === "content_block_start" && isRecord(block) && block.type === "text"
+    ? [{ type: "text_block_start" }]
+    : [];
 }
 
 // Text is taken from the streamed deltas only; the final `assistant` message repeats it.

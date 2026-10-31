@@ -29,12 +29,26 @@ describe("GM MCP server", () => {
     rolls = [];
     server = await startGmMcpServer({ onRollRequest: (r) => rolls.push(r) });
     client = new Client({ name: "test", version: "0.0.0" });
-    await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: server.headers } }),
+    );
   });
 
   afterEach(async () => {
     await client.close();
     await server.close();
+  });
+
+  it("turns away requests that lack the secret", async () => {
+    const post = (headers: Record<string, string>) =>
+      fetch(server.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+    expect((await post({})).status).toBe(401);
+    expect((await post({ authorization: "Bearer not-the-secret" })).status).toBe(401);
+    expect((await post(server.headers)).status).toBe(200);
   });
 
   it("offers request_roll", async () => {

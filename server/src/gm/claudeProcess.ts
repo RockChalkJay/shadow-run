@@ -5,7 +5,10 @@ import { parseStreamLine } from "./streamParser.js";
 
 export interface GmTurnOptions {
   prompt: string;
-  /** Isolated working directory, so no project CLAUDE.md or settings leak into the GM. */
+  /**
+   * Directory the process runs in. It keeps a project CLAUDE.md and settings out of the GM,
+   * but not the account context Claude Code adds itself, such as the user's email.
+   */
   cwd: string;
   /** Resume this session; omit to start a new one. */
   sessionId?: string;
@@ -15,10 +18,21 @@ export interface GmTurnOptions {
   tools?: string[];
   /** Tools that run without a permission prompt, e.g. `mcp__gm__request_roll`. */
   allowedTools?: string[];
-  mcpServers?: Record<string, { type: "http"; url: string }>;
+  mcpServers?: Record<string, { type: "http"; url: string; headers?: Record<string, string> }>;
   claudeBin?: string;
   signal?: AbortSignal;
 }
+
+// Variables that would send a GM turn somewhere other than the user's Claude login.
+const AUTH_OVERRIDES = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+];
+
+const CANCELLED: GmEvent = { type: "error", message: "The GM turn was cancelled." };
 
 export function buildArgs(opts: GmTurnOptions): string[] {
   const args = [
@@ -42,11 +56,17 @@ export function buildArgs(opts: GmTurnOptions): string[] {
 
 /**
  * Runs one GM turn as a `claude -p` process and streams its events. Always ends with
- * exactly one `done` or `error` event.
+ * exactly one `done` or `error` event, unless the caller stops iterating first, in which
+ * case the process is killed.
  */
 export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
-  // An API key in the environment would make claude bill the API instead of the user's login.
-  const { ANTHROPIC_API_KEY: _ignored, ...env } = process.env;
+  if (opts.signal?.aborted) {
+    yield CANCELLED;
+    return;
+  }
+
+  const env = { ...process.env };
+  for (const name of AUTH_OVERRIDES) delete env[name];
 
   const child = spawn(opts.claudeBin ?? "claude", buildArgs(opts), {
     cwd: opts.cwd,
@@ -62,30 +82,37 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
     child.once("error", (spawnError) => resolve({ code: null, spawnError }));
     child.once("close", (code) => resolve({ code }));
   });
-  opts.signal?.addEventListener("abort", () => child.kill(), { once: true });
+  const onAbort = () => child.kill();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
 
   // The prompt goes over stdin: the variadic flags would otherwise swallow a trailing argument.
   child.stdin.on("error", () => {});
   child.stdin.end(opts.prompt);
 
-  let finished = false;
-  for await (const line of createInterface({ input: child.stdout })) {
-    for (const event of parseStreamLine(line)) {
-      if (event.type === "done" || event.type === "error") finished = true;
-      yield event;
+  try {
+    let finished = false;
+    for await (const line of createInterface({ input: child.stdout })) {
+      for (const event of parseStreamLine(line)) {
+        if (event.type === "done" || event.type === "error") finished = true;
+        yield event;
+      }
     }
-  }
 
-  const { code, spawnError } = await exit;
-  if (finished) return;
-  if (opts.signal?.aborted) {
-    yield { type: "error", message: "The GM turn was cancelled." };
-  } else if (spawnError) {
-    yield { type: "error", message: `Could not start claude: ${spawnError.message}` };
-  } else {
-    yield {
-      type: "error",
-      message: `claude exited with code ${code} before finishing the turn. ${stderr.trim()}`.trim(),
-    };
+    const { code, spawnError } = await exit;
+    if (finished) return;
+    if (opts.signal?.aborted) {
+      yield CANCELLED;
+    } else if (spawnError) {
+      yield { type: "error", message: `Could not start claude: ${spawnError.message}` };
+    } else {
+      yield {
+        type: "error",
+        message: `claude exited with code ${code} before finishing the turn. ${stderr.trim()}`.trim(),
+      };
+    }
+  } finally {
+    opts.signal?.removeEventListener("abort", onAbort);
+    // A caller that stops iterating early must not leave the turn running and spending usage.
+    if (child.exitCode === null && child.signalCode === null) child.kill();
   }
 }

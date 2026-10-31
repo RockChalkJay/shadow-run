@@ -11,6 +11,7 @@ describe("parseStreamLine", () => {
   it("maps a recorded text turn to session, text, usage and done", () => {
     expect(parseAll(fixture("text-turn.jsonl"))).toEqual([
       { type: "session", sessionId: "c00a4cb3-107c-4ef9-a0df-8c3d44da04c3" },
+      { type: "text_block_start" },
       { type: "text", text: "ready" },
       { type: "rate_limit", fiveHourUtilization: 0.08, resetsAt: 1793437800 },
       {
@@ -33,6 +34,18 @@ describe("parseStreamLine", () => {
       { type: "text", text: "Neon " },
       { type: "text", text: "rain." },
     ]);
+  });
+
+  it("marks where each block of narration begins, but not tool or subagent blocks", () => {
+    const start = (contentBlock: object, parent: string | null = null) =>
+      JSON.stringify({
+        type: "stream_event",
+        parent_tool_use_id: parent,
+        event: { type: "content_block_start", index: 0, content_block: contentBlock },
+      });
+    expect(parseStreamLine(start({ type: "text", text: "" }))).toEqual([{ type: "text_block_start" }]);
+    expect(parseStreamLine(start({ type: "tool_use", id: "toolu_1", name: "x", input: {} }))).toEqual([]);
+    expect(parseStreamLine(start({ type: "text", text: "" }, "toolu_9"))).toEqual([]);
   });
 
   it("reports tool calls from the assistant message and skips its text", () => {

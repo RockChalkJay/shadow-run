@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,22 @@ const collect = async (opts: GmTurnOptions) => {
   const events: GmEvent[] = [];
   for await (const event of runGmTurn(opts)) events.push(event);
   return events;
+};
+
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const exitsWithin = async (pid: number, ms: number) => {
+  for (const end = Date.now() + ms; isAlive(pid) && Date.now() < end; ) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return !isAlive(pid);
 };
 
 describe("buildArgs", () => {
@@ -71,7 +88,7 @@ describe("runGmTurn", () => {
 
   it("streams a recorded turn and finishes with done", async () => {
     const events = await turn();
-    expect(events.map((e) => e.type)).toEqual(["session", "text", "rate_limit", "done"]);
+    expect(events.map((e) => e.type)).toEqual(["session", "text_block_start", "text", "rate_limit", "done"]);
   });
 
   it("sends the prompt over stdin", async () => {
@@ -81,11 +98,39 @@ describe("runGmTurn", () => {
     expect(captured.args).toContain("-p");
   });
 
-  it("keeps ANTHROPIC_API_KEY away from the child so the login is used", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-should-not-leak";
+  it("keeps credentials and provider switches away from the child so the login is used", async () => {
+    const overrides = [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_USE_FOUNDRY",
+    ];
+    for (const name of overrides) process.env[name] = "1";
+    process.env.ANTHROPIC_BASE_URL = "http://gateway.test";
     await turn();
     const captured = JSON.parse(await readFile(capturePath, "utf8"));
-    expect(captured.apiKeyPresent).toBe(false);
+    for (const name of overrides) expect(captured.envKeys).not.toContain(name);
+    expect(captured.envKeys).toContain("ANTHROPIC_BASE_URL");
+  });
+
+  it("kills the process when the caller stops iterating early", async () => {
+    process.env.FAKE_CLAUDE_HANG = "1";
+    for await (const _event of runGmTurn({ prompt: "go", cwd: dir, claudeBin: FAKE_CLAUDE })) break;
+    const { pid } = JSON.parse(await readFile(capturePath, "utf8"));
+    expect(await exitsWithin(pid, 3000)).toBe(true);
+  });
+
+  it("does not start the process when the signal is already aborted", async () => {
+    const events = await turn({ signal: AbortSignal.abort() });
+    expect(events).toEqual([{ type: "error", message: "The GM turn was cancelled." }]);
+    await expect(readFile(capturePath, "utf8")).rejects.toThrow();
+  });
+
+  it("leaves no abort listener behind once the turn is over", async () => {
+    const controller = new AbortController();
+    await turn({ signal: controller.signal });
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   it("reports an error when claude cannot be started", async () => {

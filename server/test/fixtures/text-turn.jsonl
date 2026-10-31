@@ -1,4 +1,5 @@
 {"type":"system","subtype":"init","session_id":"c00a4cb3-107c-4ef9-a0df-8c3d44da04c3","model":"claude-opus-5-5"}
+{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}},"session_id":"c00a4cb3-107c-4ef9-a0df-8c3d44da04c3","parent_tool_use_id":null}
 {"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ready"}},"session_id":"c00a4cb3-107c-4ef9-a0df-8c3d44da04c3","parent_tool_use_id":null}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ready"}]},"session_id":"c00a4cb3-107c-4ef9-a0df-8c3d44da04c3","parent_tool_use_id":null}
 {"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.08,"resetsAt":1793437800},"seven_day":{"utilization":0.01,"resetsAt":1794013200}}},"session_id":"c00a4cb3-107c-4ef9-a0df-8c3d44da04c3"}

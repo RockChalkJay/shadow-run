@@ -2,7 +2,8 @@
 // Stand-in for the `claude` CLI in tests. Replays a recorded stream so the suite never
 // spends real quota. Configure through the environment:
 //   FAKE_CLAUDE_FIXTURE   path of a .jsonl file to print on stdout
-//   FAKE_CLAUDE_CAPTURE   path to write { args, stdin, apiKeyPresent } as JSON
+//   FAKE_CLAUDE_CAPTURE   path to write { args, stdin, pid, envKeys } as JSON, where envKeys
+//                         lists the ANTHROPIC_* and CLAUDE_CODE_USE_* variables it was given
 //   FAKE_CLAUDE_EXIT      exit code (default 0)
 //   FAKE_CLAUDE_STDERR    text to print on stderr
 //   FAKE_CLAUDE_HANG      if set, keep running after printing, until killed
@@ -18,7 +19,12 @@ const { FAKE_CLAUDE_FIXTURE, FAKE_CLAUDE_CAPTURE, FAKE_CLAUDE_EXIT, FAKE_CLAUDE_
 if (FAKE_CLAUDE_CAPTURE) {
   writeFileSync(
     FAKE_CLAUDE_CAPTURE,
-    JSON.stringify({ args: process.argv.slice(2), stdin, apiKeyPresent: "ANTHROPIC_API_KEY" in process.env }),
+    JSON.stringify({
+      args: process.argv.slice(2),
+      stdin,
+      pid: process.pid,
+      envKeys: Object.keys(process.env).filter((k) => /^(ANTHROPIC_|CLAUDE_CODE_USE_)/.test(k)),
+    }),
   );
 }
 if (FAKE_CLAUDE_FIXTURE) process.stdout.write(readFileSync(FAKE_CLAUDE_FIXTURE, "utf8"));

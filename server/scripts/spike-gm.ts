@@ -4,9 +4,9 @@
 //   npm run spike:gm            run against the real CLI (uses a little of your Claude quota)
 //   SPIKE_SAVE=dir npm run ...  also write each turn's raw events to dir/turn-N.json
 
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { GmEvent, RollRequest } from "@shadow-run/shared";
 import { runGmTurn, type GmTurnOptions } from "../src/gm/claudeProcess.js";
 import { GM_MCP_NAME, startGmMcpServer } from "../src/gm/mcpServer.js";
@@ -28,7 +28,8 @@ async function playTurn(
   const events: GmEvent[] = [];
   for await (const event of runGmTurn({ ...base, prompt })) {
     events.push(event);
-    if (event.type === "text") process.stdout.write(event.text);
+    if (event.type === "text_block_start") process.stdout.write("\n");
+    else if (event.type === "text") process.stdout.write(event.text);
     else if (event.type === "tool_use") console.log(`\n[tool_use] ${event.name}`);
     else if (event.type === "rate_limit") {
       console.log(`\n[usage] five-hour window ${(event.fiveHourUtilization * 100).toFixed(0)}% used`);
@@ -42,7 +43,9 @@ async function playTurn(
 async function main() {
   const rolls: RollRequest[] = [];
   const mcp = await startGmMcpServer({ onRollRequest: (r) => rolls.push(r) });
-  const cwd = await mkdtemp(join(tmpdir(), "shadow-run-gm-"));
+  // A fixed directory, so every run lands in one Claude Code project entry rather than a new one each time.
+  const cwd = fileURLToPath(new URL("../../campaigns/.gm-spike", import.meta.url));
+  await mkdir(cwd, { recursive: true });
   const saveDir = process.env.SPIKE_SAVE;
   if (saveDir) await mkdir(saveDir, { recursive: true });
 
@@ -51,7 +54,7 @@ async function main() {
     model: "sonnet",
     systemPrompt: SYSTEM_PROMPT,
     tools: [],
-    mcpServers: { [GM_MCP_NAME]: { type: "http" as const, url: mcp.url } },
+    mcpServers: { [GM_MCP_NAME]: { type: "http" as const, url: mcp.url, headers: mcp.headers } },
     allowedTools: [`mcp__${GM_MCP_NAME}__request_roll`],
   };
 

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -43,12 +43,28 @@ function buildServer(handlers: GmToolHandlers): McpServer {
 
 export interface RunningMcpServer {
   url: string;
+  /** Sent with every request; without them the server answers 401. */
+  headers: Record<string, string>;
   close(): Promise<void>;
 }
 
-/** Serves the GM's tools on a local port. Stateless: each request gets its own server instance. */
+/**
+ * Serves the GM's tools on a local port, guarded by a secret that only this process and the
+ * GM it launches know, so other local processes and web pages can't invoke the tools.
+ * Stateless: each request gets its own server instance.
+ */
 export async function startGmMcpServer(handlers: GmToolHandlers): Promise<RunningMcpServer> {
+  const expected = Buffer.from(`Bearer ${randomBytes(24).toString("hex")}`);
+  const authorized = (header: string | undefined) => {
+    const given = Buffer.from(header ?? "");
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  };
+
   const http = createServer(async (req, res) => {
+    if (!authorized(req.headers.authorization)) {
+      res.writeHead(401).end();
+      return;
+    }
     if (req.method !== "POST" || req.url !== "/mcp") {
       res.writeHead(405).end();
       return;
@@ -73,6 +89,7 @@ export async function startGmMcpServer(handlers: GmToolHandlers): Promise<Runnin
 
   return {
     url: `http://127.0.0.1:${port}/mcp`,
+    headers: { Authorization: expected.toString() },
     close: () =>
       new Promise((resolve, reject) => {
         http.close((err) => (err ? reject(err) : resolve()));
