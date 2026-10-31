@@ -1,0 +1,14 @@
+{
+  "name": "shadow-run",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "spike:gm": "npm run spike:gm --workspace server"
+  }
+}
