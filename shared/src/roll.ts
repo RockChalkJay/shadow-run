@@ -33,10 +33,19 @@ export type RollRequest = z.infer<typeof RollRequest>;
 
 /** The dice of one roll, in the order rolled, and what they add up to. */
 export interface RollResult {
+  /** The dice pool, in the order rolled. */
   dice: number[];
+  /** Hits on the pool, plus hits on `explosions`, plus `bonusHits`. */
   hits: number;
+  /** Dice in the pool showing 1. */
   ones: number;
   glitch: boolean;
   /** A glitch with no hits. */
   criticalGlitch: boolean;
+  /** Extra dice rolled for exploding 6s. They can hit but never count toward a glitch. */
+  explosions?: number[];
+  /** Hits bought with Edge. */
+  bonusHits?: number;
+  /** Highest face that counts toward a glitch; 2 when a foe spent Edge to widen it. */
+  glitchFaces?: 1 | 2;
 }

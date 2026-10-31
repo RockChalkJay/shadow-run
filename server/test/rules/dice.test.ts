@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
-  addDice,
+  bumpDie,
+  buyHit,
   defaultRuleset,
   evaluate,
+  MAX_EXPLOSIONS,
   MAX_POOL,
   nonHitIndexes,
   parseDice,
   rerollDice,
+  rerollFailed,
   rollPool,
+  rollWithEdgeDice,
   scriptedD6,
   seededD6,
+  widenGlitch,
   type Ruleset,
 } from "../../src/rules/index.js";
 
-const strictGlitch: Ruleset = { ...defaultRuleset, glitch: { rule: "more_than_half" } };
+const halfOrMore: Ruleset = { ...defaultRuleset, glitch: { rule: "half_or_more" } };
 
 describe("evaluate", () => {
   it("counts 5s and 6s as hits and 1s as ones", () => {
@@ -26,14 +31,14 @@ describe("evaluate", () => {
     });
   });
 
-  it("calls it a glitch when half the dice are ones, with hits still counted", () => {
-    const roll = evaluate([1, 1, 1, 6, 6, 6]);
-    expect(roll).toMatchObject({ hits: 3, ones: 3, glitch: true, criticalGlitch: false });
+  it("calls it a glitch only when more than half the dice are ones, with hits still counted", () => {
+    expect(evaluate([1, 1, 1, 6, 6, 6]).glitch).toBe(false);
+    const roll = evaluate([1, 1, 1, 1, 6, 6]);
+    expect(roll).toMatchObject({ hits: 2, ones: 4, glitch: true, criticalGlitch: false });
   });
 
-  it("needs more than half under the stricter reading of the rule", () => {
-    expect(evaluate([1, 1, 1, 6, 6, 6], strictGlitch).glitch).toBe(false);
-    expect(evaluate([1, 1, 1, 1, 6, 6], strictGlitch).glitch).toBe(true);
+  it("can be switched to half or more", () => {
+    expect(evaluate([1, 1, 1, 6, 6, 6], halfOrMore).glitch).toBe(true);
   });
 
   it("makes a glitch with no hits critical", () => {
@@ -87,6 +92,42 @@ describe("rollPool", () => {
   });
 });
 
+describe("exploding 6s", () => {
+  it("rolls another die for each 6, and again for each new 6, and counts every 5 or 6 among them as a hit", () => {
+    // Pool 6,2,6: the first 6 explodes into 6 then 3; the second 6 explodes into 5.
+    const roll = rollPool(3, scriptedD6([6, 2, 6, 6, 3, 5]), defaultRuleset, { explode: true });
+    expect(roll.dice).toEqual([6, 2, 6]);
+    expect(roll.explosions).toEqual([6, 3, 5]);
+    expect(roll.hits).toBe(2 + 2);
+  });
+
+  it("does not count a 1 on an exploded die toward a glitch, or the exploded dice in the pool", () => {
+    // Four pool dice with two 1s is not more than half; counting the two exploded 1s would make it a glitch.
+    const roll = rollPool(4, scriptedD6([1, 1, 6, 6, 1, 1]), defaultRuleset, { explode: true });
+    expect(roll.explosions).toEqual([1, 1]);
+    expect(roll).toMatchObject({ ones: 2, hits: 2, glitch: false });
+  });
+
+  it("adds the Edge attribute to the pool and explodes", () => {
+    // A pool of 9 with Edge 5 is 14 dice.
+    const faces = [6, 6, 5, 2, 3, 1, 4, 2, 3, 4, 2, 3, 1, 4, /* explosions */ 6, 3, 5];
+    const roll = rollWithEdgeDice(9, 5, scriptedD6(faces));
+    expect(roll.dice).toHaveLength(14);
+    expect(roll.explosions).toEqual([6, 3, 5]);
+    expect(roll.hits).toBe(3 + 2);
+  });
+
+  it("stops a die that keeps showing 6 from looping forever", () => {
+    expect(() => rollPool(1, () => 6, defaultRuleset, { explode: true })).toThrow("Too many exploding dice");
+    expect(MAX_EXPLOSIONS).toBeGreaterThan(100);
+  });
+
+  it("rejects a negative or fractional Edge or pool", () => {
+    expect(() => rollWithEdgeDice(5, -1, seededD6(1))).toThrow(RangeError);
+    expect(() => rollWithEdgeDice(5.5, 2, seededD6(1))).toThrow(RangeError);
+  });
+});
+
 describe("dice sources", () => {
   it("seededD6 repeats for the same seed and stays on the die", () => {
     const a = Array.from({ length: 50 }, seededD6(7));
@@ -112,7 +153,7 @@ describe("parseDice", () => {
   });
 });
 
-describe("rerolling and adding dice", () => {
+describe("rerolling", () => {
   const start = evaluate([6, 2, 5, 1]);
 
   it("finds the dice that did not hit", () => {
@@ -120,7 +161,7 @@ describe("rerolling and adding dice", () => {
   });
 
   it("rerolls the chosen dice and recounts, leaving the original roll alone", () => {
-    const after = rerollDice(start, nonHitIndexes(start), scriptedD6([5, 6]));
+    const after = rerollDice(start, [1, 3], scriptedD6([5, 6]));
     expect(after.dice).toEqual([6, 5, 5, 6]);
     expect(after.hits).toBe(4);
     expect(start.dice).toEqual([6, 2, 5, 1]);
@@ -132,13 +173,53 @@ describe("rerolling and adding dice", () => {
     expect(() => rerollDice(start, [-1], seededD6(1))).toThrow(RangeError);
   });
 
-  it("adds dice and recounts glitches over the larger pool", () => {
-    const after = addDice(evaluate([6, 1]), 2, scriptedD6([1, 1]));
-    expect(after).toMatchObject({ dice: [6, 1, 1, 1], hits: 1, ones: 3, glitch: true, criticalGlitch: false });
+  it("rerolls every failed die", () => {
+    const after = rerollFailed(start, scriptedD6([5, 6]));
+    expect(after.dice).toEqual([6, 5, 5, 6]);
   });
 
-  it("rejects a negative or fractional number of extra dice", () => {
-    expect(() => addDice(start, -1, seededD6(1))).toThrow(RangeError);
-    expect(() => addDice(start, 1.5, seededD6(1))).toThrow(RangeError);
+  it("refuses to reroll failed dice after a glitch or critical glitch", () => {
+    expect(() => rerollFailed(evaluate([1, 1, 1, 6]), seededD6(1))).toThrow("glitch");
+    expect(() => rerollFailed(evaluate([1, 1, 1, 2]), seededD6(1))).toThrow("glitch");
+  });
+
+  it("keeps explosions and bought hits when dice are rerolled", () => {
+    const roll = buyHit(rollPool(2, scriptedD6([6, 2, 5]), defaultRuleset, { explode: true }));
+    const after = rerollDice(roll, [1], scriptedD6([4]));
+    expect(after).toMatchObject({ explosions: [5], bonusHits: 1 });
+  });
+});
+
+describe("other Edge boosts on a roll", () => {
+  it("raises one die by 1 so a 4 becomes a hit", () => {
+    const after = bumpDie(evaluate([4, 2]), 0);
+    expect(after.dice).toEqual([5, 2]);
+    expect(after.hits).toBe(1);
+  });
+
+  it("raises a 1 to a 2 to avoid a glitch", () => {
+    expect(evaluate([1, 1, 1, 3]).glitch).toBe(true);
+    expect(bumpDie(evaluate([1, 1, 1, 3]), 0).glitch).toBe(false);
+  });
+
+  it("will not raise a 6 or a die that is not there", () => {
+    expect(() => bumpDie(evaluate([6]), 0)).toThrow("cannot be raised");
+    expect(() => bumpDie(evaluate([3]), 5)).toThrow(RangeError);
+  });
+
+  it("buys a hit that counts in the total and turns a critical glitch into a plain glitch", () => {
+    const crit = evaluate([1, 1, 1, 2]);
+    expect(crit.criticalGlitch).toBe(true);
+    const bought = buyHit(crit);
+    expect(bought).toMatchObject({ hits: 1, bonusHits: 1, glitch: true, criticalGlitch: false });
+    expect(buyHit(bought).hits).toBe(2);
+  });
+
+  it("counts 2s toward a foe's glitch as well as 1s", () => {
+    const foe = evaluate([1, 2, 2, 6]);
+    expect(foe.glitch).toBe(false);
+    const widened = widenGlitch(foe);
+    expect(widened).toMatchObject({ glitch: true, criticalGlitch: false, glitchFaces: 2, ones: 1 });
+    expect(widenGlitch(evaluate([1, 2, 2, 3])).criticalGlitch).toBe(true);
   });
 });
