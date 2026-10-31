@@ -1,55 +1,52 @@
 import { defaultRuleset, type Ruleset } from "./ruleset.js";
 
 export type DamageType = "physical" | "stun";
-export type Status = "active" | "unconscious" | "dying" | "dead";
+export type HealType = DamageType | "overflow";
+export type Status = "active" | "unconscious" | "dead";
 
 export interface ConditionMonitor {
   physicalBoxes: number;
   stunBoxes: number;
+  /** Physical damage past the last physical box; the character dies when all of these are filled. */
+  overflowBoxes: number;
   physical: number;
   stun: number;
-  /** Physical damage past the last box; death comes when it exceeds Body. */
   overflow: number;
-  body: number;
 }
 
 export function newMonitor(body: number, willpower: number, rules: Ruleset = defaultRuleset): ConditionMonitor {
-  const { baseBoxes } = rules.conditionMonitor;
+  const { baseBoxes, overflowMultiplier } = rules.conditionMonitor;
   return {
     physicalBoxes: baseBoxes + Math.ceil(body / 2),
     stunBoxes: baseBoxes + Math.ceil(willpower / 2),
+    overflowBoxes: body * overflowMultiplier,
     physical: 0,
     stun: 0,
     overflow: 0,
-    body,
   };
 }
 
+/** Either monitor full knocks the character out; filling the overflow kills. */
 export function statusOf(monitor: ConditionMonitor): Status {
-  if (monitor.overflow > monitor.body) return "dead";
-  if (monitor.physical >= monitor.physicalBoxes) return "dying";
-  if (monitor.stun >= monitor.stunBoxes) return "unconscious";
+  if (monitor.overflow >= monitor.overflowBoxes) return "dead";
+  if (monitor.physical >= monitor.physicalBoxes || monitor.stun >= monitor.stunBoxes) return "unconscious";
   return "active";
 }
 
-/** Dice lost on every test, from boxes filled on both tracks. Not applied to damage resistance. */
+/** Dice lost on every test but damage resistance: one per complete row of boxes filled on either monitor. */
 export function woundModifier(monitor: ConditionMonitor, rules: Ruleset = defaultRuleset): number {
-  return Math.floor((monitor.physical + monitor.stun) / rules.woundModifier.boxesPerDie);
+  const row = rules.woundModifier.boxesPerRow;
+  return Math.floor(monitor.physical / row) + Math.floor(monitor.stun / row);
 }
 
-/** Dice for the roll that soaks damage. */
-export function damageResistancePool(body: number, armor: number, rules: Ruleset = defaultRuleset): number {
-  return rules.damageResistance.pool === "body_plus_armor" ? body + armor : body;
+/** Dice for the roll that soaks damage: Body alone, since armor is already in the Defense Rating. */
+export function damageResistancePool(body: number): number {
+  return body;
 }
 
 /** Damage left after the resistance roll's hits, each of which removes one point. */
 export function damageAfterResistance(damageValue: number, resistanceHits: number): number {
   return Math.max(0, damageValue - resistanceHits);
-}
-
-/** Physical damage that does not beat the armor lands as stun. */
-export function resolveDamageType(base: DamageType, damageValue: number, armor: number): DamageType {
-  return base === "physical" && damageValue <= armor ? "stun" : base;
 }
 
 function addPhysical(monitor: ConditionMonitor, amount: number): ConditionMonitor {
@@ -71,4 +68,10 @@ export function applyDamage(
   const filled = { ...monitor, stun: monitor.stun + taken };
   const carried = Math.floor((amount - taken) / rules.conditionMonitor.stunOverflowPerPhysical);
   return carried > 0 ? addPhysical(filled, carried) : filled;
+}
+
+/** Clears up to `boxes` of damage from one track, never below zero. */
+export function healDamage(monitor: ConditionMonitor, type: HealType, boxes: number): ConditionMonitor {
+  if (!Number.isInteger(boxes) || boxes < 0) throw new RangeError(`Boxes healed must be a whole number, got ${boxes}`);
+  return { ...monitor, [type]: Math.max(0, monitor[type] - boxes) };
 }

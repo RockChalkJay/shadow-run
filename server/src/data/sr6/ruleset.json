@@ -1,19 +1,32 @@
 {
   "hitMinimum": 5,
-  "glitch": { "rule": "half_or_more" },
+  "glitch": { "rule": "more_than_half" },
   "edge": { "max": 7, "maxGainPerRound": 2, "ratingGapForEdge": 4 },
-  "conditionMonitor": { "baseBoxes": 8, "stunOverflowPerPhysical": 2 },
-  "woundModifier": { "boxesPerDie": 3 },
-  "damageResistance": { "pool": "body_plus_armor" },
+  "conditionMonitor": { "baseBoxes": 8, "stunOverflowPerPhysical": 1, "overflowMultiplier": 2 },
+  "woundModifier": { "boxesPerRow": 3 },
   "initiative": { "maxDice": 5, "majorActions": 1, "baseMinorActions": 1, "minorActionsPerDie": 1 },
+  "pages": {
+    "hitMinimum": "36, 106",
+    "glitch.rule": "36, 45, 106",
+    "edge.max": "46",
+    "edge.maxGainPerRound": "46",
+    "edge.ratingGapForEdge": "46, 106",
+    "conditionMonitor.baseBoxes": "39",
+    "conditionMonitor.stunOverflowPerPhysical": "39",
+    "conditionMonitor.overflowMultiplier": "122",
+    "woundModifier.boxesPerRow": "39",
+    "initiative.maxDice": "40",
+    "initiative.actions": "41",
+    "fixed in code: ties go to the attacker": "36, 106",
+    "fixed in code: damage resistance rolls Body only": "106",
+    "fixed in code: initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107"
+  },
   "unverified": [
-    "glitch.rule: sources split between 'half or more' and 'more than half' of the dice showing 1",
-    "damageResistance.pool: one source says Body alone, others Body + armor",
-    "conditionMonitor.stunOverflowPerPhysical: rounding of excess stun into physical is unconfirmed",
-    "initiative.minorActionsPerDie: one source gives a flat 1 major + 1 minor regardless of dice",
-    "edge.maxGainPerRound: found in one secondary source only",
-    "fixed in code, overflow death: assumed dead once overflow exceeds Body",
-    "fixed in code, opposed ties: assumed the defender wins",
-    "fixed in code, damage type conversion: assumed physical damage becomes stun when the Damage Value does not exceed armor"
+    "exploding 6s: the extra dice can hit, but they are not counted as 1s and not counted in the pool when checking for a glitch",
+    "wound penalty: only complete rows of 3 boxes count, so a short last row adds nothing",
+    "a threshold of 0 is treated as 1, since the book defines thresholds from 1 and a roll with no hits should not succeed",
+    "a bought automatic hit counts as a hit when deciding whether a glitch is critical",
+    "+1 to a single die cannot be used on a 6",
+    "Edge given to an ally counts toward the ally's per-round gain cap and the overall maximum"
   ]
 }

@@ -13,16 +13,19 @@ export const Ruleset = z.object({
   conditionMonitor: z.object({
     baseBoxes: z.number().int().min(1),
     stunOverflowPerPhysical: z.number().int().min(1),
+    /** Overflow boxes, as a multiple of Body; the character dies when they are all filled. */
+    overflowMultiplier: z.number().int().min(1),
   }),
-  woundModifier: z.object({ boxesPerDie: z.number().int().min(1) }),
-  damageResistance: z.object({ pool: z.enum(["body_plus_armor", "body"]) }),
+  woundModifier: z.object({ boxesPerRow: z.number().int().min(1) }),
   initiative: z.object({
     maxDice: z.number().int().min(1),
     majorActions: z.number().int().min(1),
     baseMinorActions: z.number().int().min(0),
     minorActionsPerDie: z.number().int().min(0),
   }),
-  /** Rules that came from conflicting or single secondary sources; check them against the rulebook. */
+  /** Where each rule is in the core rulebook PDF, so any value can be checked. */
+  pages: z.record(z.string(), z.string()),
+  /** Rulings the engine makes where the book is silent. */
   unverified: z.array(z.string()),
 });
 export type Ruleset = z.infer<typeof Ruleset>;

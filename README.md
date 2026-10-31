@@ -12,7 +12,9 @@ One owner, on their own machine, with their own Claude login. The group plays ar
 
 ## Rules
 
-The numbers the engine plays by are in `server/src/data/sr6/ruleset.json`. Edit that file to change a rule; it is checked each time the rules load. Its `unverified` list names the rules that came from conflicting or secondary sources, so check those against your copy of the core rulebook. Entries marked "fixed in code" are not settings yet: if the rulebook disagrees with one, it needs a code change.
+The engine follows the Shadowrun 6th Edition core rulebook. Its numbers are in `server/src/data/sr6/ruleset.json`, and the Edge boosts, actions and burns with their costs are in `server/src/data/sr6/edge.json`. Both name the rulebook PDF page each value comes from, so any of them can be checked. Edit the files to change a rule; they are validated each time the rules load. The `unverified` list in the ruleset names the few rulings the engine makes where the book is silent.
+
+Keep your copy of the rulebook in `docs/rules/`. Git ignores that folder, so the PDFs are never committed or published.
 
 ## Development
 
