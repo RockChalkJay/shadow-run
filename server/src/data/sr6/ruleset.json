@@ -1,0 +1,19 @@
+{
+  "hitMinimum": 5,
+  "glitch": { "rule": "half_or_more" },
+  "edge": { "max": 7, "maxGainPerRound": 2, "ratingGapForEdge": 4 },
+  "conditionMonitor": { "baseBoxes": 8, "stunOverflowPerPhysical": 2 },
+  "woundModifier": { "boxesPerDie": 3 },
+  "damageResistance": { "pool": "body_plus_armor" },
+  "initiative": { "maxDice": 5, "majorActions": 1, "baseMinorActions": 1, "minorActionsPerDie": 1 },
+  "unverified": [
+    "glitch.rule: sources split between 'half or more' and 'more than half' of the dice showing 1",
+    "damageResistance.pool: one source says Body alone, others Body + armor",
+    "conditionMonitor.stunOverflowPerPhysical: rounding of excess stun into physical is unconfirmed",
+    "initiative.minorActionsPerDie: one source gives a flat 1 major + 1 minor regardless of dice",
+    "edge.maxGainPerRound: found in one secondary source only",
+    "fixed in code, overflow death: assumed dead once overflow exceeds Body",
+    "fixed in code, opposed ties: assumed the defender wins",
+    "fixed in code, damage type conversion: assumed physical damage becomes stun when the Damage Value does not exceed armor"
+  ]
+}

@@ -30,3 +30,13 @@ export type RollRequestInput = z.infer<typeof RollRequestInput>;
 
 export const RollRequest = RollRequestInput.extend({ id: z.string() });
 export type RollRequest = z.infer<typeof RollRequest>;
+
+/** The dice of one roll, in the order rolled, and what they add up to. */
+export interface RollResult {
+  dice: number[];
+  hits: number;
+  ones: number;
+  glitch: boolean;
+  /** A glitch with no hits. */
+  criticalGlitch: boolean;
+}
