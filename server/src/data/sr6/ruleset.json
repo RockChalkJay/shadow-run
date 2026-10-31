@@ -12,8 +12,8 @@
     "conditionMonitor.stunOverflowPerPhysical: rounding of excess stun into physical is unconfirmed",
     "initiative.minorActionsPerDie: one source gives a flat 1 major + 1 minor regardless of dice",
     "edge.maxGainPerRound: found in one secondary source only",
-    "overflow death: assumed dead once overflow exceeds Body",
-    "opposed ties: assumed the defender wins",
-    "damage type conversion: assumed physical damage becomes stun when the Damage Value does not exceed armor"
+    "fixed in code, overflow death: assumed dead once overflow exceeds Body",
+    "fixed in code, opposed ties: assumed the defender wins",
+    "fixed in code, damage type conversion: assumed physical damage becomes stun when the Damage Value does not exceed armor"
   ]
 }

@@ -6,9 +6,10 @@ export interface SimpleTestOutcome {
   netHits: number;
 }
 
-/** A test against a fixed threshold. */
+/** A test against a fixed threshold. A roll with no hits fails whatever the threshold. */
 export function simpleTest(roll: RollResult, threshold: number): SimpleTestOutcome {
-  return { success: roll.hits >= threshold, netHits: Math.max(0, roll.hits - threshold) };
+  const needed = Math.max(1, threshold);
+  return { success: roll.hits >= needed, netHits: Math.max(0, roll.hits - needed) };
 }
 
 export interface OpposedTestOutcome {

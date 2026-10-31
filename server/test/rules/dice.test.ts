@@ -3,6 +3,7 @@ import {
   addDice,
   defaultRuleset,
   evaluate,
+  MAX_POOL,
   nonHitIndexes,
   parseDice,
   rerollDice,
@@ -43,6 +44,10 @@ describe("evaluate", () => {
     expect(evaluate([])).toMatchObject({ hits: 0, glitch: false, criticalGlitch: false });
   });
 
+  it.each([[[9]], [[0]], [[2.5]], [[NaN]], [[6, 7, 1]]])("rejects dice that are not 1 to 6: %j", (dice) => {
+    expect(() => evaluate(dice)).toThrow(RangeError);
+  });
+
   it("does not change the array it was given", () => {
     const dice = [6, 1];
     evaluate(dice).dice.push(3);
@@ -60,8 +65,18 @@ describe("rollPool", () => {
     expect(() => rollPool(2.5, seededD6(1))).toThrow(RangeError);
   });
 
+  it("allows the largest pool and refuses a bigger one", () => {
+    expect(rollPool(MAX_POOL, seededD6(1)).dice).toHaveLength(MAX_POOL);
+    expect(() => rollPool(MAX_POOL + 1, seededD6(1))).toThrow(RangeError);
+    expect(() => rollPool(1_000_000_000, seededD6(1))).toThrow(RangeError);
+  });
+
+  it("refuses a dice source that returns a face off the die", () => {
+    expect(() => rollPool(2, () => 7)).toThrow(RangeError);
+  });
+
   it("hits about a third of the time, with every face turning up", () => {
-    const roll = rollPool(60000, seededD6(42));
+    const roll = evaluate(Array.from({ length: 60000 }, seededD6(42)));
     expect(roll.hits / 60000).toBeGreaterThan(0.32);
     expect(roll.hits / 60000).toBeLessThan(0.347);
     for (const face of [1, 2, 3, 4, 5, 6]) {

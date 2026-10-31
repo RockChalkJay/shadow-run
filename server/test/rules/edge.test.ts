@@ -24,6 +24,12 @@ describe("gainEdge", () => {
     expect(gainEdge(3, 1, 5)).toEqual({ points: 4, gainedThisRound: 2, gained: 1 });
   });
 
+  it("gains nothing for an amount of 0 and rejects one that is negative or fractional", () => {
+    expect(gainEdge(3, 0, 0).gained).toBe(0);
+    expect(() => gainEdge(3, 0, -1)).toThrow(RangeError);
+    expect(() => gainEdge(3, 0, 0.5)).toThrow(RangeError);
+  });
+
   it("stops at the overall maximum", () => {
     expect(gainEdge(7, 0, 1).gained).toBe(0);
     expect(gainEdge(6, 0, 2)).toEqual({ points: 7, gainedThisRound: 1, gained: 1 });

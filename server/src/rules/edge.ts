@@ -27,6 +27,7 @@ export function gainEdge(
   amount: number,
   rules: Ruleset = defaultRuleset,
 ): EdgeGain {
+  if (!Number.isInteger(amount) || amount < 0) throw new RangeError(`Edge gained must be a whole number, got ${amount}`);
   const room = Math.min(rules.edge.maxGainPerRound - gainedThisRound, rules.edge.max - points);
   const gained = Math.max(0, Math.min(amount, room));
   return { points: points + gained, gainedThisRound: gainedThisRound + gained, gained };

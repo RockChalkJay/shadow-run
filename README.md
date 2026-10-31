@@ -12,7 +12,7 @@ One owner, on their own machine, with their own Claude login. The group plays ar
 
 ## Rules
 
-The numbers the engine plays by are in `server/src/data/sr6/ruleset.json`. Edit that file to change a rule; it is checked each time the rules load. Its `unverified` list names the rules that came from conflicting or secondary sources, so check those against your copy of the core rulebook.
+The numbers the engine plays by are in `server/src/data/sr6/ruleset.json`. Edit that file to change a rule; it is checked each time the rules load. Its `unverified` list names the rules that came from conflicting or secondary sources, so check those against your copy of the core rulebook. Entries marked "fixed in code" are not settings yet: if the rulebook disagrees with one, it needs a code change.
 
 ## Development
 

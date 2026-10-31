@@ -12,6 +12,12 @@ describe("simpleTest", () => {
   it("fails below the threshold with no net hits", () => {
     expect(simpleTest(withHits(1), 2)).toEqual({ success: false, netHits: 0 });
   });
+
+  it("never lets a roll with no hits succeed, even against a threshold of 0", () => {
+    expect(simpleTest(withHits(0), 0)).toEqual({ success: false, netHits: 0 });
+    expect(simpleTest(evaluate([1, 1, 1, 2]), 0).success).toBe(false);
+    expect(simpleTest(withHits(1), 0)).toEqual({ success: true, netHits: 0 });
+  });
 });
 
 describe("opposedTest", () => {
