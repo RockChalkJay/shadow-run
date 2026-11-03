@@ -9,15 +9,27 @@ A local web app that runs Shadowrun 6th Edition sessions with Claude as the Game
 ## Trying the table
 
 ```
-npm run dev:server      # the table, on ws://127.0.0.1:8787/ws
+npm run dev:server      # the table, with Claude as the GM on your own plan
 npm run play            # in another terminal: play at it from the command line
 ```
 
-The GM here is a short script, so nothing uses your Claude usage yet; Claude takes over as the GM in a later change. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
+Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
 
-Each campaign lives in `campaigns/<name>/` (git-ignored; pick one with `SHADOWRUN_CAMPAIGN`, default `default`): `party.json`, `state.json` and `transcript.jsonl`. The first run writes a demo `party.json` there; edit it to play your own characters. Stop and restart the server and the table picks up where it left off.
+Settings, all optional:
 
-The server answers only this machine. It refuses connections that do not come from loopback, requests whose `Host` does not name loopback, and browsers whose `Origin` is not the web app's, so a web page you visit cannot drive the table.
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `SHADOWRUN_GM` | `claude` | `scripted` uses a short demo script instead, which spends no usage |
+| `SHADOWRUN_GM_MODEL` | `sonnet` | the model that plays the GM |
+| `SHADOWRUN_GM_EFFORT` | the CLI's own | `low`, `medium`, `high`, `xhigh` or `max` |
+| `SHADOWRUN_CAMPAIGN` | `default` | which campaign folder to use |
+| `PORT` | `8787` | where the table listens |
+
+`npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage.
+
+Each campaign lives in `campaigns/<name>/` (git-ignored): `party.json`, `state.json` and `transcript.jsonl`, plus an optional `premise.md` that tells the GM what the session is about. The first run writes a demo `party.json`; edit it to play your own characters. Stop and restart the server and the table picks up where it left off.
+
+The server answers only this machine. It refuses connections that do not come from loopback, requests whose `Host` does not name loopback, and browsers whose `Origin` is not the web app's, so a web page you visit cannot drive the table. The GM process runs in a private folder with no settings files and none of your credentials in its environment. Claude Code still shows the model your account email, and the CLI has no switch to stop that, so the GM is told never to mention it.
 
 ## Who it is for
 
@@ -37,7 +49,6 @@ Requires Node 24+ and the `claude` CLI logged in to your Claude account.
 npm install
 npm test            # unit tests; a fake `claude` binary replays recorded streams
 npm run typecheck
-npm run spike:gm    # two real GM turns: streaming, a request_roll tool call, session resume
+npm run check:gm    # a short scene with the real GM (uses a little of your Claude usage)
 ```
 
-`spike:gm` talks to the real CLI, so it uses a little of your Claude usage.

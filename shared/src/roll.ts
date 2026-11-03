@@ -40,6 +40,14 @@ export const RollRequestInput = z.object({
 });
 export type RollRequestInput = z.infer<typeof RollRequestInput>;
 
+/** What the GM supplies when a non-player character rolls. The system rolls the dice. */
+export const NpcRollInput = z.object({
+  label: z.string().min(1).describe("Who is rolling and why, e.g. 'Ganger sprays the doorway'"),
+  pool: z.number().int().min(0).max(MAX_POOL).describe("Number of d6"),
+  threshold: z.number().int().min(1).optional().describe("Hits needed, if the roll is against a fixed threshold"),
+});
+export type NpcRollInput = z.infer<typeof NpcRollInput>;
+
 export const RollRequest = RollRequestInput.extend({ id: z.string() });
 export type RollRequest = z.infer<typeof RollRequest>;
 

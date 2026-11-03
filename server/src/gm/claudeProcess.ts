@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { userInfo } from "node:os";
 import { createInterface } from "node:readline";
 import type { GmEvent } from "@shadow-run/shared";
 import { parseStreamLine } from "./streamParser.js";
@@ -14,6 +15,7 @@ export interface GmTurnOptions {
   sessionId?: string;
   systemPrompt?: string;
   model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Built-in tools to expose. Empty means none. */
   tools?: string[];
   /** Tools that run without a permission prompt, e.g. `mcp__gm__request_roll`. */
@@ -40,7 +42,7 @@ export function buildArgs(opts: GmTurnOptions): string[] {
     "--output-format", "stream-json",
     "--include-partial-messages",
     "--verbose",
-    "--setting-sources", "project",
+    "--setting-sources", "",
     "--disable-slash-commands",
     "--tools", (opts.tools ?? []).join(","),
   ];
@@ -50,8 +52,39 @@ export function buildArgs(opts: GmTurnOptions): string[] {
   }
   if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt);
   if (opts.model) args.push("--model", opts.model);
+  if (opts.effort) args.push("--effort", opts.effort);
   if (opts.sessionId) args.push("--resume", opts.sessionId);
   return args;
+}
+
+/** The environment a GM process gets: ours, minus anything that would bill somewhere else, plus what the CLI needs to find the login. */
+export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base, CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" };
+  for (const name of AUTH_OVERRIDES) delete env[name];
+  // The CLI finds a subscription login by user name; a server started from an IDE or a service manager often has none set.
+  const user = userInfo();
+  env.USER ??= user.username;
+  env.LOGNAME ??= user.username;
+  env.HOME ??= user.homedir;
+  return env;
+}
+
+/** Stops the process and anything it started. It runs as the leader of its own process group, so one signal reaches them all. */
+function killTree(child: ChildProcess): void {
+  const { pid } = child;
+  if (pid === undefined) return;
+  const signal = (sig: NodeJS.Signals) => {
+    try {
+      if (process.platform === "win32") child.kill(sig);
+      else process.kill(-pid, sig);
+    } catch {
+      // Already gone.
+    }
+  };
+  signal("SIGTERM");
+  setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) signal("SIGKILL");
+  }, 3000).unref();
 }
 
 /**
@@ -65,13 +98,11 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
     return;
   }
 
-  const env = { ...process.env };
-  for (const name of AUTH_OVERRIDES) delete env[name];
-
   const child = spawn(opts.claudeBin ?? "claude", buildArgs(opts), {
     cwd: opts.cwd,
-    env,
+    env: childEnv(),
     stdio: ["pipe", "pipe", "pipe"],
+    detached: process.platform !== "win32",
   });
 
   let stderr = "";
@@ -82,7 +113,7 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
     child.once("error", (spawnError) => resolve({ code: null, spawnError }));
     child.once("close", (code) => resolve({ code }));
   });
-  const onAbort = () => child.kill();
+  const onAbort = () => killTree(child);
   opts.signal?.addEventListener("abort", onAbort, { once: true });
 
   // The prompt goes over stdin: the variadic flags would otherwise swallow a trailing argument.
@@ -91,16 +122,27 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
 
   try {
     let finished = false;
+    // A failed turn's error is held back until the process has exited, because the CLI says why on stderr.
+    let failed: Extract<GmEvent, { type: "error" }> | undefined;
     for await (const line of createInterface({ input: child.stdout })) {
       for (const event of parseStreamLine(line)) {
-        if (event.type === "done" || event.type === "error") finished = true;
-        yield event;
+        if (event.type === "error") {
+          failed = event;
+          finished = true;
+        } else {
+          if (event.type === "done") finished = true;
+          yield event;
+        }
       }
     }
 
     const { code, spawnError } = await exit;
-    if (finished) return;
-    if (opts.signal?.aborted) {
+    if (failed) {
+      const why = stderr.trim();
+      yield { type: "error", message: why ? `${failed.message}: ${why}` : failed.message };
+    } else if (finished) {
+      return;
+    } else if (opts.signal?.aborted) {
       yield CANCELLED;
     } else if (spawnError) {
       yield { type: "error", message: `Could not start claude: ${spawnError.message}` };
@@ -113,6 +155,6 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
   } finally {
     opts.signal?.removeEventListener("abort", onAbort);
     // A caller that stops iterating early must not leave the turn running and spending usage.
-    if (child.exitCode === null && child.signalCode === null) child.kill();
+    if (child.exitCode === null && child.signalCode === null) killTree(child);
   }
 }
