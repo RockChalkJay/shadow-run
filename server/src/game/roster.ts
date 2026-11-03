@@ -1,22 +1,32 @@
 import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealType, PartyMember } from "@shadow-run/shared";
-import { applyDamage, defaultRuleset, healDamage, newMonitor, statusOf, woundModifier, type Ruleset, type Treatment } from "../rules/index.js";
+import { applyDamage, defaultRuleset, gruntBoxes, gruntStatus, gruntWoundModifier, healDamage, newMonitor, statusOf, woundModifier, type Ruleset, type Treatment } from "../rules/index.js";
 import type { Fail } from "./rollManager.js";
 
 /** Most non-player characters the table will track at once; more than that is the GM losing count. */
 export const MAX_NPCS = 60;
+
+/** What a grunt has beyond other non-player characters. Their single track lives in the entry's `monitor.physical`. */
+export interface GruntState {
+  professionalRating: number;
+  lieutenant: boolean;
+  charisma: number;
+  /** The damage that hit last, which decides whether a full track is dead or unconscious. */
+  last: DamageType | null;
+}
 
 interface Entry {
   name: string;
   body: number;
   willpower: number;
   monitor: ConditionMonitor;
+  grunt?: GruntState;
   /** The treatments this character has had for their current injuries; they start over when the character is next hurt. */
   treated: Set<Treatment>;
 }
 
 export interface SavedRoster {
   pcs: Array<{ id: string; monitor: ConditionMonitor; treated: Treatment[] }>;
-  npcs: Array<{ id: string; name: string; body: number; willpower: number; monitor: ConditionMonitor; treated: Treatment[] }>;
+  npcs: Array<{ id: string; name: string; body: number; willpower: number; monitor: ConditionMonitor; treated: Treatment[]; grunt?: GruntState }>;
 }
 
 /** A roster as saved before treatments were tracked: everyone starts untreated. */
@@ -59,7 +69,14 @@ export class Roster {
       });
     }
     for (const npc of saved?.npcs ?? []) {
-      this.npcs.set(npc.id, { name: npc.name, body: npc.body, willpower: npc.willpower, monitor: npc.monitor, treated: new Set(npc.treated) });
+      this.npcs.set(npc.id, {
+        name: npc.name,
+        body: npc.body,
+        willpower: npc.willpower,
+        monitor: npc.monitor,
+        treated: new Set(npc.treated),
+        ...(npc.grunt && { grunt: { ...npc.grunt } }),
+      });
     }
   }
 
@@ -70,6 +87,19 @@ export class Roster {
   view(kind: "pc" | "npc", id: string): CharacterView | undefined {
     const entry = this.entry(kind, id);
     if (!entry) return undefined;
+    const { grunt } = entry;
+    if (grunt) {
+      // A grunt has one track, so the damage that hit last decides whether a full one is dead or unconscious.
+      return {
+        id,
+        kind,
+        name: entry.name,
+        monitor: { ...entry.monitor },
+        status: gruntStatus(entry.monitor.physical, entry.monitor.physicalBoxes, grunt.last),
+        woundModifier: gruntWoundModifier(entry.monitor.physical, this.rules),
+        grunt: { professionalRating: grunt.professionalRating, lieutenant: grunt.lieutenant, lastDamage: grunt.last },
+      };
+    }
     return { id, kind, name: entry.name, monitor: { ...entry.monitor }, status: statusOf(entry.monitor), woundModifier: woundModifier(entry.monitor, this.rules) };
   }
 
@@ -113,6 +143,14 @@ export class Roster {
       return { ok: false, error: `"${ref.id}" is new to the table. Give the NPC's name, body and willpower the first time you mention them.` };
     }
     if (this.npcs.size >= MAX_NPCS) return { ok: false, error: `The table is already tracking ${MAX_NPCS} non-player characters.` };
+    if (ref.professionalRating !== undefined) {
+      if (ref.charisma === undefined) return { ok: false, error: `"${ref.id}" is a new grunt. Give their charisma too, for their Composure test.` };
+      const grunt = { professionalRating: ref.professionalRating, lieutenant: ref.lieutenant ?? false, charisma: ref.charisma, last: null };
+      const boxes = gruntBoxes(ref.body, ref.willpower, grunt, this.rules);
+      const monitor = { physicalBoxes: boxes, physical: 0, stunBoxes: 1, stun: 0, overflowBoxes: 1, overflow: 0 };
+      this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor, treated: new Set(), grunt });
+      return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
+    }
     this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor: newMonitor(ref.body, ref.willpower, this.rules), treated: new Set() });
     return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
   }
@@ -121,7 +159,13 @@ export class Roster {
   damage(kind: "pc" | "npc", id: string, type: DamageType, amount: number): CharacterView {
     const entry = this.entry(kind, id);
     if (!entry) throw new Error(`No ${kind} "${id}" to hurt.`);
-    entry.monitor = applyDamage(entry.monitor, type, amount, this.rules);
+    if (entry.grunt) {
+      // One track for everything; damage past the last box is not counted, and what hit last decides the rest.
+      entry.monitor = { ...entry.monitor, physical: Math.min(entry.monitor.physicalBoxes, entry.monitor.physical + amount) };
+      if (amount > 0) entry.grunt.last = type;
+    } else {
+      entry.monitor = applyDamage(entry.monitor, type, amount, this.rules);
+    }
     // New injuries are a new set of injuries, which can be treated again.
     if (amount > 0) entry.treated.clear();
     return this.view(kind, id)!;
@@ -131,9 +175,16 @@ export class Roster {
   heal(kind: "pc" | "npc", id: string, type: HealType, boxes: number): { after: CharacterView; healed: number } {
     const entry = this.entry(kind, id);
     if (!entry) throw new Error(`No ${kind} "${id}" to heal.`);
+    if (entry.grunt) throw new Error(`"${id}" is a grunt, who cannot be healed.`);
     const healed = Math.min(boxes, entry.monitor[type]);
     entry.monitor = healDamage(entry.monitor, type, healed);
     return { after: this.view(kind, id)!, healed };
+  }
+
+  /** Dice for a grunt's Composure test, or undefined for anyone who is not a grunt. */
+  composurePool(id: string): number | undefined {
+    const entry = this.npcs.get(id);
+    return entry?.grunt ? entry.willpower + entry.grunt.charisma : undefined;
   }
 
   hasBeenTreated(kind: "pc" | "npc", id: string, treatment: Treatment): boolean {
@@ -147,7 +198,7 @@ export class Roster {
   toSaved(): SavedRoster {
     return {
       pcs: [...this.pcs].map(([id, e]) => ({ id, monitor: e.monitor, treated: [...e.treated] })),
-      npcs: [...this.npcs].map(([id, e]) => ({ id, name: e.name, body: e.body, willpower: e.willpower, monitor: e.monitor, treated: [...e.treated] })),
+      npcs: [...this.npcs].map(([id, e]) => ({ id, name: e.name, body: e.body, willpower: e.willpower, monitor: e.monitor, treated: [...e.treated], ...(e.grunt && { grunt: { ...e.grunt } }) })),
     };
   }
 }

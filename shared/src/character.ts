@@ -27,6 +27,14 @@ export const ConditionMonitor = z.object({
 });
 export type ConditionMonitor = z.infer<typeof ConditionMonitor>;
 
+/** What marks a non-player character as a grunt: a nameless member of a group of opposition with one condition track. */
+export interface GruntInfo {
+  professionalRating: number;
+  lieutenant: boolean;
+  /** The damage that hit last; with a full track it decides whether the grunt is dead or unconscious. */
+  lastDamage: DamageType | null;
+}
+
 /** A character as the table sees them: a player character or a non-player one the GM is tracking. */
 export interface CharacterView {
   id: string;
@@ -36,4 +44,6 @@ export interface CharacterView {
   status: Status;
   /** Dice lost on every test but damage resistance. */
   woundModifier: number;
+  /** Set for a grunt. Its whole condition track is `monitor.physical` out of `monitor.physicalBoxes`; the stun and overflow tracks are unused. */
+  grunt?: GruntInfo;
 }

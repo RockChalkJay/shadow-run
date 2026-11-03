@@ -4,6 +4,7 @@
   "edge": { "max": 7, "maxGainPerRound": 2, "ratingGapForEdge": 4 },
   "conditionMonitor": { "baseBoxes": 8, "stunOverflowPerPhysical": 1, "overflowMultiplier": 2 },
   "woundModifier": { "boxesPerRow": 3 },
+  "grunt": { "woundBoxesPerRow": 2, "maxGroupSize": 5 },
   "initiative": { "maxDice": 5, "majorActions": 1, "baseMinorActions": 1, "minorActionsPerDie": 1 },
   "pages": {
     "hitMinimum": "36, 106",
@@ -15,6 +16,8 @@
     "conditionMonitor.stunOverflowPerPhysical": "39",
     "conditionMonitor.overflowMultiplier": "122",
     "woundModifier.boxesPerRow": "39",
+    "grunt.woundBoxesPerRow": "204",
+    "grunt.maxGroupSize": "115",
     "initiative.maxDice": "40",
     "initiative.majorActions": "41",
     "initiative.baseMinorActions": "41",
@@ -31,7 +34,11 @@
     "first aid, a medkit and healing magic can each be received once for any single set of injuries": "120, 121",
     "overflow damage heals first": "120, 122",
     "natural recovery: Body + Willpower each hour heals a stun box per hit; Body + Body each day heals a physical box per hit": "122",
-    "natural recovery of overflow: Body + Body minus wound modifiers, a box per hit": "122"
+    "natural recovery of overflow: Body + Body minus wound modifiers, a box per hit": "122",
+    "a grunt has one condition monitor of 8 plus half the higher of Body and Willpower, rounded up; a lieutenant adds their Professional Rating": "204",
+    "a grunt's single track decides life and death by the damage that hit last: physical is dead or bleeding out, stun is unconscious": "204",
+    "once a grunt's damage boxes exceed their Professional Rating they make a Composure test (Willpower + Charisma) to see if they bolt": "204",
+    "grunts attack as a group: the highest member's pool, one die for every odd-numbered member beyond the first, no more than 5 in a group": "115"
   },
   "unverified": [
     "exploding 6s: the extra dice can hit, but they are not counted as 1s and not counted in the pool when checking for a glitch",
@@ -48,6 +55,12 @@
     "first aid, a medkit and healing magic heal no physical or stun box while any overflow box is filled; natural recovery is rolled for each track separately and is not held up by overflow",
     "natural recovery of stun and physical damage takes no wound penalty, since the book subtracts wound modifiers only for overflow, and an unconscious character can roll it",
     "the book's time limits (a minute for first aid, an hour for a medkit, an hour or a day between natural recovery rolls) and medkit supplies are the GM's to keep; the system tracks no game time",
-    "natural recovery can be rolled only by a player character for their own injuries"
+    "natural recovery can be rolled only by a player character for their own injuries",
+    "the book leaves a grunt's Composure threshold to the GM; the system uses a fixed threshold of 2 and tests once, when the grunt first passes their Professional Rating while still standing",
+    "a grunt that fails Composure bolts, which the GM is told to carry out; one that passes holds for the rest of the fight",
+    "a grunt knocked out by stun damage who is then hit by physical damage is dead, since the last damage decides",
+    "damage past a grunt's last box is not tracked; a grunt hit by physical damage last is treated as dead",
+    "grunts cannot be healed, since the book gives no healing for a single combined track",
+    "a group attack takes the named attacker's wounds off their pool before adding the group's bonus dice, and the Attack Rating bonus for extra members waits for Edge"
   ]
 }

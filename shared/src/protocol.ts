@@ -57,6 +57,8 @@ export type TranscriptEntry =
       /** Damage that got through. */
       taken: number;
       after: CharacterView;
+      /** Set when a grunt passed their Professional Rating with this damage and the system tested their nerve. */
+      composure?: { roll: RollResult; pool: number; threshold: number; held: boolean };
     })
   | (EntryBase & {
       kind: "attack";
@@ -64,6 +66,8 @@ export type TranscriptEntry =
       attacker: string;
       defender: string;
       weapon: Weapon;
+      /** How many grunts attacked together; absent for a single attacker. */
+      groupSize?: number;
       attackRoll: RollResult;
       defenseRoll: RollResult;
       /** Who rolled each side: the app or physical dice for a player, the system for a non-player character. */

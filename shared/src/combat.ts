@@ -11,6 +11,15 @@ export const CharacterRef = z.object({
   name: z.string().min(1).max(60).optional().describe("An NPC's name. Required the first time you mention an NPC"),
   body: z.number().int().min(1).max(20).optional().describe("An NPC's Body. Required the first time you mention an NPC"),
   willpower: z.number().int().min(1).max(20).optional().describe("An NPC's Willpower. Required the first time you mention an NPC"),
+  professionalRating: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .optional()
+    .describe("Makes this NPC a grunt, one of a group of nameless opposition: their Professional Rating from 0 to 10. Leave it out for a named character"),
+  charisma: z.number().int().min(1).max(20).optional().describe("A grunt's Charisma, for their Composure test. Required with professionalRating"),
+  lieutenant: z.boolean().optional().describe("True for the leader of a group of grunts, who has a longer condition track"),
 });
 export type CharacterRef = z.infer<typeof CharacterRef>;
 
@@ -43,6 +52,13 @@ export const AttackInput = z.object({
   weapon: Weapon,
   attackPool: AttackPool.describe("The attacker's pool: the weapon skill plus Agility, adjusted for gear and conditions"),
   defensePool: AttackPool.describe("The defender's pool: Reaction plus Intuition, adjusted for cover, surprise and conditions"),
+  alongside: z
+    .array(CharacterRef)
+    .max(9)
+    .optional()
+    .describe(
+      "Other grunts attacking the same target in the same way as part of one group attack, besides the attacker. Give the highest pool in the group as attackPool; the system adds the group's bonus dice. Only grunts, and by the rulebook no more than 5 in a group including the attacker",
+    ),
   stakes: z.string().min(1).describe("What this attack means in the scene, for the players to read"),
   edgeAdvice: z
     .string()

@@ -53,7 +53,7 @@ export function attackerRequest(shared: Shared, mine: Side, defender: Other) {
 }
 
 /** Someone the system rolls for attacks a player character: they roll the defense, the system rolls the attack. */
-export function defenderRequest(shared: Shared, mine: Side, attacker: Other) {
+export function defenderRequest(shared: Shared, mine: Side, attacker: Other, groupSize = 1) {
   const { weapon } = shared;
   return {
     input: {
@@ -72,6 +72,6 @@ export function defenderRequest(shared: Shared, mine: Side, attacker: Other) {
       },
       edgeAdvice: shared.edgeAdvice ?? fallbackEdgeAdvice,
     },
-    attack: { role: "defender" as const, weapon, other: { kind: "npc" as const, id: attacker.id, name: attacker.name } },
+    attack: { role: "defender" as const, weapon, ...(groupSize > 1 && { groupSize }), other: { kind: "npc" as const, id: attacker.id, name: attacker.name } },
   } satisfies { input: unknown; attack: RollRequest["attack"] };
 }

@@ -97,6 +97,8 @@ export const RollRequest = RollRequestInput.extend({
       /** Which side the player is on. */
       role: z.enum(["attacker", "defender"]),
       weapon: Weapon,
+      /** How many grunts attacked together as the other side; absent for a single attacker. */
+      groupSize: z.number().int().min(2).optional(),
       /** The other side, whom the system rolls for. */
       other: z.object({ kind: z.literal("npc"), id: z.string(), name: z.string() }),
     })

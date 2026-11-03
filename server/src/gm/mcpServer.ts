@@ -71,7 +71,9 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "with no hits misses. A player character's dice are rolled on the players' screen, so when the reply says a " +
         "roll is waiting, end your turn and wait; the full result comes back as your next message. When only " +
         "non-player characters are involved you get the result straight away. At least one side must be a non-player " +
-        "character. The first time you name an NPC give their name, body and willpower. When a player character " +
+        "character. The first time you name an NPC give their name, body and willpower. Grunts attacking together " +
+        "attack as a group: name one as the attacker, give the highest pool among them, and list the rest in alongside. " +
+        "When a player character " +
         "rolls, also give edgeAdvice, as you would for request_roll. Do not narrate the result " +
         "until you have the report.",
       inputSchema: AttackInput.shape,

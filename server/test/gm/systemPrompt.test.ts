@@ -75,6 +75,7 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("untrained groups run as soon as one of them goes down");
     expect(prompt).toContain("semi-trained ones (rating 1 to 4) retreat after losing about a quarter");
     expect(prompt).toContain("elite ones (8 to 10) fight on to the last");
+    expect(prompt).toContain("these points are your guide for a whole group");
   });
 
   it("tells the GM the system owns injuries, and how to hurt and heal", () => {
@@ -89,6 +90,15 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("call heal with that id in that same turn, or the hits are lost");
     expect(prompt).toContain("each be received only once for a set of injuries");
     expect(prompt).toContain("Never heal without a roll");
+  });
+
+  it("tells the GM how to use grunts, and that a failed Composure test means they bolt", () => {
+    expect(prompt).toContain("Nameless opposition are grunts.");
+    expect(prompt).toContain("also give professionalRating (0 to 10, from the tiers above) and charisma");
+    expect(prompt).toContain("A full track is dead if physical damage hit last and unconscious if stun did");
+    expect(prompt).toContain("if the test fails the grunt bolts, so have it flee or surrender");
+    expect(prompt).toContain("Grunts cannot be healed.");
+    expect(prompt).toContain("the others in alongside (at most four more)");
   });
 
   it("explains wounds the way the rulebook does: a die per filled row, none on resisting damage", () => {
