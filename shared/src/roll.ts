@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DamageType } from "./character.js";
 
 /** Most dice one roll may have. Real pools stay far below it; it stops a mistaken size from exhausting memory. */
 export const MAX_POOL = 100;
@@ -48,7 +49,20 @@ export const NpcRollInput = z.object({
 });
 export type NpcRollInput = z.infer<typeof NpcRollInput>;
 
-export const RollRequest = RollRequestInput.extend({ id: z.string() });
+export const RollRequest = RollRequestInput.extend({
+  id: z.string(),
+  /** Set when the pool was cut by this many dice for wounds. */
+  woundPenalty: z.number().int().min(1).optional(),
+  /** Set when this roll is a character resisting damage: each hit removes one point of it. */
+  soak: z
+    .object({
+      damageValue: z.number().int().min(1),
+      damageType: DamageType,
+      /** What caused the damage, for the report. */
+      source: z.string(),
+    })
+    .optional(),
+});
 export type RollRequest = z.infer<typeof RollRequest>;
 
 /** The dice of one roll, in the order rolled, and what they add up to. */

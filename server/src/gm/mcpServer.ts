@@ -3,18 +3,20 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { NpcRollInput, RollRequestInput } from "@shadow-run/shared";
+import { DealDamageInput, HealInput, NpcRollInput, RollRequestInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = [`mcp__${GM_MCP_NAME}__request_roll`, `mcp__${GM_MCP_NAME}__roll_npc`];
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "deal_damage", "heal"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
   rollNpc(input: unknown): Promise<ToolReply>;
+  dealDamage(input: unknown): Promise<ToolReply>;
+  heal(input: unknown): Promise<ToolReply>;
 }
 
 const asResult = (reply: ToolReply) => ({
@@ -52,6 +54,33 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: NpcRollInput.shape,
     },
     async (input) => asResult(await handlers.rollNpc(input)),
+  );
+
+  server.registerTool(
+    "deal_damage",
+    {
+      description:
+        "Hurt a character: a hit that landed, a fall, fire, a hazard. Use it for every injury, and never decide " +
+        "yourself how much damage lands. Give the Damage Value before the target resists; the target resists with " +
+        "Body and the system applies what gets through. A player character rolls their own Body on the table's " +
+        "screen, so end your turn and wait; an NPC's Body is rolled for you and you get the report straight away. " +
+        "The first time you name an NPC give their name, body and willpower; after that the id is enough. " +
+        "Do not narrate the wound until you have the report.",
+      inputSchema: DealDamageInput.shape,
+    },
+    async (input) => asResult(await handlers.dealDamage(input)),
+  );
+
+  server.registerTool(
+    "heal",
+    {
+      description:
+        "Heal a character after a roll that earned it: First Aid, a medkit, a healing spell. Heal one box for each " +
+        "net hit over the threshold, and no more. Healing without a roll behind it is not allowed. A dead character " +
+        "cannot be healed.",
+      inputSchema: HealInput.shape,
+    },
+    async (input) => asResult(await handlers.heal(input)),
   );
 
   return server;

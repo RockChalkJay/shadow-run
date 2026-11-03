@@ -90,7 +90,7 @@ describe("a turn with the CLI", () => {
     expect(run).toMatchObject({
       stdin: "BEGIN SESSION. Open the first scene.",
       model: "haiku",
-      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc",
+      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__deal_damage,mcp__gm__heal",
       settingSources: "",
     });
     expect(run?.systemPrompt).toContain("Kira (id: kira)");
@@ -150,6 +150,50 @@ describe("a turn with the CLI", () => {
     expect(reply).toMatchObject({ isError: true });
     expect(reply?.text).toContain('There is no character "nobody"');
     expect(t.events.some((e) => e.type === "roll.requested")).toBe(false);
+  });
+
+  it("hurts an NPC through the tools server and gives the GM the report in the same turn", async () => {
+    const target = { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower: 3 };
+    const t = await table([{ steps: [{ tool: "deal_damage", args: { label: "Pistol shot", target, damageValue: 5, damageType: "physical" } }, { say: "He staggers." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+    const [reply] = await t.tools();
+    expect(reply).toMatchObject({ tool: "deal_damage", isError: false });
+    expect(reply?.text).toMatch(/^DAMAGE RESULT\. Pistol shot: 5 physical damage to Ganger\.\nGanger resisted with Body 3/);
+    expect(t.session.snapshot().characters.find((c) => c.id === "ganger-1")).toBeDefined();
+  });
+
+  it("puts a player's resistance roll on the table, and tells the GM how they stand once it is answered", async () => {
+    const t = await table([
+      { steps: [{ tool: "deal_damage", args: { label: "Pistol shot", target: { kind: "pc", id: "kira" }, damageValue: 7, damageType: "physical" } }] },
+      { steps: [{ say: "She grits her teeth." }] },
+    ]);
+    await t.session.start();
+    await t.session.whenIdle();
+    const [reply] = await t.tools();
+    expect(reply?.text).toContain("Kira must roll Body to resist 7 physical damage");
+
+    await t.session.submitRoll(requestedId(t.events), { mode: "physical", dice: "6 5 3 1 1" });
+    await t.session.whenIdle();
+    const [, second] = await t.starts();
+    expect(second?.stdin).toContain("DAMAGE RESULT. Pistol shot: 7 physical damage to Kira.");
+    expect(second?.stdin).toContain("Kira: Physical 5/11");
+  });
+
+  it("heals through the tools server", async () => {
+    const t = await table([
+      {
+        steps: [
+          { tool: "deal_damage", args: { label: "x", target: { kind: "npc", id: "g", name: "G", body: 3, willpower: 3 }, damageValue: 6, damageType: "stun" } },
+          { tool: "heal", args: { target: { kind: "npc", id: "g" }, type: "stun", boxes: 2, reason: "A medkit" } },
+        ],
+      },
+    ]);
+    await t.session.start();
+    await t.session.whenIdle();
+    const [, healed] = await t.tools();
+    expect(healed).toMatchObject({ tool: "heal", isError: false });
+    expect(healed?.text).toContain("HEAL. A medkit: G heals 2 stun.");
   });
 
   it("answers an NPC roll straight away with the system's dice", async () => {

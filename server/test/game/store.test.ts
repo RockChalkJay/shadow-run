@@ -6,7 +6,7 @@ import { CampaignStore, type SavedState } from "../../src/game/store.js";
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
-const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], held: [] };
+const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], held: [] };
 
 describe("party", () => {
   it("is null before anything is saved, and round-trips after", async () => {
@@ -38,6 +38,26 @@ describe("game state", () => {
     await store.saveState(state);
     expect(await store.loadState()).toEqual(state);
     expect(await readdir(d)).toEqual(["state.json"]);
+  });
+
+  it("loads a save from before health was tracked, with everyone unhurt", async () => {
+    const d = await dir();
+    const { pcs: _p, npcs: _n, ...old } = emptyState;
+    await writeFile(join(d, "state.json"), JSON.stringify(old));
+    expect(await new CampaignStore(d).loadState()).toMatchObject({ pcs: [], npcs: [] });
+  });
+
+  it("round-trips health and a report waiting for the GM", async () => {
+    const store = new CampaignStore(await dir());
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 4, stun: 0, overflow: 0 };
+    const state = {
+      ...emptyState,
+      pcs: [{ id: "kira", monitor }],
+      npcs: [{ id: "ganger-1", name: "Ganger", body: 3, willpower: 3, monitor }],
+      results: [{ kind: "report" as const, text: "DAMAGE RESULT. x" }],
+    };
+    await store.saveState(state);
+    expect(await store.loadState()).toEqual(state);
   });
 
   it("refuses a state file it cannot understand rather than starting over silently", async () => {

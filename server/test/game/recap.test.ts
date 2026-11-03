@@ -9,6 +9,18 @@ const nameOf = (id: string) => ({ kira: "Kira", doc: "Doc" })[id] ?? id;
 let id = 0;
 const entry = (e: object) => ({ ...e, id: ++id, ts: "t" }) as unknown as TranscriptEntry;
 
+function resistanceRoll(): TranscriptEntry {
+  const m = new RollManager({ knownCharacter: () => true, newId: () => "r1" });
+  m.createInternal({
+    ...rollInput({ pool: { total: 5, breakdown: "Body 5" } }),
+    threshold: 1,
+    soak: { damageValue: 8, damageType: "physical", source: "Ganger's pistol" },
+  });
+  const result = m.resolve("r1", { mode: "physical", dice: "6 5 3 1 1" });
+  if (!result.ok) throw new Error(result.error);
+  return entry({ kind: "roll", resolved: result.resolved });
+}
+
 function resolvedRoll(dice: string, opposed = false): TranscriptEntry {
   const m = new RollManager({ knownCharacter: () => true, d6: scriptedD6([2, 2, 2, 2]), newId: () => "r1" });
   const { threshold: _t, ...rest } = rollInput();
@@ -38,6 +50,38 @@ describe("formatRecap", () => {
         "[NPC roll] Ganger fires: 2 hits, success.",
       ].join("\n"),
     );
+  });
+
+  it("reports damage and healing, and who is down", () => {
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 6, stun: 0, overflow: 0 };
+    const after = (status: "active" | "unconscious" | "dead") => ({ id: "kira", kind: "pc" as const, name: "Kira", monitor, status, woundModifier: 2 });
+    const resistance = { dice: [6, 5, 1], hits: 2, ones: 1, glitch: false, criticalGlitch: false };
+    const text = formatRecap(
+      [
+        entry({ kind: "damage", label: "Ganger's pistol", damageType: "physical", damageValue: 8, resistance, resistedBy: "physical", taken: 6, after: after("active") }),
+        entry({ kind: "damage", label: "Shock baton", damageType: "stun", damageValue: 12, resistance, resistedBy: "app", taken: 10, after: after("unconscious") }),
+        entry({ kind: "heal", reason: "Doc's First Aid", type: "stun", healed: 2, after: after("active") }),
+      ],
+      nameOf,
+    );
+    expect(text).toBe(
+      [
+        "[Damage] Kira took 6 physical from Ganger's pistol.",
+        "[Damage] Kira took 10 stun from Shock baton. Kira is unconscious.",
+        "[Heal] Kira healed 2 stun: Doc's First Aid.",
+      ].join("\n"),
+    );
+  });
+
+  it("leaves out a resistance roll, which has no verdict, and keeps the damage line that says what came of it", () => {
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 6, stun: 0, overflow: 0 };
+    const after = { id: "kira", kind: "pc" as const, name: "Kira", monitor, status: "active" as const, woundModifier: 2 };
+    const resistance = { dice: [6, 5, 3, 1, 1], hits: 2, ones: 2, glitch: false, criticalGlitch: false };
+    const text = formatRecap(
+      [resistanceRoll(), entry({ kind: "damage", label: "Ganger's pistol", damageType: "physical", damageValue: 8, resistance, resistedBy: "physical", taken: 6, after })],
+      nameOf,
+    );
+    expect(text).toBe("[Damage] Kira took 6 physical from Ganger's pistol.");
   });
 
   it("summarizes a roll with its verdict and declared consequence", () => {

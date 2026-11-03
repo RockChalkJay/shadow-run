@@ -115,6 +115,37 @@ async function main() {
   );
   check("the GM does not reveal who is running it", !/@|protonmail|rockchalk/i.test(direct));
 
+  // A fight: the GM asks for the dice, and once they decide a hit it hurts people through the tools.
+  const faces = (request: { pool: { total: number } }, face: number) => String(face).repeat(request.pool.total).split("").join(" ");
+  await turn("a ganger shoots a player character", store, session, () =>
+    session.say(undefined, "A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
+  );
+  const defense = session.snapshot().pendingRolls.find((r) => r.characterId === "kira");
+  check("the GM asks Kira to roll against the shot", !!defense, defense?.label ?? "no roll appeared");
+  if (defense) {
+    note(`roll: ${defense.label} (${defense.pool.total} dice${defense.opposed ? `, ${defense.opposed.role} against ${defense.opposed.pool}` : ""})`);
+    await turn("Kira fails to dodge", store, session, () => session.submitRoll(defense.id, { mode: "physical", dice: faces(defense, 2) }));
+  }
+  const soak = session.snapshot().pendingRolls.find((r) => r.soak && r.characterId === "kira");
+  check("the shot lands, and the GM hurts Kira through deal_damage", !!soak, soak ? `${soak.soak!.damageValue} ${soak.soak!.damageType}` : "no damage card appeared");
+  if (soak) {
+    note(`resistance card: ${soak.label} (${soak.pool.total} dice)`);
+    await turn("Kira's resistance roll comes up empty", store, session, () => session.submitRoll(soak.id, { mode: "physical", dice: faces(soak, 2) }));
+    const kiraNow = session.snapshot().characters.find((c) => c.id === "kira");
+    note(`Kira now: physical ${kiraNow?.monitor.physical}, stun ${kiraNow?.monitor.stun}, wound penalty ${kiraNow?.woundModifier}, ${kiraNow?.status}`);
+    check("the system applied the damage in full", (kiraNow?.monitor.physical ?? 0) + (kiraNow?.monitor.stun ?? 0) >= soak.soak!.damageValue);
+  }
+
+  await turn("Kira shoots back", store, session, () => session.say("kira", "I shoot Spike with my heavy pistol."));
+  const attack = session.snapshot().pendingRolls.find((r) => r.characterId === "kira" && !r.soak);
+  check("the GM asks for an attack roll", !!attack, attack?.label ?? "no roll appeared");
+  if (attack) {
+    note(`roll: ${attack.label} (${attack.pool.total} dice${attack.opposed ? `, against ${attack.opposed.pool}` : ""})`);
+    await turn("Kira's shot is dead on", store, session, () => session.submitRoll(attack.id, { mode: "physical", dice: faces(attack, 6) }));
+  }
+  const spike = session.snapshot().characters.find((c) => c.kind === "npc");
+  check("the GM hurts the ganger through deal_damage, and the system keeps track of him", !!spike && spike.monitor.physical + spike.monitor.stun > 0, spike ? `${spike.name}: physical ${spike.monitor.physical}, ${spike.status}` : "no NPC on the table");
+
   // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
   await close();
   const razor: PartyMember = {
