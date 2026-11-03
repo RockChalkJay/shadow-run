@@ -3,49 +3,49 @@ import {
   applyDamage,
   damageAfterResistance,
   damageResistancePool,
-  defaultRuleset,
+  healDamage,
   newMonitor,
-  resolveDamageType,
   statusOf,
   woundModifier,
 } from "../../src/rules/index.js";
 
 describe("newMonitor", () => {
-  it("gives 8 boxes plus half the attribute, rounded up", () => {
-    expect(newMonitor(5, 3)).toMatchObject({ physicalBoxes: 11, stunBoxes: 10, body: 5 });
-    expect(newMonitor(4, 4)).toMatchObject({ physicalBoxes: 10, stunBoxes: 10 });
+  it("gives 8 boxes plus half the attribute, rounded up, and Body x 2 overflow boxes", () => {
+    expect(newMonitor(5, 3)).toMatchObject({ physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10 });
+    expect(newMonitor(4, 4)).toMatchObject({ physicalBoxes: 10, stunBoxes: 10, overflowBoxes: 8 });
+  });
+
+  it.each([
+    ["Body 0", 0, 3],
+    ["a missing Body", NaN, 3],
+    ["a fractional Body", 1.5, 3],
+    ["a negative Body", -2, 3],
+    ["Willpower 0", 3, 0],
+    ["a missing Willpower", 3, NaN],
+  ])("refuses %s, which would give a character who is dead already or can never be hurt", (_name, body, will) => {
+    expect(() => newMonitor(body, will)).toThrow(RangeError);
   });
 });
 
 describe("applyDamage", () => {
-  it("marks physical damage until the track is full, then reports dying", () => {
+  it("marks physical damage, and past the last box it overflows", () => {
     const hurt = applyDamage(newMonitor(5, 3), "physical", 5);
     expect(hurt).toMatchObject({ physical: 5, overflow: 0 });
     expect(statusOf(hurt)).toBe("active");
 
-    const down = applyDamage(hurt, "physical", 6);
-    expect(down).toMatchObject({ physical: 11, overflow: 0 });
-    expect(statusOf(down)).toBe("dying");
+    const over = applyDamage(hurt, "physical", 8);
+    expect(over).toMatchObject({ physical: 11, overflow: 2 });
   });
 
-  it("lets overflow reach Body while dying and kills past it", () => {
-    const full = applyDamage(newMonitor(5, 3), "physical", 11);
-    expect(statusOf(applyDamage(full, "physical", 5))).toBe("dying");
-    const dead = applyDamage(full, "physical", 6);
-    expect(dead.overflow).toBe(6);
-    expect(statusOf(dead)).toBe("dead");
-  });
-
-  it("knocks a character out when the stun track fills", () => {
-    const out = applyDamage(newMonitor(4, 4), "stun", 10);
-    expect(out).toMatchObject({ stun: 10, physical: 0 });
-    expect(statusOf(out)).toBe("unconscious");
-  });
-
-  it("carries excess stun into physical at the configured rate, rounding down", () => {
+  it("carries stun past the last stun box into physical, one for one", () => {
     const carried = applyDamage(newMonitor(4, 4), "stun", 14);
-    expect(carried).toMatchObject({ stun: 10, physical: 2 });
-    expect(applyDamage(newMonitor(4, 4), "stun", 11)).toMatchObject({ stun: 10, physical: 0 });
+    expect(carried).toMatchObject({ stun: 10, physical: 4, overflow: 0 });
+    expect(applyDamage(newMonitor(4, 4), "stun", 11)).toMatchObject({ stun: 10, physical: 1 });
+  });
+
+  it("carries a full stun track's extra into overflow once physical is full too", () => {
+    const full = applyDamage(newMonitor(4, 4), "physical", 10);
+    expect(applyDamage(full, "stun", 13)).toMatchObject({ stun: 10, physical: 10, overflow: 3 });
   });
 
   it("does not change the monitor it was given", () => {
@@ -60,29 +60,64 @@ describe("applyDamage", () => {
   });
 });
 
+describe("statusOf", () => {
+  it("knocks a character out when either monitor fills", () => {
+    expect(statusOf(applyDamage(newMonitor(4, 4), "stun", 10))).toBe("unconscious");
+    expect(statusOf(applyDamage(newMonitor(4, 4), "physical", 10))).toBe("unconscious");
+  });
+
+  it("matches the rulebook's example: 10 Stun, 11 Physical and 2 Overflow is unconscious, not dead", () => {
+    const monitor = { ...newMonitor(5, 4), stun: 10, physical: 11, overflow: 2 };
+    expect(statusOf(monitor)).toBe("unconscious");
+  });
+
+  it("kills a character whose overflow reaches Body x 2", () => {
+    const full = applyDamage(newMonitor(5, 3), "physical", 11);
+    expect(statusOf(applyDamage(full, "physical", 9))).toBe("unconscious");
+    expect(statusOf(applyDamage(full, "physical", 10))).toBe("dead");
+  });
+});
+
 describe("woundModifier", () => {
-  it("costs a die for every 3 boxes filled across both tracks", () => {
-    const monitor = { ...newMonitor(5, 5), physical: 3, stun: 3 };
-    expect(woundModifier(monitor)).toBe(2);
-    expect(woundModifier({ ...monitor, physical: 1, stun: 1 })).toBe(0);
+  it("costs a die for each complete row of 3 boxes on either monitor, added together", () => {
+    expect(woundModifier({ ...newMonitor(5, 5), physical: 3, stun: 3 })).toBe(2);
+    expect(woundModifier({ ...newMonitor(5, 5), physical: 7 })).toBe(2);
+  });
+
+  it("does not combine boxes across the two monitors into rows", () => {
+    expect(woundModifier({ ...newMonitor(5, 5), physical: 2, stun: 2 })).toBe(0);
   });
 });
 
 describe("damage resistance", () => {
-  it("rolls Body plus armor unless the ruleset says Body alone", () => {
-    expect(damageResistancePool(4, 3)).toBe(7);
-    expect(damageResistancePool(4, 3, { ...defaultRuleset, damageResistance: { pool: "body" } })).toBe(4);
+  it("rolls Body alone", () => {
+    expect(damageResistancePool(4)).toBe(4);
   });
 
   it("removes a point of damage per hit, never going below zero", () => {
     expect(damageAfterResistance(8, 3)).toBe(5);
     expect(damageAfterResistance(3, 5)).toBe(0);
   });
+});
 
-  it("turns physical damage into stun unless it beats the armor", () => {
-    expect(resolveDamageType("physical", 5, 6)).toBe("stun");
-    expect(resolveDamageType("physical", 6, 6)).toBe("stun");
-    expect(resolveDamageType("physical", 7, 6)).toBe("physical");
-    expect(resolveDamageType("stun", 9, 2)).toBe("stun");
+describe("healDamage", () => {
+  const hurt = { ...newMonitor(5, 4), stun: 5, physical: 6, overflow: 2 };
+
+  it("clears boxes from the chosen track", () => {
+    expect(healDamage(hurt, "stun", 1).stun).toBe(4);
+    expect(healDamage(hurt, "physical", 2).physical).toBe(4);
+    expect(healDamage(hurt, "overflow", 1).overflow).toBe(1);
+  });
+
+  it("never goes below zero and rejects a bad amount", () => {
+    expect(healDamage(hurt, "overflow", 9).overflow).toBe(0);
+    expect(() => healDamage(hurt, "stun", -1)).toThrow(RangeError);
+  });
+
+  it("follows the rulebook's attack: Body 3 takes 7 on a 10-box monitor and has 3 boxes left", () => {
+    const leader = newMonitor(3, 3);
+    expect(leader.physicalBoxes).toBe(10);
+    const hit = applyDamage(leader, "physical", damageAfterResistance(8, 1));
+    expect(hit.physicalBoxes - hit.physical).toBe(3);
   });
 });

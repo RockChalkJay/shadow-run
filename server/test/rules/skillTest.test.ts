@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluate, opposedTest, simpleTest } from "../../src/rules/index.js";
+import { attackDamage, damageAfterResistance, evaluate, opposedTest, simpleTest } from "../../src/rules/index.js";
 
 const withHits = (n: number) => evaluate([...Array(n).fill(6), ...Array(4).fill(3)]);
 
@@ -26,7 +26,27 @@ describe("opposedTest", () => {
     expect(opposedTest(withHits(1), withHits(4))).toEqual({ winner: "defender", netHits: 3 });
   });
 
-  it("goes to the defender on a tie", () => {
-    expect(opposedTest(withHits(3), withHits(3))).toEqual({ winner: "defender", netHits: 0 });
+  it("goes to the attacker on a tie", () => {
+    expect(opposedTest(withHits(3), withHits(3))).toEqual({ winner: "attacker", netHits: 0 });
+  });
+});
+
+describe("attackDamage", () => {
+  it("adds the attacker's net hits to the weapon's Damage Value", () => {
+    expect(attackDamage(withHits(7), withHits(2), 3)).toEqual({ hit: true, damageValue: 8 });
+  });
+
+  it("hits for the base Damage Value on a tie", () => {
+    expect(attackDamage(withHits(3), withHits(3), 4)).toEqual({ hit: true, damageValue: 4 });
+  });
+
+  it("misses when the defender has more hits", () => {
+    expect(attackDamage(withHits(2), withHits(3), 4)).toEqual({ hit: false, damageValue: 0 });
+  });
+
+  it("follows the rulebook's firearms example: 3P with 5 net hits is 8, a Body 3 soak with 1 hit leaves 7", () => {
+    const { damageValue } = attackDamage(withHits(7), withHits(2), 3);
+    expect(damageValue).toBe(8);
+    expect(damageAfterResistance(damageValue, 1)).toBe(7);
   });
 });

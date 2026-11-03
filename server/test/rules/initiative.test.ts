@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsFor, rollInitiative, scriptedD6, turnOrder } from "../../src/rules/index.js";
+import { actionsFor, rollInitiative, scriptedD6, turnOrder, type TurnEntry } from "../../src/rules/index.js";
 
 describe("rollInitiative", () => {
   it("adds Reaction, Intuition and the initiative dice", () => {
@@ -24,12 +24,39 @@ describe("actionsFor", () => {
 });
 
 describe("turnOrder", () => {
-  it("puts the highest score first and keeps the order of equal scores", () => {
-    const order = turnOrder([
-      { name: "a", score: 10 },
-      { name: "b", score: 15 },
-      { name: "c", score: 10 },
-    ]);
-    expect(order.map((e) => e.name)).toEqual(["b", "a", "c"]);
+  const entry = (name: string, score: number, edge = 3, reaction = 4, intuition = 4): TurnEntry & { name: string } => ({
+    name,
+    score,
+    edge,
+    reaction,
+    intuition,
+  });
+  const names = (list: { name: string }[]) => list.map((e) => e.name);
+  const never = () => 0.5;
+
+  it("puts the highest score first", () => {
+    expect(names(turnOrder([entry("a", 10), entry("b", 15), entry("c", 8)], never))).toEqual(["b", "a", "c"]);
+  });
+
+  it("breaks a tie on Edge first, as in the rulebook's Oda example", () => {
+    const order = turnOrder([entry("ganger", 10, 3), entry("oda", 10, 5)], never);
+    expect(names(order)).toEqual(["oda", "ganger"]);
+  });
+
+  it("then Reaction, then Intuition", () => {
+    expect(names(turnOrder([entry("a", 10, 3, 4), entry("b", 10, 3, 6)], never))).toEqual(["b", "a"]);
+    expect(names(turnOrder([entry("a", 10, 3, 4, 4), entry("b", 10, 3, 4, 6)], never))).toEqual(["b", "a"]);
+  });
+
+  it("flips a coin when everything is equal", () => {
+    const coins = [0.9, 0.1];
+    const flip = () => coins.shift() ?? 0;
+    expect(names(turnOrder([entry("a", 10), entry("b", 10)], flip))).toEqual(["b", "a"]);
+  });
+
+  it("does not change the list it was given", () => {
+    const list = [entry("a", 5), entry("b", 9)];
+    turnOrder(list, never);
+    expect(names(list)).toEqual(["a", "b"]);
   });
 });
