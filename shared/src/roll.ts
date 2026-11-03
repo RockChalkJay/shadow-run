@@ -49,10 +49,31 @@ export const NpcRollInput = z.object({
 });
 export type NpcRollInput = z.infer<typeof NpcRollInput>;
 
+/** A weapon as the GM describes it for one attack. */
+export const Weapon = z.object({
+  name: z.string().min(1).max(60).describe("The weapon, e.g. 'Ares Predator VI' or 'combat knife'"),
+  damageValue: z.number().int().min(1).max(40).describe("The weapon's base Damage Value, e.g. 3 for a 3P heavy pistol"),
+  damageType: DamageType.describe("'physical' or 'stun'"),
+});
+export type Weapon = z.infer<typeof Weapon>;
+
 export const RollRequest = RollRequestInput.extend({
   id: z.string(),
   /** Set when the pool was cut by this many dice for wounds. */
   woundPenalty: z.number().int().min(1).optional(),
+  /**
+   * Set when this roll is one side of an attack: the player's attack roll or their defense roll. The system
+   * rolls the other side when the player answers, then works out the damage.
+   */
+  attack: z
+    .object({
+      /** Which side the player is on. */
+      role: z.enum(["attacker", "defender"]),
+      weapon: Weapon,
+      /** The other side, whom the system rolls for. */
+      other: z.object({ kind: z.literal("npc"), id: z.string(), name: z.string() }),
+    })
+    .optional(),
   /** Set when this roll is a character resisting damage: each hit removes one point of it. */
   soak: z
     .object({

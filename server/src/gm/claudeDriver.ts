@@ -55,6 +55,7 @@ export class ClaudeGmDriver implements GmDriver {
       requestRoll: (input) => driver?.current?.tools.requestRoll(input) ?? Promise.resolve(NO_TURN),
       rollNpc: (input) => driver?.current?.tools.rollNpc(input) ?? Promise.resolve(NO_TURN),
       dealDamage: (input) => driver?.current?.tools.dealDamage(input) ?? Promise.resolve(NO_TURN),
+      attack: (input) => driver?.current?.tools.attack(input) ?? Promise.resolve(NO_TURN),
       heal: (input) => driver?.current?.tools.heal(input) ?? Promise.resolve(NO_TURN),
     });
     const files = { systemPrompt: join(cwd, "system-prompt.md"), mcpConfig: join(cwd, "mcp.json") };

@@ -14,7 +14,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
       // A resistance roll has no success or failure; the damage line that follows says what came of it.
-      if (request.soak) return null;
+      // The same goes for either side of an attack: the attack line says whether it landed.
+      if (request.soak || request.attack) return null;
       const against = opposed ? ` against ${opposed.by} (${hits(opposed.roll.hits)})` : "";
       const glitch = roll.criticalGlitch ? ", critical glitch" : roll.glitch ? ", glitch" : "";
       const effect = [outcome.consequence, outcome.glitchConsequence].filter(Boolean).join(" ");
@@ -24,6 +25,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Roll skipped] ${nameOf(entry.characterId)}, ${entry.label}.`;
     case "npc":
       return `[NPC roll] ${entry.label}: ${hits(entry.roll.hits)}${entry.success === undefined ? "" : entry.success ? ", success" : ", failure"}.`;
+    case "attack":
+      return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}.`;
     case "damage":
       return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}`;
     case "heal":

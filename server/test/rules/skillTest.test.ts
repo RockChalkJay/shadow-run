@@ -40,6 +40,15 @@ describe("attackDamage", () => {
     expect(attackDamage(withHits(3), withHits(3), 4)).toEqual({ hit: true, damageValue: 4 });
   });
 
+  it("misses when the attacker has no hits, even against a defender with none", () => {
+    expect(attackDamage(withHits(0), withHits(0), 4)).toEqual({ hit: false, damageValue: 0 });
+    expect(attackDamage(withHits(0), withHits(2), 4)).toEqual({ hit: false, damageValue: 0 });
+  });
+
+  it("hits for the base Damage Value with a single hit against none", () => {
+    expect(attackDamage(withHits(1), withHits(0), 4)).toEqual({ hit: true, damageValue: 5 });
+  });
+
   it("misses when the defender has more hits", () => {
     expect(attackDamage(withHits(2), withHits(3), 4)).toEqual({ hit: false, damageValue: 0 });
   });

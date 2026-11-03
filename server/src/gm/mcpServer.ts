@@ -3,18 +3,19 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DealDamageInput, HealInput, NpcRollInput, RollRequestInput } from "@shadow-run/shared";
+import { AttackInput, DealDamageInput, HealInput, NpcRollInput, RollRequestInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "deal_damage", "heal"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
   rollNpc(input: unknown): Promise<ToolReply>;
+  attack(input: unknown): Promise<ToolReply>;
   dealDamage(input: unknown): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
 }
@@ -54,6 +55,26 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: NpcRollInput.shape,
     },
     async (input) => asResult(await handlers.rollNpc(input)),
+  );
+
+  server.registerTool(
+    "attack",
+    {
+      description:
+        "Resolve one attack with a weapon: a gunshot, a sword swing, a punch. Use it for every attack in a fight, " +
+        "in place of request_roll and deal_damage. Give the attacker's pool (weapon skill plus Agility) and the " +
+        "defender's pool (Reaction plus Intuition), each with how you built it, and the weapon's base Damage Value. " +
+        "The system rolls both sides, adds the attacker's net hits to the Damage Value, has the defender resist with " +
+        "Body, and applies what gets through. You never decide whether it hits or how much damage lands. An attacker " +
+        "with no hits misses. A player character's dice are rolled on the players' screen, so when the reply says a " +
+        "roll is waiting, end your turn and wait; the full result comes back as your next message. When only " +
+        "non-player characters are involved you get the result straight away. At least one side must be a non-player " +
+        "character. The first time you name an NPC give their name, body and willpower. When a player character " +
+        "rolls, also give edgeAdvice, as you would for request_roll. Do not narrate the result " +
+        "until you have the report.",
+      inputSchema: AttackInput.shape,
+    },
+    async (input) => asResult(await handlers.attack(input)),
   );
 
   server.registerTool(

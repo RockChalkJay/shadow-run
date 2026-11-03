@@ -1,29 +1,39 @@
 import {
+  AttackInput,
   DealDamageInput,
   HealInput,
   NpcRollInput,
   type CharacterView,
+  type DamageType,
   type GmEvent,
   type GmStatus,
   type PartyMember,
   type ResolvedRoll,
   type RollRequest,
+  type RollResult,
   type ServerEvent,
   type Snapshot,
   type TranscriptEntry,
   type Usage,
+  type Weapon,
 } from "@shadow-run/shared";
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { cryptoD6, damageAfterResistance, damageResistancePool, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, damageAfterResistance, damageResistancePool, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { afterWounds, attackerRequest, damageCode, defenderRequest } from "./attack.js";
 import { formatRecap } from "./recap.js";
-import { Roster } from "./roster.js";
-import { formatCancelledForGm, formatDamageForGm, formatHealForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { Roster, type Target } from "./roster.js";
+import { formatAttackForGm, formatCancelledForGm, formatDamageForGm, formatHealForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { MAX_PENDING_ROLLS, RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
 export type Ack = { ok: true } | { ok: false; error: string };
+
+/** Said to the GM whenever a roll is now on the players' screen. */
+const WAIT_FOR_DICE = "The roll card is on the table's screen. End your turn now and wait for the result.";
+
+type Found = Extract<Target, { ok: true }>;
 
 type Held = SavedState["held"][number];
 type Outcome = SavedState["results"][number];
@@ -218,9 +228,12 @@ export class GameSession {
     // A roll to resist damage is not a result for the GM to interpret: the damage is applied now, in this step,
     // and the GM is told how the character stands.
     const soak = resolved.request.soak ? this.applySoak(resolved) : undefined;
-    this.results.push(soak ? { kind: "report", text: soak.report } : { kind: "resolved", resolved });
+    // One side of an attack is not a result for the GM to interpret either: the attack is settled now and the GM is told how it went.
+    const attacking = resolved.request.attack !== undefined;
+    if (!attacking) this.results.push(soak ? { kind: "report", text: soak.report } : { kind: "resolved", resolved });
     await this.record({ kind: "roll", resolved });
     if (soak) await this.record(soak.entry);
+    if (attacking) this.results.push({ kind: "report", text: await this.settlePlayerAttack(resolved) });
     this.blocked = false;
     await this.persist();
     this.schedule();
@@ -241,6 +254,9 @@ export class GameSession {
   async cancelRoll(requestId: string): Promise<Ack> {
     if (this.rolls.list().find((r) => r.id === requestId)?.soak) {
       return { ok: false, error: "That roll resists damage that is already coming, so it cannot be skipped. Roll it with the app or with dice." };
+    }
+    if (this.rolls.list().find((r) => r.id === requestId)?.attack?.role === "defender") {
+      return { ok: false, error: "That roll defends against an attack that is already coming, so it cannot be skipped. Roll it with the app or with dice." };
     }
     const request = this.rolls.cancel(requestId);
     if (!request) return { ok: false, error: "That roll is not waiting for dice." };
@@ -296,6 +312,7 @@ export class GameSession {
       requestRoll: (input) => whileCurrent(() => this.requestRoll(input)),
       rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
       dealDamage: (input) => whileCurrent(() => this.dealDamage(input)),
+      attack: (input) => whileCurrent(() => this.attack(input)),
       heal: (input) => whileCurrent(() => this.heal(input)),
     };
   }
@@ -305,7 +322,7 @@ export class GameSession {
     if (!created.ok) return { ok: false, text: created.error };
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
-    return { ok: true, text: "The roll card is on the table's screen. End your turn now and wait for the result." };
+    return { ok: true, text: WAIT_FOR_DICE };
   }
 
   private async rollNpc(input: unknown): Promise<ToolReply> {
@@ -337,23 +354,30 @@ export class GameSession {
     };
   }
 
-  private async dealDamage(input: unknown): Promise<ToolReply> {
-    const parsed = DealDamageInput.safeParse(input);
-    if (!parsed.success) return { ok: false, text: `The damage was not valid: ${z.prettifyError(parsed.error)}` };
-    const { label, target: ref, damageValue, damageType } = parsed.data;
-    const target = this.roster.resolve(ref);
-    if (!target.ok) return { ok: false, text: target.error };
-    if (this.roster.view(target.kind, target.id)?.status === "dead") return { ok: false, text: `${target.name} is already dead.` };
+  /** Why this target cannot be hurt, or null if it can. */
+  private alreadyDead(target: Found): ToolReply | null {
+    return this.roster.view(target.kind, target.id)?.status === "dead" ? { ok: false, text: `${target.name} is already dead.` } : null;
+  }
 
+  /** The refusal to give when no more rolls fit on the players' screen, or null if there is room. */
+  private noRoomForRolls(): ToolReply | null {
+    // Every roll the system adds here is damage that lands once it is answered, so a GM stuck in a loop must not be able to stack them.
+    return this.rolls.list().length >= MAX_PENDING_ROLLS
+      ? { ok: false, text: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop and wait for the table to answer them before hurting anyone else.` }
+      : null;
+  }
+
+  /**
+   * Hurts someone with a Damage Value they have yet to resist. A player character gets a roll of their own
+   * Body, so `waiting` is true and the caller must hold the GM; a non-player character's Body is rolled here
+   * and the damage applied at once.
+   */
+  private async harm(target: Found, label: string, damageValue: number, damageType: DamageType): Promise<{ waiting: boolean; text: string }> {
     if (target.kind === "pc") {
-      // Every card here is damage that lands once it is answered, so a GM stuck in a loop must not be able to stack them.
-      if (this.rolls.list().length >= MAX_PENDING_ROLLS) {
-        return { ok: false, text: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop and wait for the table to answer them before hurting anyone else.` };
-      }
       // The player rolls their own Body to resist, so the dice are theirs.
       const request = this.rolls.createInternal({
         characterId: target.id,
-        label: `Resist ${damageValue}${damageType === "physical" ? "P" : "S"} damage: ${label}`,
+        label: `Resist ${damageCode(damageValue, damageType)} damage: ${label}`,
         pool: { total: damageResistancePool(target.body), breakdown: `Body ${target.body}` },
         threshold: 1,
         stakes: `${damageValue} ${damageType} damage is coming. Every hit on this roll removes one point of it.`,
@@ -370,10 +394,7 @@ export class GameSession {
       });
       await this.persist();
       this.opts.emit({ type: "roll.requested", request });
-      return {
-        ok: true,
-        text: `${target.name} must roll Body to resist ${damageValue} ${damageType} damage. The roll card is on the table's screen. End your turn now and wait for the result.`,
-      };
+      return { waiting: true, text: `${target.name} must roll Body to resist ${damageValue} ${damageType} damage.` };
     }
 
     // The system rolls an NPC's Body for them.
@@ -384,7 +405,166 @@ export class GameSession {
     const damage = { label, damageType, damageValue, resistance, resistedBy: "system" as const, taken, after };
     await this.record({ kind: "damage", ...damage });
     await this.persist();
-    return { ok: true, text: formatDamageForGm({ ...damage, body: target.body }) };
+    return { waiting: false, text: formatDamageForGm({ ...damage, body: target.body }) };
+  }
+
+  private async dealDamage(input: unknown): Promise<ToolReply> {
+    const parsed = DealDamageInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The damage was not valid: ${z.prettifyError(parsed.error)}` };
+    const { label, target: ref, damageValue, damageType } = parsed.data;
+    const target = this.roster.resolve(ref);
+    if (!target.ok) return { ok: false, text: target.error };
+    const refusal = this.alreadyDead(target) ?? (target.kind === "pc" ? this.noRoomForRolls() : null);
+    if (refusal) return refusal;
+
+    const done = await this.harm(target, label, damageValue, damageType);
+    return { ok: true, text: done.waiting ? `${done.text} ${WAIT_FOR_DICE}` : done.text };
+  }
+
+  /**
+   * One attack. A player character's side is a roll request for them; the other side is rolled by the system
+   * when they answer, and the damage worked out in code. When no player character has dice to roll, it all
+   * happens here.
+   */
+  private async attack(input: unknown): Promise<ToolReply> {
+    const parsed = AttackInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The attack was not valid: ${z.prettifyError(parsed.error)}` };
+    const { label, stakes, weapon, attackPool, defensePool, edgeAdvice } = parsed.data;
+    const attacker = this.roster.resolve(parsed.data.attacker);
+    if (!attacker.ok) return { ok: false, text: attacker.error };
+    const defender = this.roster.resolve(parsed.data.defender);
+    if (!defender.ok) return { ok: false, text: defender.error };
+
+    if (attacker.kind === defender.kind && attacker.id === defender.id) return { ok: false, text: `${attacker.name} cannot attack themselves.` };
+    if (attacker.kind === "pc" && defender.kind === "pc") {
+      return { ok: false, text: "Attacks between two player characters are not handled yet. Ask the attacker for an opposed request_roll, then call deal_damage with the Damage Value it gives." };
+    }
+    const attackerView = this.roster.view(attacker.kind, attacker.id)!;
+    if (attackerView.status !== "active") return { ok: false, text: `${attacker.name} is ${attackerView.status} and cannot attack.` };
+    const refusal = this.alreadyDead(defender) ?? (attacker.kind === "pc" || defender.kind === "pc" ? this.noRoomForRolls() : null);
+    if (refusal) return refusal;
+
+    const shared = { label, stakes, weapon, edgeAdvice };
+    const defenderView = this.roster.view(defender.kind, defender.id)!;
+
+    if (attacker.kind === "pc") {
+      const theirs = defender;
+      const request = attackerRequest(shared, { characterId: attacker.id, pool: attackPool }, {
+        id: theirs.id,
+        name: theirs.name,
+        pool: afterWounds(defensePool.total, defenderView.woundModifier),
+      });
+      return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${attacker.name}'s attack`);
+    }
+
+    const attackDice = afterWounds(attackPool.total, attackerView.woundModifier);
+    if (defender.kind === "pc") {
+      // A defender who is down, or whose wounds leave them no dice, cannot defend at all.
+      const dice = defensePool.total - this.roster.woundPenalty(defender.id);
+      if (defenderView.status === "active" && dice >= 1) {
+        const request = defenderRequest(shared, { characterId: defender.id, pool: defensePool }, { id: attacker.id, name: attacker.name, pool: attackDice });
+        return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${defender.name}'s defense`);
+      }
+    }
+
+    // Nobody here has dice to roll, so the system rolls both sides. A player character who got this far cannot defend at all.
+    const defenseDice = defender.kind === "pc" ? 0 : afterWounds(defensePool.total, defenderView.woundModifier);
+    const settled = await this.settleAttack({
+      label,
+      weapon,
+      attackerName: attacker.name,
+      defender,
+      attackRoll: rollPool(attackDice, this.d6, this.rules),
+      attackDice,
+      attackedBy: "system",
+      defenseRoll: rollPool(defenseDice, this.d6, this.rules),
+      defenseDice,
+      defendedBy: "system",
+    });
+    return { ok: true, text: settled.resist ? `${settled.text}\n${settled.resist} ${WAIT_FOR_DICE}` : settled.text };
+  }
+
+  /** Announces a roll the system just made out for a player, or says why it could not. */
+  private async putOnScreen(created: ReturnType<RollManager["create"]>, what: string): Promise<ToolReply> {
+    if (!created.ok) return { ok: false, text: created.error };
+    await this.persist();
+    this.opts.emit({ type: "roll.requested", request: created.request });
+    return { ok: true, text: `${what} is waiting for dice. ${WAIT_FOR_DICE}` };
+  }
+
+  /** A player has rolled their side of an attack: the system rolled the other, and now the damage is worked out. */
+  private async settlePlayerAttack(resolved: ResolvedRoll): Promise<string> {
+    const { request, roll, opposed, source } = resolved;
+    const attack = request.attack!;
+    if (!opposed) return `ATTACK VOID. ${request.label}: the other side of the attack was lost, so nothing was applied.`;
+    const player = this.nameOf(request.characterId);
+    const attacking = attack.role === "attacker";
+    const defender = this.roster.resolve(attacking ? { kind: "npc", id: attack.other.id } : { kind: "pc", id: request.characterId }, { create: false });
+    if (!defender.ok) return `ATTACK VOID. ${request.label}: ${defender.error}`;
+    const settled = await this.settleAttack({
+      label: request.label,
+      weapon: attack.weapon,
+      attackerName: attacking ? player : attack.other.name,
+      defender,
+      attackRoll: attacking ? roll : opposed.roll,
+      attackDice: attacking ? request.pool.total : opposed.pool,
+      attackedBy: attacking ? source : "system",
+      defenseRoll: attacking ? opposed.roll : roll,
+      defenseDice: attacking ? opposed.pool : request.pool.total,
+      defendedBy: attacking ? "system" : source,
+    });
+    return settled.text;
+  }
+
+  /** Works out whether an attack landed, records it, and hurts the defender if it did. `resist` is set when a player character must now roll Body. */
+  private async settleAttack(a: {
+    label: string;
+    weapon: Weapon;
+    attackerName: string;
+    defender: Found;
+    attackRoll: RollResult;
+    attackDice: number;
+    attackedBy: "app" | "physical" | "system";
+    defenseRoll: RollResult;
+    defenseDice: number;
+    defendedBy: "app" | "physical" | "system";
+  }): Promise<{ text: string; resist?: string }> {
+    const outcome = attackDamage(a.attackRoll, a.defenseRoll, a.weapon.damageValue);
+    const report = {
+      label: a.label,
+      attacker: a.attackerName,
+      defender: a.defender.name,
+      weapon: a.weapon,
+      attackRoll: a.attackRoll,
+      attackDice: a.attackDice,
+      attackedBy: a.attackedBy,
+      defenseRoll: a.defenseRoll,
+      defenseDice: a.defenseDice,
+      defendedBy: a.defendedBy,
+      hit: outcome.hit,
+      damageValue: outcome.damageValue,
+    };
+    await this.record({
+      kind: "attack",
+      label: a.label,
+      attacker: a.attackerName,
+      defender: a.defender.name,
+      weapon: a.weapon,
+      attackRoll: a.attackRoll,
+      defenseRoll: a.defenseRoll,
+      attackedBy: a.attackedBy,
+      defendedBy: a.defendedBy,
+      hit: outcome.hit,
+      damageValue: outcome.damageValue,
+    });
+    const text = formatAttackForGm(report);
+    if (!outcome.hit) return { text };
+
+    const gone = this.alreadyDead(a.defender);
+    if (gone) return { text: `${text}\n${gone.text}` };
+    const done = await this.harm(a.defender, `${a.attackerName}'s ${a.weapon.name}`, outcome.damageValue, a.weapon.damageType);
+    // A player character's resistance is a roll still to come; the damage result reaches the GM when it is answered.
+    return done.waiting ? { text, resist: done.text } : { text: `${text}\n${done.text}` };
   }
 
   private async heal(input: unknown): Promise<ToolReply> {

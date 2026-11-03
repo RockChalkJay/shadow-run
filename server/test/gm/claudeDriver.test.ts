@@ -90,7 +90,7 @@ describe("a turn with the CLI", () => {
     expect(run).toMatchObject({
       stdin: "BEGIN SESSION. Open the first scene.",
       model: "haiku",
-      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__deal_damage,mcp__gm__heal",
+      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__attack,mcp__gm__deal_damage,mcp__gm__heal",
       settingSources: "",
     });
     expect(run?.systemPrompt).toContain("Kira (id: kira)");

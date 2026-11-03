@@ -34,8 +34,13 @@ export interface AttackOutcome {
   damageValue: number;
 }
 
-/** An attack against a defense roll. A tie still hits, for the weapon's base Damage Value. */
+/**
+ * An attack against a defense roll. A tie still hits, for the weapon's base Damage Value, but an attacker
+ * with no hits misses even against a defender with none (the book's "ties go to the aggressor" does not say
+ * a roll with no hits can win; see `unverified` in ruleset.json).
+ */
 export function attackDamage(attacker: RollResult, defender: RollResult, baseDamageValue: number): AttackOutcome {
+  if (attacker.hits === 0) return { hit: false, damageValue: 0 };
   const { winner, netHits } = opposedTest(attacker, defender);
   return winner === "attacker"
     ? { hit: true, damageValue: baseDamageValue + netHits }

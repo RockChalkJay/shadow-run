@@ -1,4 +1,5 @@
-import type { CharacterView, DamageType, HealType, ResolvedRoll, RollRequest, RollResult } from "@shadow-run/shared";
+import type { CharacterView, DamageType, HealType, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
+import { damageCode } from "./attack.js";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const diceCount = (n: number) => `${n} ${n === 1 ? "die" : "dice"}`;
@@ -109,4 +110,46 @@ export interface HealReport {
 export function formatHealForGm(r: HealReport): string {
   const did = r.healed === 0 ? `had no ${r.type} damage to heal` : `heals ${r.healed} ${r.type}`;
   return [`HEAL. ${r.reason}: ${r.after.name} ${did}.`, formatStanding(r.after)].join("\n");
+}
+
+export interface AttackReport {
+  label: string;
+  attacker: string;
+  defender: string;
+  weapon: Weapon;
+  attackRoll: RollResult;
+  attackDice: number;
+  attackedBy: keyof typeof how;
+  defenseRoll: RollResult;
+  defenseDice: number;
+  defendedBy: keyof typeof how;
+  hit: boolean;
+  damageValue: number;
+}
+
+/** What the GM is told once an attack has been rolled on both sides. */
+export function formatAttackForGm(r: AttackReport): string {
+  const base = r.weapon.damageValue;
+  const lines = [
+    `ATTACK RESULT. ${r.label}.`,
+    `${r.attacker} attacked with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
+    `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
+  ];
+  if (r.hit) {
+    const net = r.damageValue - base;
+    lines.push(
+      net > 0
+        ? `HIT by ${plural(net, "net hit")}. Damage Value ${base} + ${net} = ${r.damageValue} ${r.weapon.damageType}, before ${r.defender} resists.`
+        : `HIT on a tie. Damage Value ${r.damageValue} ${r.weapon.damageType}, before ${r.defender} resists.`,
+    );
+  } else if (r.attackRoll.hits === 0) {
+    lines.push(`MISS. ${r.attacker} had no hits, so the attack cannot land.`);
+  } else {
+    lines.push(`MISS. ${r.defender} had more hits.`);
+  }
+  for (const [who, roll] of [[r.attacker, r.attackRoll], [r.defender, r.defenseRoll]] as const) {
+    const note = glitchNote(roll);
+    if (note) lines.push(`${who}: ${note}. The GM decides what goes wrong, keeping it ${roll.criticalGlitch ? "serious but not fatal" : "inconvenient, not disastrous"}.`);
+  }
+  return lines.join("\n");
 }

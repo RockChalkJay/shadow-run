@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RollRequest, RollRequestInput, type ResolvedRoll, type RollResult } from "@shadow-run/shared";
 import { z } from "zod";
-import { cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 
 export type Fail = { ok: false; error: string };
 
@@ -46,7 +46,7 @@ export class RollManager {
     return [...this.pending.values()];
   }
 
-  create(input: unknown): { ok: true; request: RollRequest } | Fail {
+  create(input: unknown, extra: Pick<RollRequest, "attack"> = {}): { ok: true; request: RollRequest } | Fail {
     const parsed = RollRequestInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: `The roll request was not valid: ${describeIssues(parsed.error)}` };
     const data = parsed.data;
@@ -71,6 +71,7 @@ export class RollManager {
 
     const request: RollRequest = {
       ...data,
+      ...extra,
       pool,
       ...(penalty > 0 && { woundPenalty: penalty }),
       threshold: data.opposed ? undefined : (data.threshold ?? 1),
@@ -124,6 +125,14 @@ export class RollManager {
         const outcome = opposedTest(opponent, roll);
         success = outcome.winner === "defender";
         netHits = success ? outcome.netHits : 0;
+      }
+      if (request.attack) {
+        // An attack that rolls no hits cannot land, whatever the other side rolled, so the verdict follows the attack rules.
+        const attacking = request.attack.role === "attacker";
+        const [attackRoll, defenseRoll] = attacking ? [roll, opponent] : [opponent, roll];
+        const landed = attackDamage(attackRoll, defenseRoll, 0);
+        success = attacking ? landed.hit : !landed.hit;
+        netHits = attacking ? landed.damageValue : Math.max(0, defenseRoll.hits - attackRoll.hits);
       }
     } else {
       ({ success, netHits } = simpleTest(roll, request.threshold ?? 1));
