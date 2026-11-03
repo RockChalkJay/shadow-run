@@ -20,7 +20,7 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
   const { request, roll, opposed, outcome, source } = resolved;
   const lines = [
     `ROLL RESULT. ${characterName}: ${request.label}.`,
-    `${characterName} rolled ${diceCount(request.pool.total)} (${source === "app" ? "app dice" : "dice at the table"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
+    `${characterName} rolled ${diceCount(request.pool.total)} (${source === "app" ? "app dice" : "physical dice"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
   ];
   if (opposed) {
     lines.push(
@@ -46,7 +46,7 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
 }
 
 export function formatCancelledForGm(request: RollRequest, characterName: string): string {
-  return `ROLL SKIPPED. The table skipped ${characterName}'s roll (${request.label}). Apply no consequence from it; carry on from the situation as it stood before the roll.`;
+  return `ROLL SKIPPED. The players skipped ${characterName}'s roll (${request.label}). Apply no consequence from it; carry on from the situation as it stood before the roll.`;
 }
 
 export interface NpcRoll {
@@ -76,7 +76,7 @@ export function formatStanding(view: CharacterView): string {
   return parts.join(" ");
 }
 
-const how = { app: "app dice", physical: "dice at the table", system: "the system's dice" } as const;
+const how = { app: "app dice", physical: "physical dice", system: "the system's dice" } as const;
 
 export interface DamageReport {
   label: string;

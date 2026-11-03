@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 
-/** The numbers the engine plays by. Kept in a JSON file so a table can correct any of them. */
+/** The numbers the engine plays by. Kept in a JSON file so a group can correct any of them. */
 export const Ruleset = z.object({
   hitMinimum: z.number().int().min(2).max(6),
   glitch: z.object({ rule: z.enum(["half_or_more", "more_than_half"]) }),

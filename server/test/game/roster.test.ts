@@ -97,16 +97,16 @@ describe("Roster: non-player characters", () => {
     ["no body", { kind: "npc" as const, id: "g", name: "G", willpower: 3 }],
     ["no willpower", { kind: "npc" as const, id: "g", name: "G", body: 3 }],
   ])("will not add one with %s, and says what is missing", (_label, ref) => {
-    expect(fresh().resolve(ref)).toEqual({ ok: false, error: '"g" is new to the table. Give the NPC\'s name, body and willpower the first time you mention them.' });
+    expect(fresh().resolve(ref)).toEqual({ ok: false, error: '"g" is new to the game. Give the NPC\'s name, body and willpower the first time you mention them.' });
   });
 
   it("refuses an id that belongs to a player character, or a player character who is not there", () => {
     expect(fresh().resolve({ ...ganger, id: "kira" })).toMatchObject({ ok: false, error: expect.stringContaining("is a player character") });
-    expect(fresh().resolve({ kind: "pc", id: "nobody" })).toEqual({ ok: false, error: 'There is no player character "nobody" at the table.' });
+    expect(fresh().resolve({ kind: "pc", id: "nobody" })).toEqual({ ok: false, error: 'There is no player character "nobody" in the party.' });
   });
 
   it("can be asked not to add anyone", () => {
-    expect(fresh().resolve({ kind: "npc", id: "ghost" }, { create: false })).toEqual({ ok: false, error: 'There is no non-player character "ghost" on the table.' });
+    expect(fresh().resolve({ kind: "npc", id: "ghost" }, { create: false })).toEqual({ ok: false, error: 'There is no non-player character "ghost" in play.' });
   });
 
   it("stops tracking more than the limit", () => {

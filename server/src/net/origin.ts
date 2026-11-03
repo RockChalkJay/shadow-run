@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
-/** Pages allowed to talk to the table: the dev server's, and ones this server serves itself. */
+/** Pages allowed to talk to the game: the dev server's, and ones this server serves itself. */
 export function allowedOrigins(port: number, devPort = 5173, extra: readonly string[] = []): string[] {
   return [
     ...[port, devPort].flatMap((p) => [`http://localhost:${p}`, `http://127.0.0.1:${p}`]),
@@ -11,7 +11,7 @@ export function allowedOrigins(port: number, devPort = 5173, extra: readonly str
 }
 
 /**
- * Why a request to the table should be refused, or null if it is fine. This server answers only the
+ * Why a request to the game should be refused, or null if it is fine. This server answers only the
  * machine it runs on, and a web page in the owner's browser must not be able to drive it:
  * the connection must come from loopback, the Host must name loopback (so DNS rebinding does not
  * get through), and a browser's Origin must be one of ours. A client with no Origin is not a browser.

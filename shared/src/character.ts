@@ -23,7 +23,7 @@ export const ConditionMonitor = z.object({
 });
 export type ConditionMonitor = z.infer<typeof ConditionMonitor>;
 
-/** A character as the table sees them: a player character or a non-player one the GM is tracking. */
+/** A character as the players see them: a player character or a non-player one the GM is tracking. */
 export interface CharacterView {
   id: string;
   kind: "pc" | "npc";

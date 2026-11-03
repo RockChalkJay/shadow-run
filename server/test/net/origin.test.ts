@@ -29,7 +29,7 @@ describe("refusalFor", () => {
     expect(refusalFor(req("127.0.0.1", { host: "localhost:8787", origin: "http://localhost:5173" }), 8787, origins)).toBeNull();
   });
 
-  it("refuses a web page from anywhere else, which could otherwise drive the table from the owner's browser", () => {
+  it("refuses a web page from anywhere else, which could otherwise drive the game from the owner's browser", () => {
     const reason = refusalFor(req("127.0.0.1", { host: "127.0.0.1:8787", origin: "https://evil.example" }), 8787, origins);
     expect(reason).toMatch(/Origin https:\/\/evil\.example is not allowed/);
     expect(refusalFor(req("127.0.0.1", { host: "127.0.0.1:8787", origin: "http://localhost:9999" }), 8787, origins)).not.toBeNull();

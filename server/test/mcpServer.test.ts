@@ -56,10 +56,10 @@ describe("GM MCP server", () => {
   });
 
   it("hands a roll request to the session and returns its words to the GM", async () => {
-    reply = { ok: true, text: "The roll card is on the table's screen." };
+    reply = { ok: true, text: "The roll request is on the players' screen." };
     const result = await client.callTool({ name: "request_roll", arguments: rollInput() });
     expect(result.isError).toBeFalsy();
-    expect(JSON.stringify(result.content)).toContain("The roll card is on the table's screen.");
+    expect(JSON.stringify(result.content)).toContain("The roll request is on the players' screen.");
     expect(calls).toHaveLength(1);
     expect(calls[0]?.input).toMatchObject({ characterId: "kira", pool: { total: 4 } });
   });
@@ -71,7 +71,7 @@ describe("GM MCP server", () => {
   });
 
   it("marks a refusal as an error so the GM can correct itself", async () => {
-    reply = { ok: false, text: 'There is no character "nobody" at the table.' };
+    reply = { ok: false, text: 'There is no character "nobody" in the party.' };
     const result = await client.callTool({ name: "request_roll", arguments: rollInput({ characterId: "nobody" }) });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain("There is no character");

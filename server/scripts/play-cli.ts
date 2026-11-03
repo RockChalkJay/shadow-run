@@ -1,4 +1,4 @@
-// Plays at the table from a terminal, over the same WebSocket the browser will use.
+// Plays the game from a terminal, over the same WebSocket the browser will use.
 //
 //   npm run dev:server     in one terminal
 //   npm run play           in another
@@ -25,7 +25,7 @@ const line = (text = "") => {
   console.log(text);
 };
 
-function card(request: RollRequest) {
+function showRequest(request: RollRequest) {
   line(`\n  ROLL #${pending.indexOf(request) + 1}: ${name(request.characterId)} to ${request.label}`);
   line(`    dice: ${request.pool.total} (${request.pool.breakdown})`);
   if (request.soak) {
@@ -88,7 +88,7 @@ function handle(event: ServerEvent) {
       pending = event.pendingRolls;
       line(`Connected. Party: ${party.map((m) => `${m.name} (${m.id})`).join(", ")}. Speaking as ${active?.name}. Type /help for commands.`);
       for (const entry of event.transcript.slice(-8)) show(entry);
-      for (const request of pending) card(request);
+      for (const request of pending) showRequest(request);
       break;
     case "gm.status":
       if (event.status.phase === "error") line(`  [GM error: ${event.status.message}; /retry, or say something]`);
@@ -109,7 +109,7 @@ function handle(event: ServerEvent) {
       break;
     case "roll.requested":
       pending.push(event.request);
-      card(event.request);
+      showRequest(event.request);
       break;
     case "roll.cancelled":
       pending = pending.filter((r) => r.id !== event.requestId);
@@ -140,7 +140,7 @@ ws.on("close", () => {
   process.exit(0);
 });
 ws.on("error", (err) => {
-  console.error(`Could not reach the table at ${url}: ${err.message}. Is "npm run dev:server" running?`);
+  console.error(`Could not reach the game at ${url}: ${err.message}. Is "npm run dev:server" running?`);
   process.exit(1);
 });
 
@@ -149,7 +149,7 @@ const help = [
   "  /as <id>          speak as another character",
   "  /start            begin the session",
   "  /app [n]          roll pending roll n (default 1) with the app's dice",
-  "  /dice [n:] f f f  report dice rolled at the table, e.g. /dice 6 5 3 1 or /dice 2: 4 4 1",
+  "  /dice [n:] f f f  report physical dice rolled, e.g. /dice 6 5 3 1 or /dice 2: 4 4 1",
   "  /skip [n]         skip a pending roll",
   "  /status           show how hurt everyone is",
   "  /stop             stop the GM mid-turn",
@@ -172,7 +172,7 @@ createInterface({ input: process.stdin }).on("line", (input) => {
     case "start":
       return send({ type: "session.start" });
     case "status":
-      return console.log(characters.map((c) => `  ${c.kind === "npc" ? "(NPC) " : ""}${formatStanding(c)}`).join("\n") || "  Nobody is on the table yet.");
+      return console.log(characters.map((c) => `  ${c.kind === "npc" ? "(NPC) " : ""}${formatStanding(c)}`).join("\n") || "  Nobody is in play yet.");
     case "stop":
       return send({ type: "turn.cancel" });
     case "retry":

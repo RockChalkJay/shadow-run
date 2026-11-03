@@ -14,7 +14,7 @@ export interface HubOptions {
   allowedOrigins: (port: number) => string[];
 }
 
-/** The table's connection to browsers and other clients: one WebSocket, plus a health check. */
+/** The game's connection to browsers and other clients: one WebSocket, plus a health check. */
 export class Hub {
   private session: GameSession | undefined;
   private readonly server: Server;
@@ -88,7 +88,7 @@ export class Hub {
 
   private async dispatch(message: ClientMessage): Promise<Ack> {
     const session = this.session;
-    if (!session) return { ok: false, error: "The table is not ready yet." };
+    if (!session) return { ok: false, error: "The game is not ready yet." };
     switch (message.type) {
       case "session.start":
         return session.start();

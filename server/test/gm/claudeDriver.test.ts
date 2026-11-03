@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 /** A session whose GM is the real driver talking to a scripted stand-in for the `claude` CLI. */
-async function table(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}) {
+async function newGame(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}) {
   const dir = await mkdtemp(join(tmpdir(), "sr-gm-"));
   const scriptFile = join(dir, "script.json");
   const logFile = join(dir, "log.jsonl");
@@ -52,8 +52,8 @@ afterEach(() => {
 });
 
 describe("a turn with the CLI", () => {
-  it("shows the GM's words, puts its roll on the table, and holds for the dice", async () => {
-    const t = await table([
+  it("shows the GM's words, puts its roll request on the players' screen, and holds for the dice", async () => {
+    const t = await newGame([
       { steps: [{ say: "The guard turns." }, { tool: "request_roll", args: rollInput() }] },
       { steps: [{ say: "You slip by." }] },
     ]);
@@ -81,8 +81,8 @@ describe("a turn with the CLI", () => {
     expect(t.session.gmSessionId).toBe("fake-session-1");
   });
 
-  it("runs the CLI the way the table intends", async () => {
-    const t = await table([{ steps: [{ say: "Hello." }] }], { model: "haiku" });
+  it("runs the CLI the way the game intends", async () => {
+    const t = await newGame([{ steps: [{ say: "Hello." }] }], { model: "haiku" });
     await t.session.start();
     await t.session.whenIdle();
 
@@ -98,7 +98,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("keeps the prompt and the tools secret off the command line, in files only this user can read", async () => {
-    const t = await table([{ steps: [{ say: "Hello." }] }]);
+    const t = await newGame([{ steps: [{ say: "Hello." }] }]);
     await t.session.start();
     await t.session.whenIdle();
 
@@ -113,7 +113,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("sends the prompt fresh every turn, so a resumed session does not keep the one it began with", async () => {
-    const t = await table([{ steps: [{ say: "One." }] }, { steps: [{ say: "Two." }] }]);
+    const t = await newGame([{ steps: [{ say: "One." }] }, { steps: [{ say: "Two." }] }]);
     await t.session.start();
     await t.session.whenIdle();
     await t.session.say("kira", "again");
@@ -124,7 +124,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("writes the latest party and premise into the prompt each time it starts", async () => {
-    const first = await table([{ steps: [{ say: "Hi." }] }]);
+    const first = await newGame([{ steps: [{ say: "Hi." }] }]);
     const extra = { id: "razor", name: "Razor", body: 4, willpower: 4, edge: 2, sheet: "Demo. Human face." };
     const second = await ClaudeGmDriver.start({ party: [...party, extra], premise: "A courier vanishes.", claudeBin: FAKE_GM, workDir: first.workDir });
     open.push(second);
@@ -134,7 +134,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("copes with a premise far longer than a command line could hold", async () => {
-    const t = await table([{ steps: [{ say: "Hello." }] }], { premise: "Long background. ".repeat(20_000) });
+    const t = await newGame([{ steps: [{ say: "Hello." }] }], { premise: "Long background. ".repeat(20_000) });
     await t.session.start();
     await t.session.whenIdle();
     expect(t.session.snapshot().gm).toEqual({ phase: "idle" });
@@ -143,7 +143,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("lets the GM know a roll was refused, and why, so it can correct itself", async () => {
-    const t = await table([{ steps: [{ say: "Hm." }, { tool: "request_roll", args: rollInput({ characterId: "nobody" }) }] }]);
+    const t = await newGame([{ steps: [{ say: "Hm." }, { tool: "request_roll", args: rollInput({ characterId: "nobody" }) }] }]);
     await t.session.start();
     await t.session.whenIdle();
     const [reply] = await t.tools();
@@ -154,7 +154,7 @@ describe("a turn with the CLI", () => {
 
   it("hurts an NPC through the tools server and gives the GM the report in the same turn", async () => {
     const target = { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower: 3 };
-    const t = await table([{ steps: [{ tool: "deal_damage", args: { label: "Pistol shot", target, damageValue: 5, damageType: "physical" } }, { say: "He staggers." }] }]);
+    const t = await newGame([{ steps: [{ tool: "deal_damage", args: { label: "Pistol shot", target, damageValue: 5, damageType: "physical" } }, { say: "He staggers." }] }]);
     await t.session.start();
     await t.session.whenIdle();
     const [reply] = await t.tools();
@@ -163,8 +163,8 @@ describe("a turn with the CLI", () => {
     expect(t.session.snapshot().characters.find((c) => c.id === "ganger-1")).toBeDefined();
   });
 
-  it("puts a player's resistance roll on the table, and tells the GM how they stand once it is answered", async () => {
-    const t = await table([
+  it("puts a player's resistance roll request on their screen, and tells the GM how they stand once it is answered", async () => {
+    const t = await newGame([
       { steps: [{ tool: "deal_damage", args: { label: "Pistol shot", target: { kind: "pc", id: "kira" }, damageValue: 7, damageType: "physical" } }] },
       { steps: [{ say: "She grits her teeth." }] },
     ]);
@@ -181,7 +181,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("heals through the tools server", async () => {
-    const t = await table([
+    const t = await newGame([
       {
         steps: [
           { tool: "deal_damage", args: { label: "x", target: { kind: "npc", id: "g", name: "G", body: 3, willpower: 3 }, damageValue: 6, damageType: "stun" } },
@@ -197,7 +197,7 @@ describe("a turn with the CLI", () => {
   });
 
   it("answers an NPC roll straight away with the system's dice", async () => {
-    const t = await table([{ steps: [{ tool: "roll_npc", args: { label: "Ganger fires", pool: 5, threshold: 2 } }, { say: "Bullets fly." }] }]);
+    const t = await newGame([{ steps: [{ tool: "roll_npc", args: { label: "Ganger fires", pool: 5, threshold: 2 } }, { say: "Bullets fly." }] }]);
     await t.session.start();
     await t.session.whenIdle();
     const [reply] = await t.tools();
@@ -209,7 +209,7 @@ describe("a turn with the CLI", () => {
 
 describe("when the GM's session is lost", () => {
   it("starts a new one from the transcript, without repeating what is already in the turn", async () => {
-    const t = await table([
+    const t = await newGame([
       { steps: [{ say: "Rain falls." }] },
       { lostSession: true, steps: [] },
       { steps: [{ say: "Back again." }] },
@@ -231,7 +231,7 @@ describe("when the GM's session is lost", () => {
   });
 
   it("does not start over for some other failure", async () => {
-    const t = await table([{ steps: [{ say: "Hi." }] }], { claudeBin: "/nonexistent/claude" });
+    const t = await newGame([{ steps: [{ say: "Hi." }] }], { claudeBin: "/nonexistent/claude" });
     await t.session.say("kira", "hi");
     await t.session.whenIdle();
     expect(t.session.snapshot().gm).toMatchObject({ phase: "error", message: expect.stringContaining("Could not start claude") });
@@ -239,15 +239,15 @@ describe("when the GM's session is lost", () => {
 });
 
 describe("a turn that goes wrong", () => {
-  it("is an error when the GM neither speaks nor acts, so the table is not left waiting", async () => {
-    const t = await table([{ steps: [] }]);
+  it("is an error when the GM neither speaks nor acts, so the players are not left waiting", async () => {
+    const t = await newGame([{ steps: [] }]);
     await t.session.say("kira", "hello?");
     await t.session.whenIdle();
     expect(t.session.snapshot().gm).toEqual({ phase: "error", message: "The GM did not answer." });
   });
 
   it("stops the process when the turn is cancelled", async () => {
-    const t = await table([{ steps: [{ say: "One moment" }, { hang: true }] }]);
+    const t = await newGame([{ steps: [{ say: "One moment" }, { hang: true }] }]);
     await t.session.say("kira", "hi");
     await vi.waitFor(() => expect(t.events.some((e) => e.type === "gm.text")).toBe(true));
     const [run] = await t.starts();

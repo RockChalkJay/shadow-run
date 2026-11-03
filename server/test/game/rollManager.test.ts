@@ -24,9 +24,9 @@ describe("creating a roll", () => {
     expect((created as { request: { threshold?: number } }).request.threshold).toBeUndefined();
   });
 
-  it("refuses a character who is not at the table", () => {
+  it("refuses a character who is not in the party", () => {
     const created = manager().create(rollInput({ characterId: "nobody" }));
-    expect(created).toEqual({ ok: false, error: 'There is no character "nobody" at the table.' });
+    expect(created).toEqual({ ok: false, error: 'There is no character "nobody" in the party.' });
   });
 
   it("refuses a roll that has both a threshold and an opponent", () => {
@@ -62,7 +62,7 @@ describe("wounds", () => {
   const hurtManager = (penalty: number, refusal: string | null = null) =>
     new RollManager({ knownCharacter: () => true, woundPenalty: () => penalty, canAct: () => refusal, newId: () => "r1" });
 
-  it("takes dice off the pool, says so on the card, and records the penalty", () => {
+  it("takes dice off the pool, says so on the roll request, and records the penalty", () => {
     const created = hurtManager(2).create(rollInput({ pool: { total: 6, breakdown: "Agility 4 + Stealth 2" } }));
     expect(created).toMatchObject({
       ok: true,
@@ -130,7 +130,7 @@ describe("rolling with the app", () => {
   });
 });
 
-describe("dice rolled at the table", () => {
+describe("physical dice", () => {
   it("counts the dice the player reports", () => {
     const m = manager();
     m.create(rollInput());

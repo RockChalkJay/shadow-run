@@ -6,14 +6,14 @@ A local web app that runs Shadowrun 6th Edition sessions with Claude as the Game
 - Dice can be rolled physically and reported in the app, or rolled in the app with an animation.
 - Key story beats get a generated scene image in a hand-painted 1980s arcade-animation style.
 
-## Trying the table
+## Trying the game
 
 ```
-npm run dev:server      # the table, with Claude as the GM on your own plan
+npm run dev:server      # the game, with Claude as the GM on your own plan
 npm run play            # in another terminal: play at it from the command line
 ```
 
-Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
+Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports physical dice you rolled.
 
 Settings, all optional:
 
@@ -23,15 +23,15 @@ Settings, all optional:
 | `SHADOWRUN_GM_MODEL` | `sonnet` | the model that plays the GM |
 | `SHADOWRUN_GM_EFFORT` | the CLI's own | `low`, `medium`, `high`, `xhigh` or `max` |
 | `SHADOWRUN_CAMPAIGN` | `default` | which campaign folder to use |
-| `PORT` | `8787` | where the table listens |
+| `PORT` | `8787` | where the game listens |
 
 `npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage.
 
-The table keeps count of everyone's health using the rulebook's condition monitors: physical, stun and overflow, with a die lost on every roll except resisting damage for each filled row of three boxes. When the GM hurts someone, the system takes the damage, the player rolls their own Body to resist it (or the system does for a non-player character), and only what gets through is applied. Skipping that roll is not allowed, and a character whose monitor is full cannot act. `/status` in the client shows how hurt everyone is.
+The game keeps count of everyone's health using the rulebook's condition monitors: physical, stun and overflow, with a die lost on every roll except resisting damage for each filled row of three boxes. When the GM hurts someone, the system takes the damage, the player rolls their own Body to resist it (or the system does for a non-player character), and only what gets through is applied. Skipping that roll is not allowed, and a character whose monitor is full cannot act. `/status` in the client shows how hurt everyone is.
 
-Each campaign lives in `campaigns/<name>/` (git-ignored): `party.json`, `state.json` and `transcript.jsonl`, plus an optional `premise.md` that tells the GM what the session is about. The first run writes a demo `party.json`; edit it to play your own characters. Stop and restart the server and the table picks up where it left off. After editing `party.json` or `premise.md`, restart the server: the GM learns the changes on its next turn, with the story so far intact.
+Each campaign lives in `campaigns/<name>/` (git-ignored): `party.json`, `state.json` and `transcript.jsonl`, plus an optional `premise.md` that tells the GM what the session is about. The first run writes a demo `party.json`; edit it to play your own characters. Stop and restart the server and the game picks up where it left off. After editing `party.json` or `premise.md`, restart the server: the GM learns the changes on its next turn, with the story so far intact.
 
-The server answers only this machine. It refuses connections that do not come from loopback, requests whose `Host` does not name loopback, and browsers whose `Origin` is not the web app's, so a web page you visit cannot drive the table. The GM process runs in a private folder with no settings files and none of your credentials in its environment. Claude Code still shows the model your account email, and the CLI has no switch to stop that, so the GM is told never to mention it.
+The server answers only this machine. It refuses connections that do not come from loopback, requests whose `Host` does not name loopback, and browsers whose `Origin` is not the web app's, so a web page you visit cannot drive the game. The GM process runs in a private folder with no settings files and none of your credentials in its environment. Claude Code still shows the model your account email, and the CLI has no switch to stop that, so the GM is told never to mention it.
 
 ## Who it is for
 

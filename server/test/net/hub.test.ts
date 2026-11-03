@@ -87,7 +87,7 @@ async function connect(port: number, headers: Record<string, string> = {}) {
 const isRoll = (e: ServerEvent): e is Extract<ServerEvent, { type: "roll.requested" }> => e.type === "roll.requested";
 
 describe("connecting", () => {
-  it("greets a client with the state of the table", async () => {
+  it("greets a client with the state of the game", async () => {
     const { port } = await startTable([]);
     const client = await connect(port);
     const snapshot = await client.until((e) => e.type === "snapshot");
@@ -170,7 +170,7 @@ describe("playing", () => {
     await client.until((e) => e.type === "gm.status" && e.status.phase === "idle" && client.events.filter((x) => x.type === "gm.turn_done").length === 2);
   });
 
-  it("reports dice rolled at the table", async () => {
+  it("reports physical dice", async () => {
     const { port } = await startTable([{ rolls: [rollInput()] }, { say: ["ok"] }]);
     const client = await connect(port);
     client.send({ type: "session.start" });
@@ -194,7 +194,7 @@ describe("playing", () => {
     expect(doc.events.some((e) => e.type === "error")).toBe(false);
   });
 
-  it("shows everyone the same table, and catches a latecomer up", async () => {
+  it("shows everyone the same game, and catches a latecomer up", async () => {
     const { port } = await startTable([{ say: ["Hello, runners."] }]);
     const first = await connect(port);
     const second = await connect(port);
@@ -227,14 +227,14 @@ describe("playing", () => {
     expect(shown).toEqual([1]);
   });
 
-  it("refuses words from a character who is not at the table", async () => {
+  it("refuses words from a character who is not in the party", async () => {
     const { port } = await startTable([]);
     const client = await connect(port);
     client.send({ type: "player.say", characterId: "nobody", text: "hi" });
     await client.until((e) => e.type === "error" && e.message.includes('no character "nobody"'));
   });
 
-  it("lets the table stop a GM turn that is going nowhere", async () => {
+  it("lets the players stop a GM turn that is going nowhere", async () => {
     const { port } = await startTable([]);
     const client = await connect(port);
     client.send({ type: "turn.cancel" });

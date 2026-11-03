@@ -50,7 +50,7 @@ export interface SessionOptions {
 const SNAPSHOT_ENTRIES = 100;
 
 /**
- * The table: who is playing, which rolls are waiting for dice, and the conversation with the GM.
+ * The game: who is playing, which rolls are waiting for dice, and the conversation with the GM.
  * The GM takes one turn at a time and is held back while anyone owes it a roll.
  */
 export class GameSession {
@@ -122,7 +122,7 @@ export class GameSession {
   }
 
   private nameOf(id: string | undefined): string {
-    return this.member(id)?.name ?? "Table";
+    return this.member(id)?.name ?? "The players";
   }
 
   private restingStatus(): GmStatus {
@@ -179,7 +179,7 @@ export class GameSession {
     };
   }
 
-  // ---- what the table does -------------------------------------------------------------------
+  // ---- what the players do -------------------------------------------------------------------
 
   /** Begins the session: the GM opens the first scene. */
   async start(): Promise<Ack> {
@@ -197,7 +197,7 @@ export class GameSession {
   }
 
   async say(characterId: string | undefined, text: string): Promise<Ack> {
-    if (characterId !== undefined && !this.member(characterId)) return { ok: false, error: `There is no character "${characterId}" at the table.` };
+    if (characterId !== undefined && !this.member(characterId)) return { ok: false, error: `There is no character "${characterId}" in the party.` };
     const name = this.nameOf(characterId);
     await this.record({ kind: "say", ...(characterId !== undefined && { characterId }), name, text });
     this.held.push({ ...(characterId !== undefined && { characterId }), name, text });
@@ -227,15 +227,15 @@ export class GameSession {
     return { ok: true };
   }
 
-  /** Removes a roll whose character is no longer at the table, and tells the GM nothing came of it. */
+  /** Removes a roll whose character is no longer in the party, and tells the GM nothing came of it. */
   private async dropOrphanedRoll(request: RollRequest): Promise<Ack> {
     this.rolls.cancel(request.id);
-    this.results.push({ kind: "report", text: `ROLL DROPPED. ${request.label}: that character is no longer at the table, so nothing was rolled or applied.` });
+    this.results.push({ kind: "report", text: `ROLL DROPPED. ${request.label}: that character is no longer in the party, so nothing was rolled or applied.` });
     this.opts.emit({ type: "roll.cancelled", requestId: request.id });
     this.blocked = false;
     await this.persist();
     this.schedule();
-    return { ok: false, error: "That character is no longer at the table, so the roll was dropped." };
+    return { ok: false, error: "That character is no longer in the party, so the roll was dropped." };
   }
 
   async cancelRoll(requestId: string): Promise<Ack> {
@@ -285,7 +285,7 @@ export class GameSession {
   /**
    * The tools for one turn. They work only while that turn is the current one and has not been
    * stopped: a process that is being shut down can still send one last call, and it must not put
-   * a roll on the table for a turn nobody is waiting on.
+   * a roll request on the players' screen for a turn nobody is waiting on.
    */
   private toolsFor(turnId: number, signal: AbortSignal): GmTools {
     const whileCurrent = (act: () => Promise<ToolReply>): Promise<ToolReply> =>
@@ -305,7 +305,7 @@ export class GameSession {
     if (!created.ok) return { ok: false, text: created.error };
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
-    return { ok: true, text: "The roll card is on the table's screen. End your turn now and wait for the result." };
+    return { ok: true, text: "The roll request is on the players' screen. End your turn now and wait for the result." };
   }
 
   private async rollNpc(input: unknown): Promise<ToolReply> {
@@ -346,9 +346,9 @@ export class GameSession {
     if (this.roster.view(target.kind, target.id)?.status === "dead") return { ok: false, text: `${target.name} is already dead.` };
 
     if (target.kind === "pc") {
-      // Every card here is damage that lands once it is answered, so a GM stuck in a loop must not be able to stack them.
+      // Every roll request here is damage that lands once it is answered, so a GM stuck in a loop must not be able to stack them.
       if (this.rolls.list().length >= MAX_PENDING_ROLLS) {
-        return { ok: false, text: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop and wait for the table to answer them before hurting anyone else.` };
+        return { ok: false, text: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop and wait for the players to answer them before hurting anyone else.` };
       }
       // The player rolls their own Body to resist, so the dice are theirs.
       const request = this.rolls.createInternal({
@@ -365,14 +365,14 @@ export class GameSession {
           glitch: "A glitch changes nothing in the numbers; the GM may add a small complication.",
           criticalGlitch: "A critical glitch changes nothing in the numbers; the GM may add a serious but not fatal complication.",
         },
-        edgeAdvice: "The system does not apply Edge for you yet, so the table keeps track of its own.",
+        edgeAdvice: "The system does not apply Edge for you yet, so the players keep track of their own.",
         soak: { damageValue, damageType, source: label },
       });
       await this.persist();
       this.opts.emit({ type: "roll.requested", request });
       return {
         ok: true,
-        text: `${target.name} must roll Body to resist ${damageValue} ${damageType} damage. The roll card is on the table's screen. End your turn now and wait for the result.`,
+        text: `${target.name} must roll Body to resist ${damageValue} ${damageType} damage. The roll request is on the players' screen. End your turn now and wait for the result.`,
       };
     }
 
@@ -465,7 +465,7 @@ export class GameSession {
     return formatRecap(this.recent.slice(0, lastGm + 1), (id) => this.nameOf(id));
   }
 
-  /** Returns false when the turn failed and the GM should wait for the table. */
+  /** Returns false when the turn failed and the GM should wait for the players. */
   private async runTurn(turn: Turn): Promise<boolean> {
     const turnId = ++this.turnCounter;
     const controller = new AbortController();

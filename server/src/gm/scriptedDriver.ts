@@ -28,7 +28,7 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", () => (clearTimeout(timer), reject(signal.reason)), { once: true });
   });
 
-/** A stand-in GM that follows a script, for trying the table and testing it without spending any Claude usage. */
+/** A stand-in GM that follows a script, for trying the game and testing it without spending any Claude usage. */
 export class ScriptedGmDriver implements GmDriver {
   /** Every input the GM was given, in order. */
   readonly inputs: GmTurnInput[] = [];
@@ -69,7 +69,7 @@ export class ScriptedGmDriver implements GmDriver {
   }
 }
 
-/** A short demo for trying the table: one opening scene with a roll, then replies that echo what the table did. */
+/** A short demo for trying the game: one opening scene with a roll, then replies that echo what the players did. */
 export function demoScript(party: readonly PartyMember[]): Script {
   const first = party[0];
   return (input) => {

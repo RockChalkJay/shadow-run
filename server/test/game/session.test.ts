@@ -159,7 +159,7 @@ describe("a roll", () => {
     expect(await session.cancelRoll(id)).toEqual({ ok: true });
     await session.whenIdle();
     expect(events).toContainEqual({ type: "roll.cancelled", requestId: id });
-    expect(driver.inputs[1]?.text).toContain("ROLL SKIPPED. The table skipped Kira's roll");
+    expect(driver.inputs[1]?.text).toContain("ROLL SKIPPED. The players skipped Kira's roll");
     expect(await session.cancelRoll(id)).toMatchObject({ ok: false });
   });
 
@@ -176,19 +176,19 @@ describe("a roll", () => {
     expect((await store.recentEntries(20)).some((e) => e.kind === "roll")).toBe(false);
   });
 
-  it("can be requested by the GM only for someone at the table, with a reason it can act on", async () => {
+  it("can be requested by the GM only for someone in the party, with a reason it can act on", async () => {
     const runner = toolRunner();
     const { session, events } = await newSession(runner.driver);
     const [bad, good] = await runner.run(session, async (ctx) => [
       await ctx.tools.requestRoll(rollInput({ characterId: "nobody" })),
       await ctx.tools.requestRoll(rollInput()),
     ]);
-    expect(bad).toEqual({ ok: false, text: 'There is no character "nobody" at the table.' });
+    expect(bad).toEqual({ ok: false, text: 'There is no character "nobody" in the party.' });
     expect(good).toMatchObject({ ok: true, text: expect.stringContaining("End your turn now") });
     expect(events.filter((e) => e.type === "roll.requested")).toHaveLength(1);
   });
 
-  it("is limited in how many can wait at once, so a GM stuck in a loop cannot flood the table", async () => {
+  it("is limited in how many can wait at once, so a GM stuck in a loop cannot flood the players", async () => {
     const runner = toolRunner();
     const { session } = await newSession(runner.driver);
     const replies = await runner.run(session, async (ctx) => {
@@ -300,18 +300,18 @@ describe("turns", () => {
     for (let ticks = 0; ticks < 40; ticks++) {
       const heard: string[] = [];
       let late: Promise<unknown> | undefined;
-      let table: GameSession | undefined;
+      let game: GameSession | undefined;
       const driver: GmDriver = {
         async takeTurn(input) {
           heard.push(input.text);
           if (input.text.includes("first")) {
             for (let i = 0; i < ticks; i++) await Promise.resolve();
-            late = table?.say("doc", "late");
+            late = game?.say("doc", "late");
           }
         },
       };
       const { session } = await newSession(driver, { store: new MemoryStore() });
-      table = session;
+      game = session;
       await session.say("kira", "first");
       await session.whenIdle();
       await late;
@@ -339,17 +339,17 @@ describe("turns", () => {
     await session.whenIdle();
   });
 
-  it("refuse words from someone who is not at the table", async () => {
+  it("refuse words from someone who is not in the party", async () => {
     const { session } = await newSession(scripted([]));
-    expect(await session.say("nobody", "hello")).toEqual({ ok: false, error: 'There is no character "nobody" at the table.' });
+    expect(await session.say("nobody", "hello")).toEqual({ ok: false, error: 'There is no character "nobody" in the party.' });
   });
 
-  it("let the table speak without a character", async () => {
+  it("let the players speak without a character", async () => {
     const driver = scripted([{ say: ["ok"] }]);
     const { session } = await newSession(driver);
     await session.say(undefined, "Can we take a break?");
     await session.whenIdle();
-    expect(driver.inputs[0]?.text).toContain("- Table: Can we take a break?");
+    expect(driver.inputs[0]?.text).toContain("- The players: Can we take a break?");
   });
 });
 
@@ -456,7 +456,7 @@ describe("when a turn fails", () => {
     expect(session.snapshot().gm).toMatchObject({ phase: "error", message: expect.stringContaining("boom") });
   });
 
-  it("keeps the narration the table already saw", async () => {
+  it("keeps the narration the players already saw", async () => {
     const driver: GmDriver = {
       async takeTurn(_i, ctx) {
         ctx.onEvent({ type: "text", text: "Half a sentence" });
@@ -494,7 +494,7 @@ describe("when a turn fails", () => {
 });
 
 describe("rolling for non-player characters", () => {
-  it("rolls with the system's dice, shows the table, and tells the GM", async () => {
+  it("rolls with the system's dice, shows the players, and tells the GM", async () => {
     const runner = toolRunner();
     const { session, store, events } = await newSession(runner.driver, { d6: scriptedD6([6, 5, 2, 1]) });
     const reply = await runner.run(session, (ctx) => ctx.tools.rollNpc({ label: "Ganger fires", pool: 4, threshold: 2 }));
@@ -545,7 +545,7 @@ describe("a restart", () => {
     g.onTurn = (ctx) => void ctx.tools.requestRoll(rollInput());
     const first = await newSession(g.driver);
     await first.session.say("kira", "go");
-    // The card is announced only once the roll has been saved.
+    // The roll request is announced only once the roll has been saved.
     await vi.waitFor(() => expect(first.events.some((e) => e.type === "roll.requested")).toBe(true));
 
     // The turn has not ended and nothing was closed: this is a crash.

@@ -89,7 +89,7 @@ export function rollWithEdgeDice(
   return rollPool(pool + edgeRank, d6, rules, { ...options, explode: true });
 }
 
-/** Reads dice a player rolled at the table: "6 5 3 1", "6,5,3,1" or "6531". */
+/** Reads dice a player rolled by hand: "6 5 3 1", "6,5,3,1" or "6531". */
 export function parseDice(text: string): number[] {
   const compact = text.replace(/[\s,]+/g, "");
   if (compact === "") throw new RangeError("No dice entered");

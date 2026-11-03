@@ -1,4 +1,4 @@
-// Plays a short scene with the real `claude` CLI as the GM and checks it behaves the way the table needs.
+// Plays a short scene with the real `claude` CLI as the GM and checks it behaves the way the game needs.
 // It spends a little of your Claude plan's usage (about six turns).
 //
 //   npm run check:gm
@@ -127,9 +127,9 @@ async function main() {
     await turn("Kira fails to dodge", store, session, () => session.submitRoll(defense.id, { mode: "physical", dice: faces(defense, 2) }));
   }
   const soak = session.snapshot().pendingRolls.find((r) => r.soak && r.characterId === "kira");
-  check("the shot lands, and the GM hurts Kira through deal_damage", !!soak, soak ? `${soak.soak!.damageValue} ${soak.soak!.damageType}` : "no damage card appeared");
+  check("the shot lands, and the GM hurts Kira through deal_damage", !!soak, soak ? `${soak.soak!.damageValue} ${soak.soak!.damageType}` : "no damage roll request appeared");
   if (soak) {
-    note(`resistance card: ${soak.label} (${soak.pool.total} dice)`);
+    note(`resistance roll request: ${soak.label} (${soak.pool.total} dice)`);
     await turn("Kira's resistance roll comes up empty", store, session, () => session.submitRoll(soak.id, { mode: "physical", dice: faces(soak, 2) }));
     const kiraNow = session.snapshot().characters.find((c) => c.id === "kira");
     note(`Kira now: physical ${kiraNow?.monitor.physical}, stun ${kiraNow?.monitor.stun}, wound penalty ${kiraNow?.woundModifier}, ${kiraNow?.status}`);
@@ -144,7 +144,7 @@ async function main() {
     await turn("Kira's shot is dead on", store, session, () => session.submitRoll(attack.id, { mode: "physical", dice: faces(attack, 6) }));
   }
   const spike = session.snapshot().characters.find((c) => c.kind === "npc");
-  check("the GM hurts the ganger through deal_damage, and the system keeps track of him", !!spike && spike.monitor.physical + spike.monitor.stun > 0, spike ? `${spike.name}: physical ${spike.monitor.physical}, ${spike.status}` : "no NPC on the table");
+  check("the GM hurts the ganger through deal_damage, and the system keeps track of him", !!spike && spike.monitor.physical + spike.monitor.stun > 0, spike ? `${spike.name}: physical ${spike.monitor.physical}, ${spike.status}` : "no NPC in play");
 
   // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
   await close();
@@ -166,7 +166,7 @@ async function main() {
   check("the GM knows the new character without starting over", rolledForRazor || /razor/i.test(arrival), rolledForRazor ? "asked Razor for a roll" : "named Razor");
   check("it was still the same GM session", session.gmSessionId === sessionBefore, session.gmSessionId);
 
-  // Lose the GM's session on purpose: the table should not notice.
+  // Lose the GM's session on purpose: the players should not notice.
   await close();
   const state = JSON.parse(await readFile(join(store.dir, "state.json"), "utf8"));
   const bogus = "00000000-0000-4000-8000-000000000000";
@@ -179,7 +179,7 @@ async function main() {
       ? session.submitRoll(owed.id, { mode: "physical", dice: "6 ".repeat(owed.pool.total).trim() })
       : session.say("kira", "I wait in the shadows and watch the guard."),
   );
-  check("the table recovers from a lost session", session.snapshot().gm.phase !== "error", JSON.stringify(session.snapshot().gm));
+  check("the game recovers from a lost session", session.snapshot().gm.phase !== "error", JSON.stringify(session.snapshot().gm));
   check("it carries on in a new session", !!session.gmSessionId && session.gmSessionId !== bogus, session.gmSessionId);
   await close();
 

@@ -27,7 +27,7 @@ const LOST_SESSION = /no conversation found/i;
 
 function startOverPrompt(recap: string, text: string): string {
   return [
-    "Your memory of the earlier part of this session was lost, so the conversation so far is below, as the table saw it. Carry on from it and do not repeat it.",
+    "Your memory of the earlier part of this session was lost, so the conversation so far is below, as the players saw it. Carry on from it and do not repeat it.",
     recap ? `--- The conversation so far ---\n${recap}\n--- End of the conversation so far ---` : "",
     text,
   ]
@@ -101,7 +101,7 @@ export class ClaudeGmDriver implements GmDriver {
     }
 
     if (failure !== undefined) {
-      // A session the CLI no longer has is not the table's problem: start over from what was said.
+      // A session the CLI no longer has is not the players' problem: start over from what was said.
       if (sessionId !== undefined && !sawSession && LOST_SESSION.test(failure) && !ctx.signal.aborted) {
         console.warn("The GM's earlier session is gone; starting a new one from the transcript.");
         return this.attempt(startOverPrompt(ctx.recap(), prompt), ctx, undefined);

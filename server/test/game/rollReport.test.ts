@@ -19,7 +19,7 @@ describe("formatRollForGm", () => {
     expect(formatRollForGm(resolved(rollInput(), "6 5 5 1"), "Kira")).toBe(
       [
         "ROLL RESULT. Kira: Sneak past the guard.",
-        "Kira rolled 4 dice (dice at the table): 6 5 5 1 = 3 hits.",
+        "Kira rolled 4 dice (physical dice): 6 5 5 1 = 3 hits.",
         "Threshold 2.",
         "SUCCESS by 1 net hit.",
         "Apply this consequence, as you declared it: Kira slips through.",
@@ -73,7 +73,7 @@ describe("formatCancelledForGm", () => {
   it("tells the GM to apply nothing", () => {
     const r = resolved(rollInput(), "6 5 3 1").request;
     expect(formatCancelledForGm(r, "Kira")).toBe(
-      "ROLL SKIPPED. The table skipped Kira's roll (Sneak past the guard). Apply no consequence from it; carry on from the situation as it stood before the roll.",
+      "ROLL SKIPPED. The players skipped Kira's roll (Sneak past the guard). Apply no consequence from it; carry on from the situation as it stood before the roll.",
     );
   });
 });

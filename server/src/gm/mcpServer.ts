@@ -48,7 +48,7 @@ function buildServer(handlers: GmToolHandlers): McpServer {
     {
       description:
         "Roll dice for a non-player character when no player is rolling against them, for example an NPC " +
-        "acting on their own or a guard noticing something unopposed. The system rolls and shows the table, " +
+        "acting on their own or a guard noticing something unopposed. The system rolls and shows the players, " +
         "and you get the result straight away. Do not use it to oppose a player's roll; set `opposed` on " +
         "request_roll instead.",
       inputSchema: NpcRollInput.shape,
@@ -62,7 +62,7 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       description:
         "Hurt a character: a hit that landed, a fall, fire, a hazard. Use it for every injury, and never decide " +
         "yourself how much damage lands. Give the Damage Value before the target resists; the target resists with " +
-        "Body and the system applies what gets through. A player character rolls their own Body on the table's " +
+        "Body and the system applies what gets through. A player character rolls their own Body on the players' " +
         "screen, so end your turn and wait; an NPC's Body is rolled for you and you get the report straight away. " +
         "The first time you name an NPC give their name, body and willpower; after that the id is enough. " +
         "Do not narrate the wound until you have the report.",

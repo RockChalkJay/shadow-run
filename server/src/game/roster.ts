@@ -2,7 +2,7 @@ import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealTyp
 import { applyDamage, defaultRuleset, healDamage, newMonitor, statusOf, woundModifier, type Ruleset } from "../rules/index.js";
 import type { Fail } from "./rollManager.js";
 
-/** Most non-player characters the table will track at once; more than that is the GM losing count. */
+/** Most non-player characters the game will track at once; more than that is the GM losing count. */
 export const MAX_NPCS = 60;
 
 interface Entry {
@@ -30,7 +30,7 @@ function reconcile(saved: ConditionMonitor | undefined, fresh: ConditionMonitor)
   };
 }
 
-/** Everyone on the table and how hurt they are. Damage and healing are applied here and nowhere else. */
+/** Everyone in play and how hurt they are. Damage and healing are applied here and nowhere else. */
 export class Roster {
   private readonly pcs = new Map<string, Entry>();
   private readonly npcs = new Map<string, Entry>();
@@ -90,16 +90,16 @@ export class Roster {
   resolve(ref: CharacterRef, options: { create?: boolean } = {}): Target {
     if (ref.kind === "pc") {
       const entry = this.pcs.get(ref.id);
-      return entry ? { ok: true, kind: "pc", id: ref.id, name: entry.name, body: entry.body } : { ok: false, error: `There is no player character "${ref.id}" at the table.` };
+      return entry ? { ok: true, kind: "pc", id: ref.id, name: entry.name, body: entry.body } : { ok: false, error: `There is no player character "${ref.id}" in the party.` };
     }
     const known = this.npcs.get(ref.id);
     if (known) return { ok: true, kind: "npc", id: ref.id, name: known.name, body: known.body };
     if (this.pcs.has(ref.id)) return { ok: false, error: `"${ref.id}" is a player character. Use kind "pc" for them.` };
-    if (options.create === false) return { ok: false, error: `There is no non-player character "${ref.id}" on the table.` };
+    if (options.create === false) return { ok: false, error: `There is no non-player character "${ref.id}" in play.` };
     if (ref.name === undefined || ref.body === undefined || ref.willpower === undefined) {
-      return { ok: false, error: `"${ref.id}" is new to the table. Give the NPC's name, body and willpower the first time you mention them.` };
+      return { ok: false, error: `"${ref.id}" is new to the game. Give the NPC's name, body and willpower the first time you mention them.` };
     }
-    if (this.npcs.size >= MAX_NPCS) return { ok: false, error: `The table is already tracking ${MAX_NPCS} non-player characters.` };
+    if (this.npcs.size >= MAX_NPCS) return { ok: false, error: `The game is already tracking ${MAX_NPCS} non-player characters.` };
     this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor: newMonitor(ref.body, ref.willpower, this.rules) });
     return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
   }

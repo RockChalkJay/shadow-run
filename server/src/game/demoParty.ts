@@ -1,6 +1,6 @@
 import type { PartyMember } from "@shadow-run/shared";
 
-/** Two made-up characters so the table can be tried before real character sheets exist. */
+/** Two made-up characters so the game can be tried before real character sheets exist. */
 export const demoParty: PartyMember[] = [
   {
     id: "kira",

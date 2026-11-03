@@ -29,7 +29,7 @@ export const SavedState = z.object({
   ),
   /** How hurt each player character is. Older saves have none, and everyone starts unhurt. */
   pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor })).default([]),
-  /** The non-player characters the GM has put on the table, and how hurt they are. */
+  /** The non-player characters the GM has put in play, and how hurt they are. */
   npcs: z
     .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor }))
     .default([]),

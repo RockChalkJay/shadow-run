@@ -18,7 +18,7 @@ export interface GmTools {
 export interface GmTurnInput {
   /** `open` for the first turn of a session, `continue` after that. */
   kind: "open" | "continue";
-  /** What happened at the table since the GM last spoke: what players said, how rolls came out. */
+  /** What happened since the GM last spoke: what players said, how rolls came out. */
   text: string;
 }
 

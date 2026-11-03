@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * A player character as the table needs it before full character sheets exist: the two attributes
+ * A player character as the game needs it before full character sheets exist: the two attributes
  * that size the condition monitors, the Edge rank, and free text for the GM.
  */
 export const PartyMember = z.object({

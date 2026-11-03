@@ -14,7 +14,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
   /** Roll the pending request for the player with the app's dice. */
   z.object({ type: z.literal("roll.app"), requestId: z.string() }),
-  /** Report dice rolled at the table, e.g. "6 5 3 1 1 2". */
+  /** Report physical dice rolled, e.g. "6 5 3 1 1 2". */
   z.object({ type: z.literal("roll.physical"), requestId: z.string(), dice: z.string().max(400) }),
   /** Skip a pending roll. */
   z.object({ type: z.literal("roll.cancel"), requestId: z.string() }),
@@ -51,7 +51,7 @@ export type TranscriptEntry =
       label: string;
       damageType: DamageType;
       damageValue: number;
-      /** The resistance roll: made by the app or at the table for a player character, by the system for an NPC. */
+      /** The resistance roll: made by the app or with physical dice for a player character, by the system for an NPC. */
       resistance: RollResult;
       resistedBy: "app" | "physical" | "system";
       /** Damage that got through. */
@@ -71,7 +71,7 @@ export interface Usage {
 export interface Snapshot {
   type: "snapshot";
   party: PartyMember[];
-  /** Every player character, and every non-player character the GM has put on the table. */
+  /** Every player character, and every non-player character the GM has put in play. */
   characters: CharacterView[];
   pendingRolls: RollRequest[];
   /** The most recent entries, oldest first. */

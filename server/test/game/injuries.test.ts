@@ -23,7 +23,7 @@ async function dealt(damage: object[], d6: number[] = [], extra: ScriptedTurn[] 
 }
 
 /**
- * A table where the GM's first turn deals damage and, once the player's resistance roll is answered with
+ * A game where the GM's first turn deals damage and, once the player's resistance roll is answered with
  * `soakDice`, the session carries on; `run` then makes the GM take a later turn that does whatever you give it.
  */
 async function afterwards(damage: object[], soakDice: string) {
@@ -105,8 +105,8 @@ describe("hurting a player character", () => {
     const { session, events, driver, store } = await dealt([hurt(kira, 8)], [], [{ say: ["The round tears through her arm."] }]);
 
     expect(driver.inputs).toHaveLength(1);
-    const [card] = session.snapshot().pendingRolls;
-    expect(card).toMatchObject({
+    const [request] = session.snapshot().pendingRolls;
+    expect(request).toMatchObject({
       characterId: "kira",
       label: "Resist 8P damage: Ganger's pistol",
       pool: { total: 5, breakdown: "Body 5" },
@@ -121,7 +121,7 @@ describe("hurting a player character", () => {
     expect(session.snapshot().characters.find((c) => c.id === "kira")).toMatchObject({ monitor: { physical: 6 }, woundModifier: 2, status: "active" });
     expect(events).toContainEqual({ type: "character.updated", character: expect.objectContaining({ id: "kira", monitor: expect.objectContaining({ physical: 6 }) }) });
     expect(driver.inputs[1]?.text).toContain("DAMAGE RESULT. Ganger's pistol: 8 physical damage to Kira.");
-    expect(driver.inputs[1]?.text).toContain("Kira resisted with Body 5 (dice at the table): 6 5 3 1 1 = 2 hits, so 6 physical damage got through.");
+    expect(driver.inputs[1]?.text).toContain("Kira resisted with Body 5 (physical dice): 6 5 3 1 1 = 2 hits, so 6 physical damage got through.");
     expect(driver.inputs[1]?.text).toContain("Kira: Physical 6/11, Stun 0/10, Overflow 0/10. Wound penalty: -2 dice");
     expect(driver.inputs[1]?.text).not.toContain("ROLL RESULT");
     expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["roll", "damage", "gm"]);
@@ -220,7 +220,7 @@ describe("healing", () => {
     expect((await store.recentEntries(10)).filter((e) => e.kind === "heal")).toHaveLength(2);
   });
 
-  it("refuses to heal someone who is dead, or who is not on the table, or without a reason", async () => {
+  it("refuses to heal someone who is dead, or who is not in play, or without a reason", async () => {
     const runner = toolRunner();
     const { session } = await newSession(runner.driver, { d6: scriptedD6([2, 2, 2]) });
     const replies = await runner.run(session, async (ctx) => [
@@ -231,14 +231,14 @@ describe("healing", () => {
       await ctx.tools.heal({ target: kira, type: "physical", boxes: 0, reason: "x" }),
     ]);
     expect(replies[1]).toEqual({ ok: false, text: "Ganger is dead, beyond the reach of any healing." });
-    expect(replies[2]).toEqual({ ok: false, text: 'There is no non-player character "ghost" on the table.' });
+    expect(replies[2]).toEqual({ ok: false, text: 'There is no non-player character "ghost" in play.' });
     expect(replies[3]).toMatchObject({ ok: false, text: expect.stringContaining("healing was not valid") });
     expect(replies[4]).toMatchObject({ ok: false });
   });
 });
 
 describe("a GM stuck in a loop", () => {
-  it("cannot stack up resistance cards, each of which would land damage when answered", async () => {
+  it("cannot stack up resistance roll requests, each of which would land damage when answered", async () => {
     const runner = toolRunner();
     const { session } = await newSession(runner.driver);
     const replies = await runner.run(session, async (ctx) => {
@@ -262,24 +262,24 @@ describe("a GM stuck in a loop", () => {
   });
 });
 
-describe("a resistance roll whose character has left the table", () => {
+describe("a resistance roll whose character has left the party", () => {
   it("is dropped, the player is told, and the GM is told nothing came of it", async () => {
     const first = await dealt([hurt(kira, 8)]);
-    const card = first.session.snapshot().pendingRolls[0]!;
+    const request = first.session.snapshot().pendingRolls[0]!;
     await first.session.close();
 
-    // The party was edited while the card waited: Kira is gone.
+    // The party was edited while the roll request waited: Kira is gone.
     const driver = new ScriptedGmDriver([{ say: ["Doc looks around."] }]);
     const second = await newSession(driver, { store: first.store, party: party.filter((m) => m.id !== "kira") });
     expect(second.session.snapshot().pendingRolls).toHaveLength(1);
 
-    const ack = await second.session.submitRoll(card.id, { mode: "physical", dice: "6 5 3 1 1" });
-    expect(ack).toEqual({ ok: false, error: "That character is no longer at the table, so the roll was dropped." });
+    const ack = await second.session.submitRoll(request.id, { mode: "physical", dice: "6 5 3 1 1" });
+    expect(ack).toEqual({ ok: false, error: "That character is no longer in the party, so the roll was dropped." });
     expect(second.session.snapshot().pendingRolls).toHaveLength(0);
-    expect(second.events).toContainEqual({ type: "roll.cancelled", requestId: card.id });
+    expect(second.events).toContainEqual({ type: "roll.cancelled", requestId: request.id });
 
     await second.session.whenIdle();
-    expect(driver.inputs[0]?.text).toContain("ROLL DROPPED. Resist 8P damage: Ganger's pistol: that character is no longer at the table");
+    expect(driver.inputs[0]?.text).toContain("ROLL DROPPED. Resist 8P damage: Ganger's pistol: that character is no longer in the party");
   });
 });
 
@@ -289,7 +289,7 @@ describe("bad damage", () => {
     ["damage over the limit", hurt(kira, 41)],
     ["a type that does not exist", hurt(kira, 4, "psychic")],
     ["no label", { target: kira, damageValue: 4, damageType: "physical" }],
-    ["a player who is not at the table", hurt({ kind: "pc", id: "nobody" }, 4)],
+    ["a player who is not in the party", hurt({ kind: "pc", id: "nobody" }, 4)],
     ["an NPC with no stats the first time", hurt({ kind: "npc", id: "g2" }, 4)],
     ["an NPC id that is a player's", hurt({ kind: "npc", id: "kira", name: "K", body: 3, willpower: 3 }, 4)],
     ["an id with capitals", hurt({ kind: "npc", id: "Ganger One", name: "G", body: 3, willpower: 3 }, 4)],

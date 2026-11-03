@@ -35,7 +35,7 @@ describe("the shipped ruleset", () => {
 });
 
 describe("loadRuleset", () => {
-  it("lets a table change a rule by editing the file", async () => {
+  it("lets a group change a rule by editing the file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "sr-rules-"));
     const file = join(dir, "ruleset.json");
     await writeFile(file, JSON.stringify({ ...defaultRuleset, glitch: { rule: "half_or_more" } }));

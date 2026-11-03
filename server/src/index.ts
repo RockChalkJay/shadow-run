@@ -27,7 +27,7 @@ async function main() {
     const bin = config.claudeBin ?? "claude";
     const found = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 5000 });
     if (found.error || found.status !== 0) {
-      console.warn(`Could not run "${bin} --version". Install the Claude CLI and log in, or set SHADOWRUN_GM=scripted to try the table without it.`);
+      console.warn(`Could not run "${bin} --version". Install the Claude CLI and log in, or set SHADOWRUN_GM=scripted to try the game without it.`);
     }
     const premise = await readFile(join(store.dir, "premise.md"), "utf8").catch(() => undefined);
     driver = await ClaudeGmDriver.start({
@@ -47,7 +47,7 @@ async function main() {
   const port = await hub.listen();
   session.resume();
   const who = config.gm === "claude" ? `Claude (${config.gmModel}) as the GM, on your own plan` : "scripted GM; no Claude usage";
-  console.log(`The table is open for campaign "${config.campaign}" at ws://127.0.0.1:${port}/ws (${who}).`);
+  console.log(`The game is open for campaign "${config.campaign}" at ws://127.0.0.1:${port}/ws (${who}).`);
 
   const shutdown = async () => {
     await session.close();
