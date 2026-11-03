@@ -617,7 +617,8 @@ describe("the events a client sees", () => {
 
 describe("the demo script", () => {
   it("opens the scene once, and after a restart carries on instead of starting over", async () => {
-    const first = await newSession(new ScriptedGmDriver(demoScript(party)));
+    // The guard's dice are the system's; all ones keep him from beating Kira's three hits.
+    const first = await newSession(new ScriptedGmDriver(demoScript(party)), { d6: always(1) });
     await first.session.start();
     await first.session.whenIdle();
     const [pending] = first.session.snapshot().pendingRolls;

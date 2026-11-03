@@ -57,7 +57,7 @@ class SlowStore extends CampaignStore {
   }
 }
 
-async function startTable(script: ScriptedTurn[], faces: number[] = [], store?: CampaignStore) {
+async function startGame(script: ScriptedTurn[], faces: number[] = [], store?: CampaignStore) {
   const hub = new Hub({ port: 0, allowedOrigins: (p) => allowedOrigins(p, 5173) });
   const session = await GameSession.create({
     store: store ?? (await tempStore()),
@@ -88,7 +88,7 @@ const isRoll = (e: ServerEvent): e is Extract<ServerEvent, { type: "roll.request
 
 describe("connecting", () => {
   it("greets a client with the state of the game", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port);
     const snapshot = await client.until((e) => e.type === "snapshot");
     expect(snapshot).toMatchObject({ type: "snapshot", gm: { phase: "idle" }, pendingRolls: [], transcript: [] });
@@ -96,7 +96,7 @@ describe("connecting", () => {
   });
 
   it("accepts the web app's origin", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port, { Origin: "http://localhost:5173" });
     await client.until((e) => e.type === "snapshot");
   });
@@ -106,13 +106,13 @@ describe("connecting", () => {
     ["a page on another local port", { Origin: "http://localhost:9999" }],
     ["a host that does not name this machine", { Host: "evil.example:1" }],
   ])("turns away %s", async (_name, headers) => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const hostHeaders = "Host" in headers ? { Host: `evil.example:${port}` } : headers;
     await expect(connect(port, hostHeaders)).rejects.toThrow("status 403");
   });
 
   it("answers the health check, and refuses a bad host or an unknown path", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const get = (path: string, headers: Record<string, string> = {}) =>
       new Promise<{ status: number; body: string }>((resolve, reject) => {
         const req = request({ host: "127.0.0.1", port, path, headers }, (res) => {
@@ -130,19 +130,21 @@ describe("connecting", () => {
 
 describe("messages", () => {
   it("answers something that is not JSON, or not a message, with an error and stays connected", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port);
     client.send("{oops");
     client.send({ type: "player.say", text: "" } as ClientMessage);
     client.send({ type: "nope" } as unknown as ClientMessage);
-    await client.until((e) => e.type === "error" && e.message.includes("not JSON"));
+    // The three errors arrive separately, so wait for all of them before counting.
+    await client.until((e) => e.type === "error" && client.events.filter((x) => x.type === "error").length === 3);
+    expect(client.events.filter((e) => e.type === "error").map((e) => (e as { message: string }).message).some((m) => m.includes("not JSON"))).toBe(true);
     expect(client.events.filter((e) => e.type === "error")).toHaveLength(3);
     client.send({ type: "session.start" });
     await client.until((e) => e.type === "gm.status");
   });
 
   it("closes a connection that sends an enormous message", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port);
     client.send(JSON.stringify({ type: "player.say", text: "x".repeat(100_000) }));
     expect(await client.closed).toBe(1009);
@@ -151,7 +153,7 @@ describe("messages", () => {
 
 describe("playing", () => {
   it("runs a scene from the opening to the GM's reply to a roll", async () => {
-    const { port } = await startTable(
+    const { port } = await startGame(
       [{ say: ["The guard turns."], rolls: [rollInput()] }, { say: ["You slip by."] }],
       [6, 5, 3, 1],
     );
@@ -171,7 +173,7 @@ describe("playing", () => {
   });
 
   it("reports physical dice", async () => {
-    const { port } = await startTable([{ rolls: [rollInput()] }, { say: ["ok"] }]);
+    const { port } = await startGame([{ rolls: [rollInput()] }, { say: ["ok"] }]);
     const client = await connect(port);
     client.send({ type: "session.start" });
     const asked = await client.until(isRoll);
@@ -181,7 +183,7 @@ describe("playing", () => {
   });
 
   it("sends an error only to the client whose dice were wrong", async () => {
-    const { port } = await startTable([{ rolls: [rollInput()] }]);
+    const { port } = await startGame([{ rolls: [rollInput()] }]);
     const kira = await connect(port);
     const doc = await connect(port);
     kira.send({ type: "session.start" });
@@ -195,7 +197,7 @@ describe("playing", () => {
   });
 
   it("shows everyone the same game, and catches a latecomer up", async () => {
-    const { port } = await startTable([{ say: ["Hello, runners."] }]);
+    const { port } = await startGame([{ say: ["Hello, runners."] }]);
     const first = await connect(port);
     const second = await connect(port);
     first.send({ type: "player.say", characterId: "kira", text: "Morning." });
@@ -209,7 +211,7 @@ describe("playing", () => {
 
   it("gives a client that connects in the middle of a save exactly the entries it should see, none missing and none twice", async () => {
     const dir = (await tempStore()).dir;
-    const { port } = await startTable([], [], new SlowStore(dir));
+    const { port } = await startGame([], [], new SlowStore(dir));
     const kira = await connect(port);
     kira.send({ type: "player.say", characterId: "kira", text: "while you connect" });
     await new Promise((resolve) => setTimeout(resolve, 40));
@@ -228,14 +230,14 @@ describe("playing", () => {
   });
 
   it("refuses words from a character who is not in the party", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port);
     client.send({ type: "player.say", characterId: "nobody", text: "hi" });
     await client.until((e) => e.type === "error" && e.message.includes('no character "nobody"'));
   });
 
   it("lets the players stop a GM turn that is going nowhere", async () => {
-    const { port } = await startTable([]);
+    const { port } = await startGame([]);
     const client = await connect(port);
     client.send({ type: "turn.cancel" });
     await client.until((e) => e.type === "error" && e.message.includes("not in the middle of a turn"));
