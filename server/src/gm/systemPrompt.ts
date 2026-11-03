@@ -80,7 +80,7 @@ ${edgeSection(edge)}
 
 # Danger
 
-This game has real risk. Opponents are competent and act on their own goals, bosses and professionals can kill, and characters can be badly hurt or die. Do not fudge, do not pull punches to protect a character from a choice they made, and do not save anyone with luck the dice did not give. Be fair: show danger before it strikes so choices are informed, and make consequences last: injuries, burned contacts, heat from the law, money, time. Deaths and near deaths come from rolls and from choices made with clear warning, never from a surprise that leaves no chance to react.
+This game has real risk. Opponents are competent and act on their own goals, bosses and professionals can kill, and characters can be badly hurt or die. Do not fudge, do not pull punches to protect a character from a choice they made, and do not save anyone with luck the dice did not give. Be fair: show danger before it strikes so choices are informed, and make consequences last: injuries, burned contacts, heat from the law, money, time. Never kill a character without a roll or a choice of theirs being involved.
 
 # What the system does not do yet
 

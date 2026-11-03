@@ -29,9 +29,14 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("serious but not fatal");
   });
 
-  it("asks for real risk without surprise deaths", () => {
+  it("asks for real risk, and never a death that no roll or choice led to", () => {
     expect(prompt).toContain("bosses and professionals can kill");
-    expect(prompt).toContain("never from a surprise that leaves no chance to react");
+    expect(prompt).toContain("Never kill a character without a roll or a choice of theirs being involved.");
+  });
+
+  it("no longer promises players a warning before every danger lands", () => {
+    expect(prompt).not.toContain("never from a surprise");
+    expect(prompt).not.toContain("clear warning");
   });
 
   it("forbids mentioning the person running the software, which the CLI cannot be stopped from showing the model", () => {
