@@ -28,7 +28,7 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
     case "attack":
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}.`;
     case "damage":
-      return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}`;
+      return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}${entry.composure && !entry.composure.held ? ` ${entry.after.name} bolted.` : ""}`;
     case "heal":
       return `[Heal] ${entry.after.name} healed ${entry.healed} ${entry.type}: ${entry.reason}.`;
     case "system":

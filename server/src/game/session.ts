@@ -4,6 +4,7 @@ import {
   HealInput,
   NpcRollInput,
   RollRequestInput,
+  type CharacterRef,
   type CharacterView,
   type DamageType,
   type GmEvent,
@@ -22,7 +23,7 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, cryptoD6, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest } from "./attack.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
@@ -338,6 +339,8 @@ export class GameSession {
     const view = this.roster.view(patient.kind, patient.id)!;
     if (view.status === "dead") return { ok: false, error: `${patient.name} is dead, beyond the reach of any healing.` };
 
+    if (view.grunt) return { ok: false, error: `${patient.name} is a grunt, with a single condition track the rules give no healing for. Narrate it instead.` };
+
     const { method } = asked;
     if (isTreatment(method)) {
       if (this.roster.hasBeenTreated(patient.kind, patient.id, method)) {
@@ -446,14 +449,25 @@ export class GameSession {
     }
 
     // The system rolls an NPC's Body for them.
+    const before = this.roster.view("npc", target.id)!;
     const resistance = rollPool(target.body, this.d6, this.rules);
     const taken = damageAfterResistance(damageValue, resistance.hits);
     const after = this.roster.damage("npc", target.id, damageType, taken);
     this.announce(after);
-    const damage = { label, damageType, damageValue, resistance, resistedBy: "system" as const, taken, after };
+    const composure = this.testNerve(before, after);
+    const damage = { label, damageType, damageValue, resistance, resistedBy: "system" as const, taken, after, ...(composure && { composure }) };
     await this.record({ kind: "damage", ...damage });
     await this.persist();
     return { waiting: false, text: formatDamageForGm({ ...damage, body: target.body }) };
+  }
+
+  /** A grunt that has just passed their Professional Rating and is still on their feet tests whether they bolt. */
+  private testNerve(before: CharacterView, after: CharacterView) {
+    if (!after.grunt || !passedRating(before.monitor.physical, after.monitor.physical, after.grunt.professionalRating, after.status === "active")) return undefined;
+    const pool = this.roster.composurePool(after.id)!;
+    const roll = rollPool(pool, this.d6, this.rules);
+    const threshold = COMPOSURE_THRESHOLD;
+    return { roll, pool, threshold, held: roll.hits >= threshold };
   }
 
   private async dealDamage(input: unknown): Promise<ToolReply> {
@@ -492,6 +506,10 @@ export class GameSession {
     const refusal = this.alreadyDead(defender) ?? (attacker.kind === "pc" || defender.kind === "pc" ? this.noRoomForRolls() : null);
     if (refusal) return refusal;
 
+    const group = this.formGroup(attacker, defender, parsed.data.alongside ?? []);
+    if (!group.ok) return { ok: false, text: group.error };
+    const attackerName = group.names.join(group.names.length > 2 ? ", " : " and ").replace(/, ([^,]*)$/, " and $1");
+    const groupSize = group.names.length;
     const shared = { label, stakes, weapon, edgeAdvice };
     const defenderView = this.roster.view(defender.kind, defender.id)!;
 
@@ -505,12 +523,12 @@ export class GameSession {
       return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${attacker.name}'s attack`);
     }
 
-    const attackDice = afterWounds(attackPool.total, attackerView.woundModifier);
+    const attackDice = afterWounds(attackPool.total, attackerView.woundModifier) + groupBonusDice(groupSize);
     if (defender.kind === "pc") {
       // A defender who is down, or whose wounds leave them no dice, cannot defend at all.
       const dice = defensePool.total - this.roster.woundPenalty(defender.id);
       if (defenderView.status === "active" && dice >= 1) {
-        const request = defenderRequest(shared, { characterId: defender.id, pool: defensePool }, { id: attacker.id, name: attacker.name, pool: attackDice });
+        const request = defenderRequest(shared, { characterId: defender.id, pool: defensePool }, { id: attacker.id, name: attackerName, pool: attackDice }, groupSize);
         return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${defender.name}'s defense`);
       }
     }
@@ -520,7 +538,8 @@ export class GameSession {
     const settled = await this.settleAttack({
       label,
       weapon,
-      attackerName: attacker.name,
+      attackerName,
+      groupSize,
       defender,
       attackRoll: rollPool(attackDice, this.d6, this.rules),
       attackDice,
@@ -530,6 +549,33 @@ export class GameSession {
       defendedBy: "system",
     });
     return { ok: true, text: settled.resist ? `${settled.text}\n${settled.resist} ${WAIT_FOR_DICE}` : settled.text };
+  }
+
+  /**
+   * The grunts attacking together, the attacker first, or why they cannot. A group is grunts only, at most
+   * the book's maximum, each able to act and none of them the target.
+   */
+  private formGroup(attacker: Found, defender: Found, alongside: CharacterRef[]): { ok: true; names: string[] } | { ok: false; error: string } {
+    if (alongside.length === 0) return { ok: true, names: [attacker.name] };
+    const max = (this.rules ?? defaultRuleset).grunt.maxGroupSize;
+    if (alongside.length + 1 > max) return { ok: false, error: `A group attack has at most ${max} grunts, including the attacker.` };
+    const isGrunt = (who: Found) => who.kind === "npc" && this.roster.view("npc", who.id)?.grunt !== undefined;
+    if (!isGrunt(attacker)) return { ok: false, error: `${attacker.name} is not a grunt. Only grunts attack as a group; leave out alongside, or give the attacker a professionalRating.` };
+    const seen = new Set([`${attacker.kind}:${attacker.id}`]);
+    const names = [attacker.name];
+    for (const ref of alongside) {
+      const member = this.roster.resolve(ref);
+      if (!member.ok) return { ok: false, error: member.error };
+      const key = `${member.kind}:${member.id}`;
+      if (seen.has(key)) return { ok: false, error: `${member.name} is already in this group attack.` };
+      seen.add(key);
+      if (member.kind === defender.kind && member.id === defender.id) return { ok: false, error: `${member.name} is the target and cannot attack themselves.` };
+      if (!isGrunt(member)) return { ok: false, error: `${member.name} is not a grunt. Only grunts attack as a group.` };
+      const status = this.roster.view(member.kind, member.id)!.status;
+      if (status !== "active") return { ok: false, error: `${member.name} is ${status} and cannot attack.` };
+      names.push(member.name);
+    }
+    return { ok: true, names };
   }
 
   /** Announces a roll the system just made out for a player, or says why it could not. */
@@ -553,6 +599,7 @@ export class GameSession {
       label: request.label,
       weapon: attack.weapon,
       attackerName: attacking ? player : attack.other.name,
+      groupSize: attack.groupSize ?? 1,
       defender,
       attackRoll: attacking ? roll : opposed.roll,
       attackDice: attacking ? request.pool.total : opposed.pool,
@@ -569,6 +616,8 @@ export class GameSession {
     label: string;
     weapon: Weapon;
     attackerName: string;
+    /** How many grunts attacked together; 1 for a single attacker. */
+    groupSize: number;
     defender: Found;
     attackRoll: RollResult;
     attackDice: number;
@@ -583,6 +632,7 @@ export class GameSession {
       attacker: a.attackerName,
       defender: a.defender.name,
       weapon: a.weapon,
+      groupSize: a.groupSize,
       attackRoll: a.attackRoll,
       attackDice: a.attackDice,
       attackedBy: a.attackedBy,
@@ -598,6 +648,7 @@ export class GameSession {
       attacker: a.attackerName,
       defender: a.defender.name,
       weapon: a.weapon,
+      ...(a.groupSize > 1 && { groupSize: a.groupSize }),
       attackRoll: a.attackRoll,
       defenseRoll: a.defenseRoll,
       attackedBy: a.attackedBy,
@@ -610,7 +661,8 @@ export class GameSession {
 
     const gone = this.alreadyDead(a.defender);
     if (gone) return { text: `${text}\n${gone.text}` };
-    const done = await this.harm(a.defender, `${a.attackerName}'s ${a.weapon.name}`, outcome.damageValue, a.weapon.damageType);
+    const source = a.groupSize > 1 ? `${a.weapon.name} (${a.attackerName})` : `${a.attackerName}'s ${a.weapon.name}`;
+    const done = await this.harm(a.defender, source, outcome.damageValue, a.weapon.damageType);
     // A player character's resistance is a roll still to come; the damage result reaches the GM when it is answered.
     return done.waiting ? { text, resist: done.text } : { text: `${text}\n${done.text}` };
   }

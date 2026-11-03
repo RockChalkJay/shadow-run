@@ -91,6 +91,15 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("Never heal without a roll");
   });
 
+  it("tells the GM how to use grunts, and that a failed Composure test means they bolt", () => {
+    expect(prompt).toContain("Nameless opposition are grunts.");
+    expect(prompt).toContain("also give professionalRating (0 to 10, from the tiers above) and charisma");
+    expect(prompt).toContain("A full track is dead if physical damage hit last and unconscious if stun did");
+    expect(prompt).toContain("if the test fails the grunt bolts, so have it flee or surrender");
+    expect(prompt).toContain("Grunts cannot be healed.");
+    expect(prompt).toContain("the others in alongside (at most four more)");
+  });
+
   it("explains wounds the way the rulebook does: a die per filled row, none on resisting damage", () => {
     expect(prompt).toContain("Each filled row of three boxes on either track costs one die on every roll except resisting damage");
     expect(prompt).toContain("unconscious and out of the action");

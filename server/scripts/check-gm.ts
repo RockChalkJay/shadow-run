@@ -181,6 +181,19 @@ async function main() {
     note("(INFO) the ganger missed, so Kira has nothing to heal; the healing check was skipped");
   }
 
+  // Nameless opposition: the GM should make them grunts, and attack with them as a group.
+  await clearRolls(store, session);
+  await turn("three patrolmen rush Doc", store, session, () =>
+    session.say(
+      undefined,
+      "Out of character: please run this now. Three nameless Lone Star patrolmen (Professional Rating 3, Body 3, Willpower 3, Charisma 2 each) rush Doc together with clubs.",
+    ),
+  );
+  const rush = session.snapshot().pendingRolls.find((r) => r.attack?.role === "defender");
+  const gruntsInPlay = session.snapshot().characters.filter((c) => c.grunt);
+  check("the GM makes the patrolmen grunts", gruntsInPlay.length >= 1, `${gruntsInPlay.length} grunt(s): ${gruntsInPlay.map((c) => c.name).join(", ")}`);
+  check("the GM has them attack Doc as a group", (rush?.attack?.groupSize ?? 1) >= 2, rush ? `group of ${rush.attack?.groupSize ?? 1}` : "no defense roll appeared");
+
   await clearRolls(store, session);
   // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
   await close();

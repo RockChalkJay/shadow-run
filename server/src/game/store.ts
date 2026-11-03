@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ConditionMonitor, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { TREATMENTS } from "../rules/index.js";
 
@@ -8,6 +8,14 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 /** A transcript entry before the store gives it an id and a time. */
 export type NewEntry = DistributiveOmit<TranscriptEntry, "id" | "ts">;
+
+/** A grunt's rating, role and nerve, as saved. */
+const Grunt = z.object({
+  professionalRating: z.number().int().min(0).max(10),
+  lieutenant: z.boolean(),
+  charisma: z.number().int().min(1),
+  last: DamageType.nullable(),
+});
 
 /** A treatment a character has had for their current injuries. */
 const Treatment = z.enum(TREATMENTS);
@@ -32,10 +40,10 @@ export const SavedState = z.object({
     ]),
   ),
   /** How hurt each player character is. Older saves have none, and everyone starts unhurt. */
-  pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]) })).default([]),
+  pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]), grunt: Grunt.optional() })).default([]),
   /** The non-player characters the GM has put on the table, and how hurt they are. */
   npcs: z
-    .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]) }))
+    .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]), grunt: Grunt.optional() }))
     .default([]),
   /** Hits still unspent on healing rolls the GM has been told about, so a restart does not grant them again. */
   healBudgets: z

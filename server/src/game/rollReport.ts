@@ -73,10 +73,15 @@ export function formatNpcRoll({ label, pool, roll, threshold, success }: NpcRoll
 /** How hurt someone is, in words the GM can use. */
 export function formatStanding(view: CharacterView): string {
   const m = view.monitor;
-  const parts = [`${view.name}: Physical ${m.physical}/${m.physicalBoxes}, Stun ${m.stun}/${m.stunBoxes}, Overflow ${m.overflow}/${m.overflowBoxes}.`];
+  const g = view.grunt;
+  const parts = [
+    g
+      ? `${view.name} (${g.lieutenant ? "lieutenant, " : ""}grunt, Professional Rating ${g.professionalRating}): ${m.physical}/${m.physicalBoxes} boxes of damage.`
+      : `${view.name}: Physical ${m.physical}/${m.physicalBoxes}, Stun ${m.stun}/${m.stunBoxes}, Overflow ${m.overflow}/${m.overflowBoxes}.`,
+  ];
   if (view.woundModifier > 0) parts.push(`Wound penalty: -${view.woundModifier} dice on everything but damage resistance.`);
   if (view.status === "dead") parts.push(`${view.name} is DEAD.`);
-  else if (view.status === "unconscious") parts.push(`${view.name} is UNCONSCIOUS and out of the action until healed.`);
+  else if (view.status === "unconscious") parts.push(`${view.name} is UNCONSCIOUS and out of the action${g ? "" : " until healed"}.`);
   return parts.join(" ");
 }
 
@@ -91,6 +96,8 @@ export interface DamageReport {
   resistedBy: keyof typeof how;
   taken: number;
   after: CharacterView;
+  /** Set when a grunt passed their Professional Rating with this damage. */
+  composure?: { roll: RollResult; pool: number; threshold: number; held: boolean };
 }
 
 /** What the GM is told once damage has been resisted and applied. */
@@ -100,7 +107,17 @@ export function formatDamageForGm(r: DamageReport): string {
     `DAMAGE RESULT. ${r.label}: ${r.damageValue} ${r.damageType} damage to ${r.after.name}.`,
     `${r.after.name} resisted with Body ${r.body} (${how[r.resistedBy]}): ${showDice(r.resistance)} = ${plural(r.resistance.hits, "hit")}, so ${got}.`,
     formatStanding(r.after),
+    ...(r.composure ? [formatComposure(r.after, r.composure)] : []),
   ].join("\n");
+}
+
+/** The result of a grunt's test of nerve, which is binding: a grunt that fails it bolts. */
+function formatComposure(after: CharacterView, c: NonNullable<DamageReport["composure"]>): string {
+  const name = after.name;
+  return [
+    `COMPOSURE. ${name} is past their Professional Rating of ${after.grunt!.professionalRating}, so the system tested their nerve with Willpower + Charisma, ${diceCount(c.pool)} (${how.system}): ${showDice(c.roll)} = ${plural(c.roll.hits, "hit")} against a threshold of ${c.threshold}.`,
+    c.held ? `${name} HOLDS and keeps fighting.` : `${name} BOLTS. They break now: they flee or surrender, and you carry that out in what you narrate.`,
+  ].join(" ");
 }
 
 export interface HealReport {
@@ -140,6 +157,8 @@ export interface AttackReport {
   attacker: string;
   defender: string;
   weapon: Weapon;
+  /** How many grunts attacked together; 1 or absent for a single attacker. */
+  groupSize?: number;
   attackRoll: RollResult;
   attackDice: number;
   attackedBy: keyof typeof how;
@@ -155,7 +174,7 @@ export function formatAttackForGm(r: AttackReport): string {
   const base = r.weapon.damageValue;
   const lines = [
     `ATTACK RESULT. ${r.label}.`,
-    `${r.attacker} attacked with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
+    `${r.attacker} attacked ${(r.groupSize ?? 1) > 1 ? `as a group of ${r.groupSize} ` : ""}with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
     `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
   ];
   if (r.hit) {

@@ -17,6 +17,13 @@ export const Ruleset = z.object({
     overflowMultiplier: z.number().int().min(1),
   }),
   woundModifier: z.object({ boxesPerRow: z.number().int().min(1) }),
+  /** Grunts: nameless opposition with one combined condition track. */
+  grunt: z.object({
+    /** Boxes per wound modifier, instead of the usual row. */
+    woundBoxesPerRow: z.number().int().min(1),
+    /** Most grunts that attack together as one group. */
+    maxGroupSize: z.number().int().min(2),
+  }),
   initiative: z.object({
     maxDice: z.number().int().min(1),
     majorActions: z.number().int().min(1),
