@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RollRequest, RollRequestInput, type ResolvedRoll, type RollResult } from "@shadow-run/shared";
 import { z } from "zod";
-import { attackDamage, cryptoD6, defaultRuleset, evaluate, healingHits, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, defaultRuleset, evaluate, healingFeelsWounds, healingHits, isNaturalRecovery, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 
 export type Fail = { ok: false; error: string };
 
@@ -66,10 +66,11 @@ export class RollManager {
     if (data.healing && (data.opposed || !extra.healing)) {
       return { ok: false, error: "A healing roll is a simple test, set up by the game; leave out `opposed`." };
     }
-    const refusal = this.opts.canAct?.(data.characterId);
+    // Someone resting to recover can roll for it however hurt they are, even unconscious.
+    const refusal = extra.healing && isNaturalRecovery(extra.healing.method) ? null : this.opts.canAct?.(data.characterId);
     if (refusal) return { ok: false, error: `${refusal} Narrate what happens instead of asking for a roll.` };
 
-    const penalty = this.opts.woundPenalty?.(data.characterId) ?? 0;
+    const penalty = extra.healing && !healingFeelsWounds(extra.healing.method) ? 0 : (this.opts.woundPenalty?.(data.characterId) ?? 0);
     const dice = data.pool.total - penalty;
     if (dice < 1) {
       return { ok: false, error: `Wounds cost ${penalty} dice and leave this roll with none, so the attempt fails outright. Narrate that instead of asking for a roll.` };

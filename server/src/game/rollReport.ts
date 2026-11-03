@@ -131,7 +131,7 @@ export function formatHealingOffer(r: { healer: string; patient: string; method:
   const subject = r.method.startsWith("natural_") ? `${r.patient}'s ${METHOD_NAMES[r.method]}` : `${r.healer}'s ${METHOD_NAMES[r.method]} on ${r.patient}`;
   return [
     `HEALING AVAILABLE. ${subject}: ${plural(r.hits, "hit")} to spend. Roll id: ${r.rollId}`,
-    `Spend them with the heal tool, giving that roll id, in this turn; hits you do not spend are lost. ${rates[r.method]} Overflow damage heals first.`,
+    `Spend them with the heal tool, giving that roll id, in this turn; hits you do not spend are lost. ${rates[r.method]}${r.method.startsWith("natural_") ? "" : " Overflow damage heals first."}`,
   ].join("\n");
 }
 

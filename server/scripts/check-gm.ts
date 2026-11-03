@@ -118,7 +118,7 @@ async function main() {
   // A fight: the GM asks for the dice, and once they decide a hit it hurts people through the tools.
   const faces = (request: { pool: { total: number } }, face: number) => String(face).repeat(request.pool.total).split("").join(" ");
   await turn("a ganger shoots a player character", store, session, () =>
-    session.say(undefined, "A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
+    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
   );
   const lastAttack = async () => (await store.recentEntries(50)).findLast((e) => e.kind === "attack");
   const defense = session.snapshot().pendingRolls.find((r) => r.characterId === "kira");

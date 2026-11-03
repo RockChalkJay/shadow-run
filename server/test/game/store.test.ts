@@ -6,7 +6,7 @@ import { CampaignStore, type SavedState } from "../../src/game/store.js";
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
-const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], held: [] };
+const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], held: [] };
 
 describe("party", () => {
   it("is null before anything is saved, and round-trips after", async () => {
@@ -55,6 +55,7 @@ describe("game state", () => {
       pcs: [{ id: "kira", monitor, treated: ["first_aid" as const] }],
       npcs: [{ id: "ganger-1", name: "Ganger", body: 3, willpower: 3, monitor, treated: [] }],
       results: [{ kind: "report" as const, text: "DAMAGE RESULT. x" }],
+      healBudgets: [{ rollId: "r-1", patient: { kind: "pc" as const, id: "kira" }, method: "first_aid" as const, remaining: 2 }],
     };
     await store.saveState(state);
     expect(await store.loadState()).toEqual(state);

@@ -169,13 +169,38 @@ describe("natural recovery", () => {
     await t.gm((ctx) =>
       ctx.tools.requestRoll({ ...rollInput({ characterId: "kira", pool: { total: 8, breakdown: "Body 5 + Willpower 3" } }), healing: { method: "natural_stun", patient: kira } }),
     );
-    // Five boxes of stun cost Kira a die: one complete row of three.
-    expect(t.pending()[0]).toMatchObject({ pool: { total: 7 }, woundPenalty: 1, healing: { threshold: 0, autoHit: false } });
+    // Wound modifiers come off only the overflow recovery roll, so five boxes of stun cost her no die.
+    expect(t.pending()[0]).toMatchObject({ pool: { total: 8 }, healing: { threshold: 0, autoHit: false } });
+    expect(t.pending()[0]).not.toHaveProperty("woundPenalty");
     const id = t.pending()[0]!.id;
-    const [wrongTrack, right] = (await t.answer("6 6 5 3 3 3 3", async (ctx) => [await t.heal(id, "physical", 1)(ctx), await t.heal(id, "stun", 3)(ctx)])) as Array<{ ok: boolean; text: string }>;
+    const [wrongTrack, right] = (await t.answer("6 6 5 3 3 3 3 3", async (ctx) => [await t.heal(id, "physical", 1)(ctx), await t.heal(id, "stun", 3)(ctx)])) as Array<{ ok: boolean; text: string }>;
     expect(wrongTrack).toEqual({ ok: false, text: "natural recovery from stun cannot heal physical damage." });
     expect(right?.ok).toBe(true);
     expect(t.character("kira").monitor.stun).toBe(2);
+  });
+
+  it("can be rolled by someone who is unconscious, since they are resting, and is not held up by overflow", async () => {
+    const t = await clinic();
+    await t.hurtKira(13);
+    await t.hurtKira(4, "stun");
+    expect(t.character("kira")).toMatchObject({ status: "unconscious", monitor: { overflow: 2, stun: 4 } });
+    const asked = await t.gm((ctx) =>
+      ctx.tools.requestRoll({ ...rollInput({ characterId: "kira", pool: { total: 8, breakdown: "Body 5 + Willpower 3" } }), healing: { method: "natural_stun", patient: kira } }),
+    );
+    expect(asked).toMatchObject({ ok: true });
+    const id = t.pending()[0]!.id;
+    await t.answer("6 6 5 3 3 3 3 3", t.heal(id, "stun", 3));
+    expect(t.character("kira").monitor).toMatchObject({ stun: 1, overflow: 2 });
+  });
+
+  it("takes wound modifiers off the overflow recovery roll and no other", async () => {
+    const t = await clinic();
+    await t.hurtKira(13);
+    await t.gm((ctx) =>
+      ctx.tools.requestRoll({ ...rollInput({ characterId: "kira", pool: { total: 10, breakdown: "Body 5 + Body 5" } }), healing: { method: "natural_overflow", patient: kira } }),
+    );
+    // Eleven boxes of physical damage are three complete rows.
+    expect(t.pending()[0]).toMatchObject({ pool: { total: 7 }, woundPenalty: 3 });
   });
 
   it("cannot be asked for from someone else, or when there is nothing to recover from", async () => {
@@ -270,6 +295,52 @@ describe("spending a healing roll", () => {
     expect(again?.ok).toBe(true);
     expect(extra?.ok).toBe(false);
     expect(t.character("kira").monitor.physical).toBe(4);
+  });
+});
+
+describe("hits already spent when the server restarts", () => {
+  it("are not granted again after a partial spend in a turn that failed", async () => {
+    const first = await clinic();
+    await first.hurtKira(6);
+    await first.attempt("first_aid", kira, 6);
+    const id = first.pending()[0]!.id;
+    await first.answer(NINE(3), async (ctx) => {
+      await first.heal(id, "physical", 1)(ctx);
+      throw new Error("the GM fell over");
+    });
+    await first.session.close();
+
+    const second = await clinic([], { store: first.store });
+    second.jobs.push(async (ctx) => [await second.heal(id, "physical", 1)(ctx), await second.heal(id, "physical", 1)(ctx)]);
+    second.session.resume();
+    await second.session.whenIdle();
+    expect(second.inputs.at(-1)).toContain("2 hits to spend");
+    const [again, extra] = second.results.at(-1) as Array<{ ok: boolean }>;
+    expect(again?.ok).toBe(true);
+    expect(extra?.ok).toBe(false);
+    expect(second.character("kira").monitor.physical).toBe(4);
+  });
+});
+
+describe("a healing result the GM never heard before the server restarted", () => {
+  it("still has its hits to spend when the GM is told after the restart", async () => {
+    const first = await clinic();
+    await first.hurtKira(6);
+    await first.attempt("medkit", kira, 6);
+    const id = first.pending()[0]!.id;
+    await first.answer(NINE(3), async () => {
+      throw new Error("the GM fell over");
+    });
+    expect(first.session.snapshot().gm).toMatchObject({ phase: "error" });
+    await first.session.close();
+
+    const second = await clinic([], { store: first.store });
+    second.jobs.push(second.heal(id, "physical", 4));
+    second.session.resume();
+    await second.session.whenIdle();
+    expect(second.inputs.at(-1)).toContain("4 hits to spend");
+    expect(second.results.at(-1)).toMatchObject({ ok: true });
+    expect(second.character("kira").monitor.physical).toBe(2);
   });
 });
 

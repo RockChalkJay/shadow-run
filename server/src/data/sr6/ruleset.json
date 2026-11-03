@@ -45,7 +45,8 @@
     "the free hit for a fully natural patient applies to first aid and medkits, where the book states it, and not to healing magic",
     "an attempt at first aid, a medkit or healing magic uses up that treatment for the set of injuries even if it heals nothing",
     "a new set of injuries begins when the character next takes damage, after which each treatment can be received again",
-    "no physical or stun box heals while any overflow box is filled, whatever the kind of healing",
+    "first aid, a medkit and healing magic heal no physical or stun box while any overflow box is filled; natural recovery is rolled for each track separately and is not held up by overflow",
+    "natural recovery of stun and physical damage takes no wound penalty, since the book subtracts wound modifiers only for overflow, and an unconscious character can roll it",
     "the book's time limits (a minute for first aid, an hour for a medkit, an hour or a day between natural recovery rolls) and medkit supplies are the GM's to keep; the system tracks no game time",
     "natural recovery can be rolled only by a player character for their own injuries"
   ]

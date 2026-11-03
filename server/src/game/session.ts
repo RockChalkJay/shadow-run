@@ -88,7 +88,8 @@ export class GameSession {
   private activeTurn: { id: number; signal: AbortSignal } | null = null;
   /**
    * Hits the GM may still spend on each healing roll it has been told the result of, by roll id. They last for the
-   * turn that delivers them, and a turn that fails keeps what was spent so that its retry does not grant them again.
+   * turn that delivers them, and a turn that fails keeps what was spent, saved with the game, so that neither its
+   * retry nor a restart grants them again.
    */
   private readonly healBudgets = new Map<string, { patient: { kind: "pc" | "npc"; id: string }; method: HealMethod; remaining: number }>();
 
@@ -117,6 +118,7 @@ export class GameSession {
       saved?.pending ?? [],
     );
     this.results = saved?.results ?? [];
+    for (const budget of saved?.healBudgets ?? []) this.healBudgets.set(budget.rollId, { patient: budget.patient, method: budget.method, remaining: budget.remaining });
     this.held = saved?.held ?? [];
     this.openRequested = saved?.openRequested ?? false;
     this.opened = saved?.opened ?? false;
@@ -162,6 +164,7 @@ export class GameSession {
       pending: this.rolls.list(),
       results: this.results,
       ...this.roster.toSaved(),
+      healBudgets: [...this.healBudgets].map(([rollId, b]) => ({ rollId, patient: b.patient, method: b.method, remaining: b.remaining })),
       held: this.held,
     };
   }
@@ -627,7 +630,8 @@ export class GameSession {
 
     const perBox = hitsPerBox(budget.method, type);
     if (perBox === null) return { ok: false, text: `${METHOD_NAMES[budget.method]} cannot heal ${type} damage.` };
-    if (type !== "overflow" && standing.monitor.overflow > 0) {
+    // Overflow heals first when a healer treats someone; natural recovery is rolled for each track separately.
+    if (isTreatment(budget.method) && type !== "overflow" && standing.monitor.overflow > 0) {
       return { ok: false, text: `${target.name} has overflow damage, which heals first. Heal overflow before ${type}.` };
     }
     const toHeal = Math.min(boxes, standing.monitor[type]);

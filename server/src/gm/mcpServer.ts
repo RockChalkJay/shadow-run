@@ -102,7 +102,7 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "`healing` field, and when the result comes back it gives you the hits to spend and a roll id. Call heal with that " +
         "roll id, the track and the number of boxes; the patient is the one on the roll. First Aid heals 1 stun box per " +
         "hit or 1 physical or overflow box per 2 hits; a medkit and healing magic heal 1 box of any track per hit; natural " +
-        "recovery heals 1 box of its own track per hit. Overflow damage heals first. Hits you do not spend in the turn " +
+        "recovery heals 1 box of its own track per hit. A healer treating someone must heal overflow damage first. Hits you do not spend in the turn " +
         "you are told the result are lost, and a dead character cannot be healed.",
       inputSchema: HealInput.shape,
     },

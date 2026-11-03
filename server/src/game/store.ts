@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ConditionMonitor, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { ConditionMonitor, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { TREATMENTS } from "../rules/index.js";
 
@@ -36,6 +36,17 @@ export const SavedState = z.object({
   /** The non-player characters the GM has put on the table, and how hurt they are. */
   npcs: z
     .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]) }))
+    .default([]),
+  /** Hits still unspent on healing rolls the GM has been told about, so a restart does not grant them again. */
+  healBudgets: z
+    .array(
+      z.object({
+        rollId: z.string(),
+        patient: z.object({ kind: z.enum(["pc", "npc"]), id: z.string() }),
+        method: HealMethod,
+        remaining: z.number().int().min(0),
+      }),
+    )
     .default([]),
   /** What players said that the GM has not heard yet. */
   held: z.array(z.object({ characterId: z.string().optional(), name: z.string(), text: z.string() })),

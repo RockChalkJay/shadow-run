@@ -49,3 +49,9 @@ export function hitsPerBox(method: HealMethod, type: HealType): number | null {
       return type === "overflow" ? 1 : null;
   }
 }
+
+/** Natural recovery is a patient resting, so it is not stopped by being unconscious. */
+export const isNaturalRecovery = (method: HealMethod): boolean => !isTreatment(method);
+
+/** The book subtracts wound modifiers from the overflow recovery roll and from no other healing roll. */
+export const healingFeelsWounds = (method: HealMethod): boolean => method !== "natural_stun" && method !== "natural_physical";
