@@ -429,7 +429,7 @@ export class GameSession {
   private async attack(input: unknown): Promise<ToolReply> {
     const parsed = AttackInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: `The attack was not valid: ${z.prettifyError(parsed.error)}` };
-    const { label, stakes, weapon, attackPool, defensePool } = parsed.data;
+    const { label, stakes, weapon, attackPool, defensePool, edgeAdvice } = parsed.data;
     const attacker = this.roster.resolve(parsed.data.attacker);
     if (!attacker.ok) return { ok: false, text: attacker.error };
     const defender = this.roster.resolve(parsed.data.defender);
@@ -444,7 +444,7 @@ export class GameSession {
     const refusal = this.alreadyDead(defender) ?? (attacker.kind === "pc" || defender.kind === "pc" ? this.noRoomForRolls() : null);
     if (refusal) return refusal;
 
-    const shared = { label, stakes, weapon };
+    const shared = { label, stakes, weapon, edgeAdvice };
     const defenderView = this.roster.view(defender.kind, defender.id)!;
 
     if (attacker.kind === "pc") {

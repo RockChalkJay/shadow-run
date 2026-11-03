@@ -22,9 +22,11 @@ interface Shared {
   label: string;
   stakes: string;
   weapon: Weapon;
+  edgeAdvice?: string | undefined;
 }
 
-const edgeAdvice = "The system does not apply Edge for you yet, so the players keep track of their own.";
+/** Used when the GM gave no Edge advice of its own. */
+const fallbackEdgeAdvice = "The system does not apply Edge for you yet, so the players keep track of their own.";
 
 /** A player character attacks someone the system rolls for: they roll the attack, the system rolls the defense. */
 export function attackerRequest(shared: Shared, mine: Side, defender: Other) {
@@ -44,7 +46,7 @@ export function attackerRequest(shared: Shared, mine: Side, defender: Other) {
         glitch: "A glitch does not change whether the attack hits; the GM may add a small complication, such as a wild shot or a jam.",
         criticalGlitch: "A critical glitch means the attack misses and something serious but not fatal goes wrong.",
       },
-      edgeAdvice,
+      edgeAdvice: shared.edgeAdvice ?? fallbackEdgeAdvice,
     },
     attack: { role: "attacker" as const, weapon, other: { kind: "npc" as const, id: defender.id, name: defender.name } },
   } satisfies { input: unknown; attack: RollRequest["attack"] };
@@ -68,7 +70,7 @@ export function defenderRequest(shared: Shared, mine: Side, attacker: Other) {
         glitch: "A glitch does not change whether the attack hits; the GM may add a small complication.",
         criticalGlitch: "A critical glitch means the attack hits and something serious but not fatal goes wrong.",
       },
-      edgeAdvice,
+      edgeAdvice: shared.edgeAdvice ?? fallbackEdgeAdvice,
     },
     attack: { role: "defender" as const, weapon, other: { kind: "npc" as const, id: attacker.id, name: attacker.name } },
   } satisfies { input: unknown; attack: RollRequest["attack"] };

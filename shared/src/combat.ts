@@ -44,5 +44,10 @@ export const AttackInput = z.object({
   attackPool: AttackPool.describe("The attacker's pool: the weapon skill plus Agility, adjusted for gear and conditions"),
   defensePool: AttackPool.describe("The defender's pool: Reaction plus Intuition, adjusted for cover, surprise and conditions"),
   stakes: z.string().min(1).describe("What this attack means in the scene, for the players to read"),
+  edgeAdvice: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("When a player character rolls: whether spending Edge is worth it here, and the real option and its cost, as for request_roll"),
 });
 export type AttackInput = z.infer<typeof AttackInput>;

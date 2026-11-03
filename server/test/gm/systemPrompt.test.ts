@@ -82,6 +82,7 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("Resolve every attack with the attack tool, not request_roll.");
     expect(prompt).toContain("You never decide whether an attack lands or how much damage it does.");
     expect(prompt).toContain("An attacker with no hits misses.");
+    expect(prompt).toContain("give edgeAdvice for them as you would for request_roll");
     expect(prompt).toContain("call deal_damage with the Damage Value before they resist");
     expect(prompt).toContain("adds the attacker's net hits to the Damage Value");
     expect(prompt).toContain("Use heal only after a roll that earned it");

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RollRequest, RollRequestInput, type ResolvedRoll, type RollResult } from "@shadow-run/shared";
 import { z } from "zod";
-import { cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 
 export type Fail = { ok: false; error: string };
 
@@ -125,6 +125,14 @@ export class RollManager {
         const outcome = opposedTest(opponent, roll);
         success = outcome.winner === "defender";
         netHits = success ? outcome.netHits : 0;
+      }
+      if (request.attack) {
+        // An attack that rolls no hits cannot land, whatever the other side rolled, so the verdict follows the attack rules.
+        const attacking = request.attack.role === "attacker";
+        const [attackRoll, defenseRoll] = attacking ? [roll, opponent] : [opponent, roll];
+        const landed = attackDamage(attackRoll, defenseRoll, 0);
+        success = attacking ? landed.hit : !landed.hit;
+        netHits = attacking ? landed.damageValue : Math.max(0, defenseRoll.hits - attackRoll.hits);
       }
     } else {
       ({ success, netHits } = simpleTest(roll, request.threshold ?? 1));

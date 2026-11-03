@@ -160,6 +160,49 @@ describe("a player character attacks a non-player character", () => {
   });
 });
 
+describe("what the roll request says about Edge", () => {
+  it("uses the GM's own advice when it gives some, and a plain note when it does not", async () => {
+    const withAdvice = await fight([kiraShoots({ edgeAdvice: "Worth 2 Edge to add a die: the stairwell is dark and he has the light behind him." })], []);
+    expect(withAdvice.session.snapshot().pendingRolls[0]?.edgeAdvice).toBe("Worth 2 Edge to add a die: the stairwell is dark and he has the light behind him.");
+    const without = await fight([gangerShoots()], []);
+    expect(without.session.snapshot().pendingRolls[0]?.edgeAdvice).toBe("The system does not apply Edge for you yet, so the players keep track of their own.");
+  });
+});
+
+describe("the verdict kept with a roll that was one side of an attack", () => {
+  const verdict = async (t: Awaited<ReturnType<typeof fight>>) => {
+    const entry = (await t.store.recentEntries(20)).find((e) => e.kind === "roll");
+    if (entry?.kind !== "roll") throw new Error("no roll entry");
+    return entry.resolved.outcome;
+  };
+
+  it("says an attacker who rolled no hits failed, even against a defender who rolled none", async () => {
+    const t = await fight([kiraShoots()], [3, 3, 3, 3]);
+    await t.session.submitRoll(requestedId(t.events), { mode: "physical", dice: "3 3 3 3 3 3" });
+    await t.session.whenIdle();
+    expect(await verdict(t)).toMatchObject({ success: false, netHits: 0, consequence: "The attack misses." });
+  });
+
+  it("says a defender who rolled no hits against an attacker with none succeeded, since the attack missed", async () => {
+    const t = await fight([gangerShoots()], [3, 3, 3, 3, 3]);
+    await t.session.submitRoll(requestedId(t.events), { mode: "physical", dice: "3 3 3 3" });
+    await t.session.whenIdle();
+    expect(await verdict(t)).toMatchObject({ success: true, netHits: 0, consequence: "The attack misses." });
+  });
+
+  it("gives the attacker's net hits on a hit, and the defender's on a miss", async () => {
+    const hit = await fight([kiraShoots()], [3, 3, 3, 3, 3, 3, 3]);
+    await hit.session.submitRoll(requestedId(hit.events), { mode: "physical", dice: "6 6 6 5 3 3" });
+    await hit.session.whenIdle();
+    expect(await verdict(hit)).toMatchObject({ success: true, netHits: 4 });
+
+    const dodged = await fight([gangerShoots()], [6, 5, 3, 3, 3]);
+    await dodged.session.submitRoll(requestedId(dodged.events), { mode: "physical", dice: "6 6 5 3" });
+    await dodged.session.whenIdle();
+    expect(await verdict(dodged)).toMatchObject({ success: true, netHits: 1 });
+  });
+});
+
 describe("a non-player character attacks a player character", () => {
   it("asks the player to defend, then asks for the Body resistance, and tells the GM once both are in", async () => {
     // The system rolls the ganger's 5 attack dice (3 hits) when Kira defends.
