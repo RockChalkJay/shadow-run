@@ -1,6 +1,6 @@
 import type { ResolvedRoll } from "@shadow-run/shared";
 import { describe, expect, it } from "vitest";
-import { formatCancelledForGm, formatNpcRoll, formatRollForGm, showDice } from "../../src/game/rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatNpcRoll, formatRollForGm, showDice } from "../../src/game/rollReport.js";
 import { RollManager } from "../../src/game/rollManager.js";
 import { evaluate, scriptedD6 } from "../../src/rules/index.js";
 import { rollInput } from "../helpers.js";
@@ -87,5 +87,50 @@ describe("formatNpcRoll", () => {
 
   it("asks the GM to keep a glitch in proportion", () => {
     expect(formatNpcRoll({ label: "x", pool: 4, roll: evaluate([1, 1, 1, 2]) })).toContain("serious but not fatal");
+  });
+});
+
+describe("formatAttackForGm", () => {
+  const weapon = { name: "Ares Predator VI", damageValue: 3, damageType: "physical" as const };
+  const attack = (attackDice: string, defenseDice: string, over: object = {}) => ({
+    label: "Kira shoots the ganger",
+    attacker: "Kira",
+    defender: "Ganger",
+    weapon,
+    attackRoll: evaluate(attackDice.split(" ").map(Number)),
+    attackDice: attackDice.split(" ").length,
+    attackedBy: "physical" as const,
+    defenseRoll: evaluate(defenseDice.split(" ").map(Number)),
+    defenseDice: defenseDice.split(" ").length,
+    defendedBy: "system" as const,
+    hit: true,
+    damageValue: 7,
+    ...over,
+  });
+
+  it("reports a hit with the sum that makes the Damage Value", () => {
+    expect(formatAttackForGm(attack("6 6 6 5 3 3", "3 3 3 3"))).toBe(
+      [
+        "ATTACK RESULT. Kira shoots the ganger.",
+        "Kira attacked with Ares Predator VI (3P), 6 dice (dice at the table): 6 6 6 5 3 3 = 4 hits.",
+        "Ganger defended, 4 dice (the system's dice): 3 3 3 3 = 0 hits.",
+        "HIT by 4 net hits. Damage Value 3 + 4 = 7 physical, before Ganger resists.",
+      ].join("\n"),
+    );
+  });
+
+  it("says a hit on a tie is for the base Damage Value", () => {
+    expect(formatAttackForGm(attack("6 5 3", "6 5 3", { damageValue: 3 }))).toContain("HIT on a tie. Damage Value 3 physical, before Ganger resists.");
+  });
+
+  it("says why a miss missed", () => {
+    expect(formatAttackForGm(attack("6 3 3", "6 5 3", { hit: false, damageValue: 0 }))).toContain("MISS. Ganger had more hits.");
+    expect(formatAttackForGm(attack("3 3 3", "3 3 3", { hit: false, damageValue: 0 }))).toContain("MISS. Kira had no hits, so the attack cannot land.");
+  });
+
+  it("notes a glitch on either side, and keeps it from being fatal", () => {
+    const text = formatAttackForGm(attack("1 1 1 6", "1 1 1", { hit: false, damageValue: 0 }));
+    expect(text).toContain("Kira: GLITCH. The GM decides what goes wrong, keeping it inconvenient, not disastrous.");
+    expect(text).toContain("Ganger: CRITICAL GLITCH. The GM decides what goes wrong, keeping it serious but not fatal.");
   });
 });

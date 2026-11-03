@@ -12,6 +12,8 @@ export interface GmTools {
   rollNpc(input: unknown): Promise<ToolReply>;
   /** Hurts someone. The target resists, and the system applies what gets through. */
   dealDamage(input: unknown): Promise<ToolReply>;
+  /** One attack: the system rolls both sides, adds the net hits to the weapon's Damage Value, and hurts the defender. */
+  attack(input: unknown): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
 }
 

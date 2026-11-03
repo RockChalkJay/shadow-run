@@ -54,8 +54,9 @@ function show(entry: TranscriptEntry) {
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
       line(`\n  ${name(request.characterId)} rolled: ${showDice(roll)} = ${roll.hits} hit(s)`);
-      // Resisting damage has no success or failure; the damage entry that follows says what got through.
+      // Resisting damage and either side of an attack have no success or failure of their own; the entry that follows says what came of it.
       if (request.soak) return line();
+      if (request.attack) return line(opposed ? `  ${opposed.by} rolled: ${showDice(opposed.roll)} = ${opposed.roll.hits} hit(s)` : undefined);
       if (opposed) line(`  ${opposed.by} rolled: ${showDice(opposed.roll)} = ${opposed.roll.hits} hit(s)`);
       line(`  ${outcome.success ? "SUCCESS" : "FAILURE"}${outcome.netHits ? ` by ${outcome.netHits} net hit(s)` : ""}${roll.criticalGlitch ? ", CRITICAL GLITCH" : roll.glitch ? ", GLITCH" : ""}`);
       line(`  ${outcome.consequence}`);
@@ -66,6 +67,11 @@ function show(entry: TranscriptEntry) {
       return line(`  (roll skipped: ${entry.label})`);
     case "npc":
       return line(`  NPC roll, ${entry.label}: ${entry.pool} dice ${showDice(entry.roll)} = ${entry.roll.hits} hits`);
+    case "attack": {
+      const result = entry.hit ? `HIT for Damage Value ${entry.damageValue} ${entry.weapon.damageType}` : "MISS";
+      line(`  ${entry.attacker} attacks ${entry.defender} with ${entry.weapon.name}: ${entry.attackRoll.hits} hit(s) against ${entry.defenseRoll.hits}. ${result}`);
+      return;
+    }
     case "damage":
       line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
       line(`  ${formatStanding(entry.after)}\n`);

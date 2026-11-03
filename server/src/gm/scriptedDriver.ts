@@ -6,6 +6,8 @@ export interface ScriptedTurn {
   say?: string[];
   /** Rolls to ask for, in the shape of a `request_roll` call. */
   rolls?: unknown[];
+  /** Attacks to make, in the shape of an `attack` call. */
+  attacks?: unknown[];
   /** Damage to deal, in the shape of a `deal_damage` call. */
   damage?: unknown[];
   /** Healing to give, in the shape of a `heal` call. */
@@ -58,7 +60,7 @@ export class ScriptedGmDriver implements GmDriver {
       const reply = await ctx.tools.requestRoll(roll);
       if (!reply.ok) throw new Error(`The scripted roll was refused: ${reply.text}`);
     }
-    for (const [tool, calls] of [["dealDamage", turn.damage], ["heal", turn.heals]] as const) {
+    for (const [tool, calls] of [["attack", turn.attacks], ["dealDamage", turn.damage], ["heal", turn.heals]] as const) {
       for (const call of calls ?? []) {
         ctx.signal.throwIfAborted();
         const reply = await ctx.tools[tool](call);

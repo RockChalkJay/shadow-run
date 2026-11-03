@@ -29,6 +29,7 @@
     "exploding 6s: the extra dice can hit, but they are not counted as 1s and not counted in the pool when checking for a glitch",
     "wound penalty: only complete rows of 3 boxes count, so a short last row adds nothing",
     "a threshold of 0 is treated as 1, since the book defines thresholds from 1 and a roll with no hits should not succeed",
+    "an attack whose attacker rolls no hits misses even when the defender also rolls none; the book says ties go to the aggressor and the most hits wins, but does not say whether 0 against 0 hits",
     "a bought automatic hit counts as a hit when deciding whether a glitch is critical",
     "+1 to a single die cannot be used on a 6",
     "Edge given to an ally counts toward the ally's per-round gain cap and the overall maximum"

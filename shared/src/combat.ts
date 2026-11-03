@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DamageType, HealType } from "./character.js";
+import { MAX_POOL, Weapon } from "./roll.js";
 
 const id = z.string().min(1).max(40).regex(/^[a-z0-9_-]+$/, "ids are lowercase letters, digits, - or _");
 
@@ -28,3 +29,20 @@ export const HealInput = z.object({
   reason: z.string().min(1).describe("What did the healing, e.g. 'Doc's First Aid, 3 net hits'"),
 });
 export type HealInput = z.infer<typeof HealInput>;
+
+const AttackPool = z.object({
+  total: z.number().int().min(1).max(MAX_POOL).describe("Number of d6"),
+  breakdown: z.string().describe("How the pool was built, e.g. 'Agility 5 + Firearms 6 + 1 smartlink'"),
+});
+
+/** One attack between two characters, at least one of them a non-player character. */
+export const AttackInput = z.object({
+  label: z.string().min(1).describe("What happens, e.g. 'Kira shoots the ganger on the stairs'"),
+  attacker: CharacterRef,
+  defender: CharacterRef,
+  weapon: Weapon,
+  attackPool: AttackPool.describe("The attacker's pool: the weapon skill plus Agility, adjusted for gear and conditions"),
+  defensePool: AttackPool.describe("The defender's pool: Reaction plus Intuition, adjusted for cover, surprise and conditions"),
+  stakes: z.string().min(1).describe("What this attack means in the scene, for the players to read"),
+});
+export type AttackInput = z.infer<typeof AttackInput>;

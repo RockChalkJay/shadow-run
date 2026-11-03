@@ -17,6 +17,7 @@ describe("GM MCP server", () => {
     server = await startGmMcpServer({
       requestRoll: async (input) => (calls.push({ tool: "request_roll", input }), reply),
       rollNpc: async (input) => (calls.push({ tool: "roll_npc", input }), reply),
+      attack: async (input) => (calls.push({ tool: "attack", input }), reply),
       dealDamage: async (input) => (calls.push({ tool: "deal_damage", input }), reply),
       heal: async (input) => (calls.push({ tool: "heal", input }), reply),
     });
@@ -89,6 +90,37 @@ describe("GM MCP server", () => {
     const result = await client.callTool({ name: "roll_npc", arguments: { label: "Ganger", pool: 4, threshold: 2 } });
     expect(result.isError).toBeFalsy();
     expect(calls).toEqual([{ tool: "roll_npc", input: { label: "Ganger", pool: 4, threshold: 2 } }]);
+  });
+
+  it("passes an attack to the session, and tells the GM the system decides whether it lands", async () => {
+    const attack = {
+      label: "Kira shoots the ganger",
+      attacker: { kind: "pc", id: "kira" },
+      defender: { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower: 3 },
+      weapon: { name: "Ares Predator VI", damageValue: 3, damageType: "physical" },
+      attackPool: { total: 6, breakdown: "Agility 5 + Firearms 1" },
+      defensePool: { total: 4, breakdown: "Reaction 2 + Intuition 2" },
+      stakes: "A ganger on the stairs has a gun on her.",
+    };
+    await client.callTool({ name: "attack", arguments: attack });
+    expect(calls).toEqual([{ tool: "attack", input: attack }]);
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "attack")?.description).toMatch(/You never decide whether it hits or how much damage lands/);
+  });
+
+  it("rejects an attack with no dice before it reaches the session", async () => {
+    const bad = {
+      label: "x",
+      attacker: { kind: "pc", id: "kira" },
+      defender: { kind: "pc", id: "doc" },
+      weapon: { name: "Fist", damageValue: 1, damageType: "stun" },
+      attackPool: { total: 0, breakdown: "nothing" },
+      defensePool: { total: 3, breakdown: "x" },
+      stakes: "x",
+    };
+    const outcome = await client.callTool({ name: "attack", arguments: bad }).catch((e) => e);
+    expect(outcome instanceof Error || outcome.isError === true).toBe(true);
+    expect(calls).toHaveLength(0);
   });
 
   it("passes damage to the session, with the NPC's details on first mention", async () => {

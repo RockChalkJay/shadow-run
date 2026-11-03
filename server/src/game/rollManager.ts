@@ -46,7 +46,7 @@ export class RollManager {
     return [...this.pending.values()];
   }
 
-  create(input: unknown): { ok: true; request: RollRequest } | Fail {
+  create(input: unknown, extra: Pick<RollRequest, "attack"> = {}): { ok: true; request: RollRequest } | Fail {
     const parsed = RollRequestInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: `The roll request was not valid: ${describeIssues(parsed.error)}` };
     const data = parsed.data;
@@ -71,6 +71,7 @@ export class RollManager {
 
     const request: RollRequest = {
       ...data,
+      ...extra,
       pool,
       ...(penalty > 0 && { woundPenalty: penalty }),
       threshold: data.opposed ? undefined : (data.threshold ?? 1),

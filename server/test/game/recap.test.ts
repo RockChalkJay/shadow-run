@@ -21,6 +21,18 @@ function resistanceRoll(): TranscriptEntry {
   return entry({ kind: "roll", resolved: result.resolved });
 }
 
+function attackRoll(): TranscriptEntry {
+  const m = new RollManager({ knownCharacter: () => true, d6: scriptedD6([2, 2, 2, 2]), newId: () => "r1" });
+  const { threshold: _t, ...rest } = rollInput();
+  m.create(
+    { ...rest, opposed: { by: "Ganger", pool: 4, role: "acting" } },
+    { attack: { role: "attacker", weapon: { name: "Ares Predator VI", damageValue: 3, damageType: "physical" }, other: { kind: "npc", id: "ganger-1", name: "Ganger" } } },
+  );
+  const result = m.resolve("r1", { mode: "physical", dice: "6 6 5 3" });
+  if (!result.ok) throw new Error(result.error);
+  return entry({ kind: "roll", resolved: result.resolved });
+}
+
 function resolvedRoll(dice: string, opposed = false): TranscriptEntry {
   const m = new RollManager({ knownCharacter: () => true, d6: scriptedD6([2, 2, 2, 2]), newId: () => "r1" });
   const { threshold: _t, ...rest } = rollInput();
@@ -82,6 +94,13 @@ describe("formatRecap", () => {
       nameOf,
     );
     expect(text).toBe("[Damage] Kira took 6 physical from Ganger's pistol.");
+  });
+
+  it("lists an attack once, as hit or missed, and not as a success or failure of the roll that made it", () => {
+    const weapon = { name: "Ares Predator VI", damageValue: 3, damageType: "physical" };
+    const attack = (hit: boolean) => entry({ kind: "attack", label: "Kira shoots", attacker: "Kira", defender: "Ganger", weapon, hit, damageValue: hit ? 7 : 0 });
+    expect(formatRecap([attackRoll(), attack(true)], nameOf)).toBe("[Attack] Kira hit Ganger with Ares Predator VI.");
+    expect(formatRecap([attackRoll(), attack(false)], nameOf)).toBe("[Attack] Kira missed Ganger with Ares Predator VI.");
   });
 
   it("summarizes a roll with its verdict and declared consequence", () => {

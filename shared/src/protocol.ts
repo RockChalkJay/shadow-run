@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CharacterView, DamageType, HealType, Status } from "./character.js";
 import type { PartyMember } from "./party.js";
-import type { ResolvedRoll, RollRequest, RollResult } from "./roll.js";
+import type { ResolvedRoll, RollRequest, RollResult, Weapon } from "./roll.js";
 
 export type { Status };
 
@@ -57,6 +57,21 @@ export type TranscriptEntry =
       /** Damage that got through. */
       taken: number;
       after: CharacterView;
+    })
+  | (EntryBase & {
+      kind: "attack";
+      label: string;
+      attacker: string;
+      defender: string;
+      weapon: Weapon;
+      attackRoll: RollResult;
+      defenseRoll: RollResult;
+      /** Who rolled each side: the app or physical dice for a player, the system for a non-player character. */
+      attackedBy: "app" | "physical" | "system";
+      defendedBy: "app" | "physical" | "system";
+      hit: boolean;
+      /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
+      damageValue: number;
     })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });
