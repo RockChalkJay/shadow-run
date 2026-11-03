@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { GmDriver, GmTurnContext, GmTurnInput } from "../../src/gm/driver.js";
 import { ScriptedGmDriver, type ScriptedTurn } from "../../src/gm/scriptedDriver.js";
 import { scriptedD6 } from "../../src/rules/index.js";
-import { newSession, rollInput, toolRunner } from "../helpers.js";
+import { MAX_PENDING_ROLLS } from "../../src/game/rollManager.js";
+import { newSession, party, rollInput, toolRunner } from "../helpers.js";
 
 // Kira: Body 5, Willpower 3 -> Physical 11, Stun 10, Overflow 10. Doc: Body 3, Willpower 5 -> Physical 10, Stun 11, Overflow 6.
 const ganger = { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower: 3 };
@@ -233,6 +234,52 @@ describe("healing", () => {
     expect(replies[2]).toEqual({ ok: false, text: 'There is no non-player character "ghost" on the table.' });
     expect(replies[3]).toMatchObject({ ok: false, text: expect.stringContaining("healing was not valid") });
     expect(replies[4]).toMatchObject({ ok: false });
+  });
+});
+
+describe("a GM stuck in a loop", () => {
+  it("cannot stack up resistance cards, each of which would land damage when answered", async () => {
+    const runner = toolRunner();
+    const { session } = await newSession(runner.driver);
+    const replies = await runner.run(session, async (ctx) => {
+      const out = [];
+      for (let i = 0; i < MAX_PENDING_ROLLS + 3; i++) out.push(await ctx.tools.dealDamage(hurt(kira, 3)));
+      return out;
+    });
+    expect(replies.filter((r) => r.ok)).toHaveLength(MAX_PENDING_ROLLS);
+    expect(replies[MAX_PENDING_ROLLS]).toMatchObject({ ok: false, text: expect.stringContaining("Stop and wait") });
+    expect(session.snapshot().pendingRolls).toHaveLength(MAX_PENDING_ROLLS);
+  });
+
+  it("counts rolls it asked for as well", async () => {
+    const runner = toolRunner();
+    const { session } = await newSession(runner.driver);
+    const reply = await runner.run(session, async (ctx) => {
+      for (let i = 0; i < MAX_PENDING_ROLLS; i++) await ctx.tools.requestRoll(rollInput());
+      return ctx.tools.dealDamage(hurt(kira, 3));
+    });
+    expect(reply).toMatchObject({ ok: false });
+  });
+});
+
+describe("a resistance roll whose character has left the table", () => {
+  it("is dropped, the player is told, and the GM is told nothing came of it", async () => {
+    const first = await dealt([hurt(kira, 8)]);
+    const card = first.session.snapshot().pendingRolls[0]!;
+    await first.session.close();
+
+    // The party was edited while the card waited: Kira is gone.
+    const driver = new ScriptedGmDriver([{ say: ["Doc looks around."] }]);
+    const second = await newSession(driver, { store: first.store, party: party.filter((m) => m.id !== "kira") });
+    expect(second.session.snapshot().pendingRolls).toHaveLength(1);
+
+    const ack = await second.session.submitRoll(card.id, { mode: "physical", dice: "6 5 3 1 1" });
+    expect(ack).toEqual({ ok: false, error: "That character is no longer at the table, so the roll was dropped." });
+    expect(second.session.snapshot().pendingRolls).toHaveLength(0);
+    expect(second.events).toContainEqual({ type: "roll.cancelled", requestId: card.id });
+
+    await second.session.whenIdle();
+    expect(driver.inputs[0]?.text).toContain("ROLL DROPPED. Resist 8P damage: Ganger's pistol: that character is no longer at the table");
   });
 });
 

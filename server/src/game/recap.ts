@@ -13,6 +13,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `GM: ${entry.text}`;
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
+      // A resistance roll has no success or failure; the damage line that follows says what came of it.
+      if (request.soak) return null;
       const against = opposed ? ` against ${opposed.by} (${hits(opposed.roll.hits)})` : "";
       const glitch = roll.criticalGlitch ? ", critical glitch" : roll.glitch ? ", glitch" : "";
       const effect = [outcome.consequence, outcome.glitchConsequence].filter(Boolean).join(" ");

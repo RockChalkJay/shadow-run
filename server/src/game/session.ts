@@ -20,7 +20,7 @@ import { cryptoD6, damageAfterResistance, damageResistancePool, rollPool, simple
 import { formatRecap } from "./recap.js";
 import { Roster } from "./roster.js";
 import { formatCancelledForGm, formatDamageForGm, formatHealForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
-import { RollManager, type RollEntry } from "./rollManager.js";
+import { MAX_PENDING_ROLLS, RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
 export type Ack = { ok: true } | { ok: false; error: string };
@@ -208,6 +208,10 @@ export class GameSession {
   }
 
   async submitRoll(requestId: string, entry: RollEntry): Promise<Ack> {
+    // A roll can outlive its character if the party was edited while it waited; it has nobody to apply to.
+    const waiting = this.rolls.list().find((r) => r.id === requestId);
+    if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+
     const result = this.rolls.resolve(requestId, entry);
     if (!result.ok) return result;
     const { resolved } = result;
@@ -221,6 +225,17 @@ export class GameSession {
     await this.persist();
     this.schedule();
     return { ok: true };
+  }
+
+  /** Removes a roll whose character is no longer at the table, and tells the GM nothing came of it. */
+  private async dropOrphanedRoll(request: RollRequest): Promise<Ack> {
+    this.rolls.cancel(request.id);
+    this.results.push({ kind: "report", text: `ROLL DROPPED. ${request.label}: that character is no longer at the table, so nothing was rolled or applied.` });
+    this.opts.emit({ type: "roll.cancelled", requestId: request.id });
+    this.blocked = false;
+    await this.persist();
+    this.schedule();
+    return { ok: false, error: "That character is no longer at the table, so the roll was dropped." };
   }
 
   async cancelRoll(requestId: string): Promise<Ack> {
@@ -331,6 +346,10 @@ export class GameSession {
     if (this.roster.view(target.kind, target.id)?.status === "dead") return { ok: false, text: `${target.name} is already dead.` };
 
     if (target.kind === "pc") {
+      // Every card here is damage that lands once it is answered, so a GM stuck in a loop must not be able to stack them.
+      if (this.rolls.list().length >= MAX_PENDING_ROLLS) {
+        return { ok: false, text: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop and wait for the table to answer them before hurting anyone else.` };
+      }
       // The player rolls their own Body to resist, so the dice are theirs.
       const request = this.rolls.createInternal({
         characterId: target.id,
