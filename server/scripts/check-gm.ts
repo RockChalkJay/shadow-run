@@ -7,7 +7,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerEvent } from "@shadow-run/shared";
+import type { PartyMember, ServerEvent } from "@shadow-run/shared";
 import { demoParty } from "../src/game/demoParty.js";
 import { GameSession } from "../src/game/session.js";
 import { CampaignStore } from "../src/game/store.js";
@@ -37,9 +37,9 @@ const tap = (inner: GmDriver): GmDriver => ({
   close: () => inner.close?.() ?? Promise.resolve(),
 });
 
-async function open(store: CampaignStore) {
-  const real = await ClaudeGmDriver.start({ party: demoParty, model });
-  const session = await GameSession.create({ store, party: demoParty, driver: tap(real), emit: (e) => events.push(e) });
+async function open(store: CampaignStore, party: PartyMember[]) {
+  const real = await ClaudeGmDriver.start({ party, model });
+  const session = await GameSession.create({ store, party, driver: tap(real), emit: (e) => events.push(e) });
   return { session, close: async () => (await session.close(), await real.close()) };
 }
 
@@ -68,7 +68,7 @@ async function turn(label: string, store: CampaignStore, session: GameSession, a
 async function main() {
   const store = new CampaignStore(await mkdtemp(join(tmpdir(), "shadow-run-check-")));
   await store.saveParty(demoParty);
-  let { session, close } = await open(store);
+  let { session, close } = await open(store, demoParty);
 
   const opening = await turn("the opening scene", store, session, () => session.start());
   check("the GM opens the scene", opening.length > 40);
@@ -115,13 +115,39 @@ async function main() {
   );
   check("the GM does not reveal who is running it", !/@|protonmail|rockchalk/i.test(direct));
 
+  // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
+  await close();
+  const razor: PartyMember = {
+    id: "razor",
+    name: "Razor",
+    body: 3,
+    willpower: 4,
+    edge: 3,
+    sheet: "Demo character. Human decker. Body 3, Agility 3, Reaction 4, Strength 2, Willpower 4, Logic 6, Intuition 5, Charisma 2, Edge 3. Hacking 6, Electronics 4, Cracking 5. Carries a battered cyberdeck named Mother.",
+  };
+  const party = [...demoParty, razor];
+  const sessionBefore = (JSON.parse(await readFile(join(store.dir, "state.json"), "utf8")) as { claudeSessionId?: string }).claudeSessionId;
+  ({ session, close } = await open(store, party));
+  const arrival = await turn("a new character joins the same session", store, session, () =>
+    session.say("razor", "Razor here, just arrived with my deck. I plug into the booth's jack and try to sniff the commlink's signal."),
+  );
+  const rolledForRazor = session.snapshot().pendingRolls.some((r) => r.characterId === "razor");
+  check("the GM knows the new character without starting over", rolledForRazor || /razor/i.test(arrival), rolledForRazor ? "asked Razor for a roll" : "named Razor");
+  check("it was still the same GM session", session.gmSessionId === sessionBefore, session.gmSessionId);
+
   // Lose the GM's session on purpose: the table should not notice.
   await close();
   const state = JSON.parse(await readFile(join(store.dir, "state.json"), "utf8"));
   const bogus = "00000000-0000-4000-8000-000000000000";
   await writeFile(join(store.dir, "state.json"), JSON.stringify({ ...state, claudeSessionId: bogus }));
-  ({ session, close } = await open(store));
-  await turn("after the GM's session is lost", store, session, () => session.say("kira", "I wait in the shadows and watch the guard."));
+  ({ session, close } = await open(store, party));
+  // The GM may be waiting on a roll; answering it is what gives it a turn to take.
+  const owed = session.snapshot().pendingRolls[0];
+  await turn("after the GM's session is lost", store, session, () =>
+    owed
+      ? session.submitRoll(owed.id, { mode: "physical", dice: "6 ".repeat(owed.pool.total).trim() })
+      : session.say("kira", "I wait in the shadows and watch the guard."),
+  );
   check("the table recovers from a lost session", session.snapshot().gm.phase !== "error", JSON.stringify(session.snapshot().gm));
   check("it carries on in a new session", !!session.gmSessionId && session.gmSessionId !== bogus, session.gmSessionId);
   await close();

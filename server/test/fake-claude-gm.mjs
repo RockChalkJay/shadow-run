@@ -24,6 +24,9 @@ const script = JSON.parse(readFileSync(FAKE_GM_SCRIPT, "utf8"));
 const turn = script[call - 1] ?? { steps: [] };
 
 const resume = after("--resume");
+const systemPromptFile = after("--system-prompt-file");
+const mcpArg = after("--mcp-config") ?? "{}";
+const mcpText = mcpArg.trimStart().startsWith("{") ? mcpArg : readFileSync(mcpArg, "utf8");
 log({
   kind: "start",
   call,
@@ -32,7 +35,11 @@ log({
   stdin,
   cwd: process.cwd(),
   model: after("--model"),
-  systemPrompt: after("--system-prompt"),
+  argv,
+  systemPrompt: systemPromptFile ? readFileSync(systemPromptFile, "utf8") : after("--system-prompt"),
+  systemPromptFile,
+  snapshot: after("--system-prompt-snapshot"),
+  mcpConfigArg: mcpArg,
   allowedTools: after("--allowedTools"),
   settingSources: after("--setting-sources"),
 });
@@ -48,7 +55,7 @@ if (turn.lostSession && resume) {
 
 out({ type: "system", subtype: "init", session_id: sessionId });
 
-const config = JSON.parse(after("--mcp-config") ?? "{}").mcpServers?.gm;
+const config = JSON.parse(mcpText).mcpServers?.gm;
 let client;
 async function tools() {
   if (!client) {

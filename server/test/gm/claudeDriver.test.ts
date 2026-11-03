@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,51 @@ describe("a turn with the CLI", () => {
     });
     expect(run?.systemPrompt).toContain("Kira (id: kira)");
     expect(await realpath(run?.cwd)).toBe(await realpath(t.workDir));
+  });
+
+  it("keeps the prompt and the tools secret off the command line, in files only this user can read", async () => {
+    const t = await table([{ steps: [{ say: "Hello." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+
+    const [run] = await t.starts();
+    const commandLine = (run?.argv as string[]).join(" ");
+    expect(commandLine).not.toContain("Bearer");
+    expect(commandLine).not.toContain("Kira (id");
+    expect(run?.systemPromptFile).toBe(join(t.workDir, "system-prompt.md"));
+    expect(run?.mcpConfigArg).toBe(join(t.workDir, "mcp.json"));
+    expect((await stat(run?.systemPromptFile)).mode & 0o777).toBe(0o600);
+    expect((await stat(run?.mcpConfigArg)).mode & 0o777).toBe(0o600);
+  });
+
+  it("sends the prompt fresh every turn, so a resumed session does not keep the one it began with", async () => {
+    const t = await table([{ steps: [{ say: "One." }] }, { steps: [{ say: "Two." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "again");
+    await t.session.whenIdle();
+    const runs = await t.starts();
+    expect(runs.map((r) => r.snapshot)).toEqual(["off", "off"]);
+    expect(runs[1]?.resume).toBe("fake-session-1");
+  });
+
+  it("writes the latest party and premise into the prompt each time it starts", async () => {
+    const first = await table([{ steps: [{ say: "Hi." }] }]);
+    const extra = { id: "razor", name: "Razor", body: 4, willpower: 4, edge: 2, sheet: "Demo. Human face." };
+    const second = await ClaudeGmDriver.start({ party: [...party, extra], premise: "A courier vanishes.", claudeBin: FAKE_GM, workDir: first.workDir });
+    open.push(second);
+    const written = await readFile(join(first.workDir, "system-prompt.md"), "utf8");
+    expect(written).toContain("Razor (id: razor)");
+    expect(written).toContain("A courier vanishes.");
+  });
+
+  it("copes with a premise far longer than a command line could hold", async () => {
+    const t = await table([{ steps: [{ say: "Hello." }] }], { premise: "Long background. ".repeat(20_000) });
+    await t.session.start();
+    await t.session.whenIdle();
+    expect(t.session.snapshot().gm).toEqual({ phase: "idle" });
+    const [run] = await t.starts();
+    expect((run?.systemPrompt as string).length).toBeGreaterThan(300_000);
   });
 
   it("lets the GM know a roll was refused, and why, so it can correct itself", async () => {

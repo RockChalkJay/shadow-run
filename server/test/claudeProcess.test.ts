@@ -1,11 +1,12 @@
+import { spawnSync } from "node:child_process";
 import { getEventListeners } from "node:events";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GmEvent } from "@shadow-run/shared";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildArgs, childEnv, runGmTurn, type GmTurnOptions } from "../src/gm/claudeProcess.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildArgs, childEnv, runGmTurn, stopAllGmProcesses, type GmTurnOptions } from "../src/gm/claudeProcess.js";
 
 const path = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 const FAKE_CLAUDE = path("./fake-claude.mjs");
@@ -66,6 +67,27 @@ describe("buildArgs", () => {
     expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
     expect(args[args.indexOf("--effort") + 1]).toBe("high");
     expect(buildArgs(base)).not.toContain("--effort");
+  });
+
+  it("sends the system prompt fresh every turn, so a resumed session does not keep the one it began with", () => {
+    const inline = buildArgs({ ...base, systemPrompt: "You are the GM." });
+    expect(inline[inline.indexOf("--system-prompt-snapshot") + 1]).toBe("off");
+    const file = buildArgs({ ...base, systemPromptFile: "/work/system-prompt.md" });
+    expect(file[file.indexOf("--system-prompt-file") + 1]).toBe("/work/system-prompt.md");
+    expect(file[file.indexOf("--system-prompt-snapshot") + 1]).toBe("off");
+    expect(file).not.toContain("--system-prompt");
+  });
+
+  it("can take the system prompt and the tools configuration as files, keeping both off the command line", () => {
+    const args = buildArgs({
+      ...base,
+      systemPromptFile: "/work/system-prompt.md",
+      mcpConfigFile: "/work/mcp.json",
+      mcpServers: { gm: { type: "http", url: "http://127.0.0.1:1/mcp", headers: { Authorization: "Bearer secret" } } },
+    });
+    expect(args[args.indexOf("--mcp-config") + 1]).toBe("/work/mcp.json");
+    expect(args.join(" ")).not.toContain("secret");
+    expect(args).toContain("--strict-mcp-config");
   });
 
   it("loads no settings files, so nothing configured on the machine reaches the GM", () => {
@@ -159,6 +181,30 @@ describe("runGmTurn", () => {
     expect(grandchildPid).toBeGreaterThan(0);
     expect(await exitsWithin(pid, 3000)).toBe(true);
     expect(await exitsWithin(grandchildPid, 3000)).toBe(true);
+  });
+
+  it("stops every running GM process on request", async () => {
+    process.env.FAKE_CLAUDE_HANG = "1";
+    const running = (async () => {
+      for await (const _event of runGmTurn({ prompt: "go", cwd: dir, claudeBin: FAKE_CLAUDE })) {
+        // Drain.
+      }
+    })();
+    await vi.waitFor(async () => expect(JSON.parse(await readFile(capturePath, "utf8")).pid).toBeGreaterThan(0));
+    const { pid } = JSON.parse(await readFile(capturePath, "utf8"));
+    stopAllGmProcesses();
+    expect(await exitsWithin(pid, 3000)).toBe(true);
+    await running;
+  });
+
+  it("stops the GM process when the server exits without any cleanup, as in a crash", async () => {
+    process.env.FAKE_CLAUDE_HANG = "1";
+    process.env.CRASH_BIN = FAKE_CLAUDE;
+    const helper = path("./helpers/crash.ts");
+    const result = spawnSync("npx", ["tsx", helper], { env: process.env, encoding: "utf8", timeout: 60_000 });
+    expect(result.status, result.stderr).toBe(0);
+    const { pid } = JSON.parse(await readFile(capturePath, "utf8"));
+    expect(await exitsWithin(pid, 3000)).toBe(true);
   });
 
   it("does not start the process when the signal is already aborted", async () => {

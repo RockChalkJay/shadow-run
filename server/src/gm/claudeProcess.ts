@@ -13,7 +13,10 @@ export interface GmTurnOptions {
   cwd: string;
   /** Resume this session; omit to start a new one. */
   sessionId?: string;
+  /** The system prompt, as text. Prefer `systemPromptFile`: arguments are size-limited and visible to other processes. */
   systemPrompt?: string;
+  /** A file holding the system prompt. */
+  systemPromptFile?: string;
   model?: string;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Built-in tools to expose. Empty means none. */
@@ -21,6 +24,8 @@ export interface GmTurnOptions {
   /** Tools that run without a permission prompt, e.g. `mcp__gm__request_roll`. */
   allowedTools?: string[];
   mcpServers?: Record<string, { type: "http"; url: string; headers?: Record<string, string> }>;
+  /** A file holding the MCP configuration, which keeps a tools secret out of the process list. */
+  mcpConfigFile?: string;
   claudeBin?: string;
   signal?: AbortSignal;
 }
@@ -47,10 +52,14 @@ export function buildArgs(opts: GmTurnOptions): string[] {
     "--tools", (opts.tools ?? []).join(","),
   ];
   if (opts.allowedTools?.length) args.push("--allowedTools", opts.allowedTools.join(","));
-  if (opts.mcpServers) {
+  if (opts.mcpConfigFile) {
+    args.push("--strict-mcp-config", "--mcp-config", opts.mcpConfigFile);
+  } else if (opts.mcpServers) {
     args.push("--strict-mcp-config", "--mcp-config", JSON.stringify({ mcpServers: opts.mcpServers }));
   }
-  if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt);
+  // A resumed session would otherwise keep the prompt it began with, ignoring later edits to the party, premise or prompt.
+  if (opts.systemPromptFile) args.push("--system-prompt-file", opts.systemPromptFile, "--system-prompt-snapshot", "off");
+  else if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt, "--system-prompt-snapshot", "off");
   if (opts.model) args.push("--model", opts.model);
   if (opts.effort) args.push("--effort", opts.effort);
   if (opts.sessionId) args.push("--resume", opts.sessionId);
@@ -69,8 +78,14 @@ export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessE
   return env;
 }
 
-/** Stops the process and anything it started. It runs as the leader of its own process group, so one signal reaches them all. */
-function killTree(child: ChildProcess): void {
+/** Every GM process that is running, so none outlives the server. */
+const live = new Set<ChildProcess>();
+
+/**
+ * Stops the process and anything it started. It runs as the leader of its own process group, so one
+ * signal reaches them all. `hard` skips the grace period, for when the server itself is going away.
+ */
+function killTree(child: ChildProcess, hard = false): void {
   const { pid } = child;
   if (pid === undefined) return;
   const signal = (sig: NodeJS.Signals) => {
@@ -81,11 +96,22 @@ function killTree(child: ChildProcess): void {
       // Already gone.
     }
   };
+  if (hard) return signal("SIGKILL");
   signal("SIGTERM");
   setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null) signal("SIGKILL");
   }, 3000).unref();
 }
+
+/**
+ * Stops every GM process still running. The processes lead their own groups, so they do not get the
+ * terminal's Ctrl-C with the server, and without this a server that crashed would leave a turn
+ * running and spending plan usage.
+ */
+export function stopAllGmProcesses(): void {
+  for (const child of live) killTree(child, true);
+}
+process.once("exit", stopAllGmProcesses);
 
 /**
  * Runs one GM turn as a `claude -p` process and streams its events. Always ends with
@@ -104,6 +130,9 @@ export async function* runGmTurn(opts: GmTurnOptions): AsyncGenerator<GmEvent> {
     stdio: ["pipe", "pipe", "pipe"],
     detached: process.platform !== "win32",
   });
+
+  live.add(child);
+  child.once("close", () => live.delete(child));
 
   let stderr = "";
   child.stderr.on("data", (chunk) => {

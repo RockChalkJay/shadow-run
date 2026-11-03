@@ -25,7 +25,7 @@ async function main() {
   let driver: GmDriver;
   if (config.gm === "claude") {
     const bin = config.claudeBin ?? "claude";
-    const found = spawnSync(bin, ["--version"], { encoding: "utf8" });
+    const found = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 5000 });
     if (found.error || found.status !== 0) {
       console.warn(`Could not run "${bin} --version". Install the Claude CLI and log in, or set SHADOWRUN_GM=scripted to try the table without it.`);
     }

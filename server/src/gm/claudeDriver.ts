@@ -5,7 +5,7 @@ import type { EdgeCatalog } from "../rules/index.js";
 import { runGmTurn, type GmTurnOptions } from "./claudeProcess.js";
 import type { GmDriver, GmTurnContext, GmTurnInput, ToolReply } from "./driver.js";
 import { GM_MCP_NAME, GM_TOOL_NAMES, startGmMcpServer, type RunningMcpServer } from "./mcpServer.js";
-import { privateDir } from "./privateDir.js";
+import { privateDir, writePrivateFile } from "./privateDir.js";
 import { buildSystemPrompt } from "./systemPrompt.js";
 
 export interface ClaudeDriverOptions {
@@ -43,7 +43,8 @@ export class ClaudeGmDriver implements GmDriver {
     private readonly opts: ClaudeDriverOptions,
     private readonly mcp: RunningMcpServer,
     private readonly cwd: string,
-    private readonly systemPrompt: string,
+    /** Where the system prompt and the tools configuration are kept, out of reach of other users and of the process list. */
+    private readonly files: { systemPrompt: string; mcpConfig: string },
   ) {}
 
   static async start(opts: ClaudeDriverOptions): Promise<ClaudeGmDriver> {
@@ -54,7 +55,10 @@ export class ClaudeGmDriver implements GmDriver {
       requestRoll: (input) => driver?.current?.tools.requestRoll(input) ?? Promise.resolve(NO_TURN),
       rollNpc: (input) => driver?.current?.tools.rollNpc(input) ?? Promise.resolve(NO_TURN),
     });
-    driver = new ClaudeGmDriver(opts, mcp, cwd, buildSystemPrompt(opts));
+    const files = { systemPrompt: join(cwd, "system-prompt.md"), mcpConfig: join(cwd, "mcp.json") };
+    await writePrivateFile(files.systemPrompt, buildSystemPrompt(opts));
+    await writePrivateFile(files.mcpConfig, JSON.stringify({ mcpServers: { [GM_MCP_NAME]: { type: "http", url: mcp.url, headers: mcp.headers } } }));
+    driver = new ClaudeGmDriver(opts, mcp, cwd, files);
     return driver;
   }
 
@@ -76,12 +80,12 @@ export class ClaudeGmDriver implements GmDriver {
       prompt,
       cwd: this.cwd,
       ...(sessionId !== undefined && { sessionId }),
-      systemPrompt: this.systemPrompt,
+      systemPromptFile: this.files.systemPrompt,
       model: this.opts.model ?? "sonnet",
       ...(this.opts.effort && { effort: this.opts.effort }),
       tools: [],
       allowedTools: GM_TOOL_NAMES,
-      mcpServers: { [GM_MCP_NAME]: { type: "http", url: this.mcp.url, headers: this.mcp.headers } },
+      mcpConfigFile: this.files.mcpConfig,
       ...(this.opts.claudeBin && { claudeBin: this.opts.claudeBin }),
       signal: ctx.signal,
     })) {

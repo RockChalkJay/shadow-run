@@ -1,8 +1,8 @@
-import { chmod, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { privateDir } from "../../src/gm/privateDir.js";
+import { privateDir, writePrivateFile } from "../../src/gm/privateDir.js";
 
 const base = () => mkdtemp(join(tmpdir(), "sr-priv-"));
 const mode = async (p: string) => (await stat(p)).mode & 0o777;
@@ -35,5 +35,23 @@ describe("privateDir", () => {
     const file = join(await base(), "file");
     await writeFile(file, "x");
     await expect(privateDir(file)).rejects.toThrow();
+  });
+});
+
+describe("writePrivateFile", () => {
+  it("writes a file only this user can read", async () => {
+    const file = join(await base(), "secret.json");
+    await writePrivateFile(file, "one");
+    expect(await mode(file)).toBe(0o600);
+    expect(await readFile(file, "utf8")).toBe("one");
+  });
+
+  it("replaces an earlier file and tightens it if it was left open", async () => {
+    const file = join(await base(), "secret.json");
+    await writeFile(file, "old", { mode: 0o644 });
+    await chmod(file, 0o644);
+    await writePrivateFile(file, "new");
+    expect(await mode(file)).toBe(0o600);
+    expect(await readFile(file, "utf8")).toBe("new");
   });
 });
