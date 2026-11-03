@@ -135,7 +135,9 @@ describe("messages", () => {
     client.send("{oops");
     client.send({ type: "player.say", text: "" } as ClientMessage);
     client.send({ type: "nope" } as unknown as ClientMessage);
-    await client.until((e) => e.type === "error" && e.message.includes("not JSON"));
+    // The three errors arrive separately, so wait for all of them before counting.
+    await client.until((e) => e.type === "error" && client.events.filter((x) => x.type === "error").length === 3);
+    expect(client.events.some((e) => e.type === "error" && e.message.includes("not JSON"))).toBe(true);
     expect(client.events.filter((e) => e.type === "error")).toHaveLength(3);
     client.send({ type: "session.start" });
     await client.until((e) => e.type === "gm.status");

@@ -5,7 +5,7 @@ import { demoScript, ScriptedGmDriver, type ScriptedTurn } from "../../src/gm/sc
 import { scriptedD6 } from "../../src/rules/index.js";
 import type { GameSession } from "../../src/game/session.js";
 import { MAX_PENDING_ROLLS } from "../../src/game/rollManager.js";
-import { MemoryStore, newSession, party, rollInput, toolRunner, types } from "../helpers.js";
+import { always, MemoryStore, newSession, party, rollInput, toolRunner, types } from "../helpers.js";
 
 const scripted = (turns: ScriptedTurn[]) => new ScriptedGmDriver(turns);
 
@@ -617,7 +617,8 @@ describe("the events a client sees", () => {
 
 describe("the demo script", () => {
   it("opens the scene once, and after a restart carries on instead of starting over", async () => {
-    const first = await newSession(new ScriptedGmDriver(demoScript(party)));
+    // The guard's dice are the system's; all ones keep him from beating Kira's three hits.
+    const first = await newSession(new ScriptedGmDriver(demoScript(party)), { d6: always(1) });
     await first.session.start();
     await first.session.whenIdle();
     const [pending] = first.session.snapshot().pendingRolls;
@@ -642,7 +643,8 @@ const idOfRequestedRoll = (events: Array<{ type: string }>) =>
 describe("the demo GM and injuries", () => {
   it("hurts a character who fails the first roll, and carries on once they have resisted", async () => {
     const driver = new ScriptedGmDriver(demoScript(party));
-    const { session, events } = await newSession(driver);
+    // The guard's dice are the system's; all sixes keep Kira's no-hit roll from tying a no-hit guard roll, which she wins as the one acting.
+    const { session, events } = await newSession(driver, { d6: always(6) });
     await session.start();
     await session.whenIdle();
     await session.submitRoll(idOfRequestedRoll(events), { mode: "physical", dice: "2 2 2 2 2 2 2 2" });
