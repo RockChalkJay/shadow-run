@@ -1,0 +1,34 @@
+import type { GmEvent } from "@shadow-run/shared";
+
+export interface ToolReply {
+  ok: boolean;
+  /** Text handed back to the GM as the tool's result. */
+  text: string;
+}
+
+/** What the GM may do during a turn. Everything it does that touches dice goes through here. */
+export interface GmTools {
+  requestRoll(input: unknown): Promise<ToolReply>;
+  rollNpc(input: unknown): Promise<ToolReply>;
+}
+
+export interface GmTurnInput {
+  /** `open` for the first turn of a session, `continue` after that. */
+  kind: "open" | "continue";
+  /** What happened at the table since the GM last spoke: what players said, how rolls came out. */
+  text: string;
+}
+
+export interface GmTurnContext {
+  turnId: number;
+  /** Aborted when the turn is cancelled or runs too long. */
+  signal: AbortSignal;
+  onEvent(event: GmEvent): void;
+  tools: GmTools;
+}
+
+/** Whatever plays the GM: the Claude CLI in play, a script in tests and demos. */
+export interface GmDriver {
+  /** Runs one turn. Resolves when it ends cleanly; rejects if it fails or is aborted. */
+  takeTurn(input: GmTurnInput, ctx: GmTurnContext): Promise<void>;
+}
