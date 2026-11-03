@@ -4,7 +4,8 @@ import type { GmDriver, GmTurnContext, GmTurnInput } from "../../src/gm/driver.j
 import { demoScript, ScriptedGmDriver, type ScriptedTurn } from "../../src/gm/scriptedDriver.js";
 import { scriptedD6 } from "../../src/rules/index.js";
 import type { GameSession } from "../../src/game/session.js";
-import { MemoryStore, newSession, party, rollInput, types } from "../helpers.js";
+import { MAX_PENDING_ROLLS } from "../../src/game/rollManager.js";
+import { MemoryStore, newSession, party, rollInput, toolRunner, types } from "../helpers.js";
 
 const scripted = (turns: ScriptedTurn[]) => new ScriptedGmDriver(turns);
 
@@ -95,7 +96,7 @@ describe("a roll", () => {
     await session.whenIdle();
     const requested = events.find((e) => e.type === "roll.requested");
     expect(requested).toMatchObject({ request: { characterId: "kira", label: "Sneak past the guard" } });
-    expect((await session.snapshot()).gm).toEqual({ phase: "waiting_for_rolls" });
+    expect(session.snapshot().gm).toEqual({ phase: "waiting_for_rolls" });
     expect(driver.inputs).toHaveLength(1);
 
     const id = (requested as { request: { id: string } }).request.id;
@@ -107,7 +108,7 @@ describe("a roll", () => {
     expect(driver.inputs[1]?.text).toContain("ROLL RESULT. Kira: Sneak past the guard.");
     expect(driver.inputs[1]?.text).toContain("6 5 3 1 = 2 hits");
     expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["gm", "roll", "gm"]);
-    expect((await session.snapshot()).gm).toEqual({ phase: "idle" });
+    expect(session.snapshot().gm).toEqual({ phase: "idle" });
   });
 
   it("keeps anything said while dice are owed and delivers it with the result", async () => {
@@ -171,17 +172,80 @@ describe("a roll", () => {
 
     expect(await session.submitRoll(id, { mode: "physical", dice: "6 5" })).toEqual({ ok: false, error: "This roll is 4 dice; you entered 2." });
     expect(await session.submitRoll("nope", { mode: "app" })).toMatchObject({ ok: false });
-    expect((await session.snapshot()).pendingRolls).toHaveLength(1);
+    expect(session.snapshot().pendingRolls).toHaveLength(1);
     expect((await store.recentEntries(20)).some((e) => e.kind === "roll")).toBe(false);
   });
 
   it("can be requested by the GM only for someone at the table, with a reason it can act on", async () => {
-    const { session, events } = await newSession(scripted([]));
-    const bad = await session.tools.requestRoll(rollInput({ characterId: "nobody" }));
+    const runner = toolRunner();
+    const { session, events } = await newSession(runner.driver);
+    const [bad, good] = await runner.run(session, async (ctx) => [
+      await ctx.tools.requestRoll(rollInput({ characterId: "nobody" })),
+      await ctx.tools.requestRoll(rollInput()),
+    ]);
     expect(bad).toEqual({ ok: false, text: 'There is no character "nobody" at the table.' });
-    const good = await session.tools.requestRoll(rollInput());
     expect(good).toMatchObject({ ok: true, text: expect.stringContaining("End your turn now") });
-    expect(types(events)).toEqual(["roll.requested"]);
+    expect(events.filter((e) => e.type === "roll.requested")).toHaveLength(1);
+  });
+
+  it("is limited in how many can wait at once, so a GM stuck in a loop cannot flood the table", async () => {
+    const runner = toolRunner();
+    const { session } = await newSession(runner.driver);
+    const replies = await runner.run(session, async (ctx) => {
+      const out = [];
+      for (let i = 0; i < 12; i++) out.push(await ctx.tools.requestRoll(rollInput()));
+      return out;
+    });
+    expect(replies.filter((r) => r.ok)).toHaveLength(MAX_PENDING_ROLLS);
+    expect(replies[MAX_PENDING_ROLLS]).toMatchObject({ ok: false, text: expect.stringContaining("Stop asking") });
+    expect(session.snapshot().pendingRolls).toHaveLength(MAX_PENDING_ROLLS);
+  });
+});
+
+describe("the GM's tools", () => {
+  it("stop working once the turn they belong to is over", async () => {
+    const runner = toolRunner();
+    const { session, events } = await newSession(runner.driver);
+    const ctx = await runner.run(session, async (turn) => turn);
+
+    const late = await ctx.tools.requestRoll(rollInput());
+    expect(late).toMatchObject({ ok: false, text: expect.stringContaining("That turn is over") });
+    expect(await ctx.tools.rollNpc({ label: "x", pool: 3 })).toMatchObject({ ok: false });
+    expect(session.snapshot().pendingRolls).toHaveLength(0);
+    expect(events.some((e) => e.type === "roll.requested")).toBe(false);
+  });
+
+  it("stop working the moment the turn is cancelled, even before the GM process has exited", async () => {
+    let captured: GmTurnContext | undefined;
+    const driver: GmDriver = {
+      takeTurn: (_input, ctx) => {
+        captured = ctx;
+        return new Promise((_resolve, reject) => ctx.signal.addEventListener("abort", () => reject(ctx.signal.reason), { once: true }));
+      },
+    };
+    const { session, events } = await newSession(driver);
+    await session.say("kira", "hi");
+    await vi.waitFor(() => expect(captured).toBeDefined());
+
+    expect(await captured!.tools.requestRoll(rollInput())).toMatchObject({ ok: true });
+    session.cancelTurn();
+    expect(await captured!.tools.requestRoll(rollInput())).toMatchObject({ ok: false });
+    await session.whenIdle();
+    expect(events.filter((e) => e.type === "roll.requested")).toHaveLength(1);
+  });
+
+  it("do not work for a turn that has been replaced by a newer one", async () => {
+    const contexts: GmTurnContext[] = [];
+    const driver: GmDriver = { takeTurn: async (_input, ctx) => void contexts.push(ctx) };
+    const { session } = await newSession(driver);
+    await session.say("kira", "one");
+    await session.whenIdle();
+    await session.say("kira", "two");
+    await session.whenIdle();
+
+    expect(contexts).toHaveLength(2);
+    expect(await contexts[0]!.tools.requestRoll(rollInput())).toMatchObject({ ok: false });
+    expect(session.snapshot().pendingRolls).toHaveLength(0);
   });
 });
 
@@ -296,7 +360,7 @@ describe("when a turn fails", () => {
     await session.say("kira", "hello");
     await session.whenIdle();
 
-    expect((await session.snapshot()).gm).toEqual({ phase: "error", message: "boom" });
+    expect(session.snapshot().gm).toEqual({ phase: "error", message: "boom" });
     expect((await store.recentEntries(10)).at(-1)).toMatchObject({ kind: "system", text: "The GM's turn failed: boom" });
     expect(driver.inputs).toHaveLength(1);
 
@@ -304,7 +368,7 @@ describe("when a turn fails", () => {
     await session.whenIdle();
     expect(driver.inputs).toHaveLength(2);
     expect(driver.inputs[1]).toEqual({ kind: "open", text: "BEGIN SESSION. Open the first scene.\n\nThe players say:\n- Kira: hello" });
-    expect((await session.snapshot()).gm).toEqual({ phase: "idle" });
+    expect(session.snapshot().gm).toEqual({ phase: "idle" });
     expect(events.filter((e) => e.type === "gm.turn_done")).toHaveLength(2);
   });
 
@@ -341,7 +405,7 @@ describe("when a turn fails", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     expect(g.inputs).toHaveLength(1);
-    expect((await session.snapshot()).gm).toMatchObject({ phase: "error", message: "boom" });
+    expect(session.snapshot().gm).toMatchObject({ phase: "error", message: "boom" });
 
     session.retry();
     await vi.waitFor(() => expect(g.inputs).toHaveLength(2));
@@ -358,7 +422,7 @@ describe("when a turn fails", () => {
     const id = (events.find((e) => e.type === "roll.requested") as { request: { id: string } }).request.id;
     await session.submitRoll(id, { mode: "physical", dice: "6 5 3 1" });
     await session.whenIdle();
-    expect((await session.snapshot()).gm.phase).toBe("error");
+    expect(session.snapshot().gm.phase).toBe("error");
 
     session.retry();
     await session.whenIdle();
@@ -368,11 +432,11 @@ describe("when a turn fails", () => {
   it("can be stopped mid-turn, and what was said waits for the next one", async () => {
     const { session, store } = await newSession(stuck());
     await session.say("kira", "hi");
-    await vi.waitFor(async () => expect((await session.snapshot()).gm.phase).toBe("thinking"));
+    await vi.waitFor(async () => expect(session.snapshot().gm.phase).toBe("thinking"));
 
     expect(session.cancelTurn()).toEqual({ ok: true });
     await session.whenIdle();
-    expect((await session.snapshot()).gm).toEqual({ phase: "error", message: "The turn was cancelled." });
+    expect(session.snapshot().gm).toEqual({ phase: "error", message: "The turn was cancelled." });
     expect((await store.recentEntries(10)).at(-1)).toMatchObject({ kind: "system", text: "The turn was cancelled." });
     expect(session.cancelTurn()).toEqual({ ok: false, error: "The GM is not in the middle of a turn." });
   });
@@ -381,7 +445,7 @@ describe("when a turn fails", () => {
     const { session } = await newSession(stuck(), { turnTimeoutMs: 30 });
     await session.say("kira", "hi");
     await session.whenIdle();
-    expect((await session.snapshot()).gm).toEqual({ phase: "error", message: "The GM took too long to answer." });
+    expect(session.snapshot().gm).toEqual({ phase: "error", message: "The GM took too long to answer." });
   });
 
   it("is treated as an error when the driver reports one but returns normally", async () => {
@@ -389,7 +453,7 @@ describe("when a turn fails", () => {
     const { session } = await newSession(driver);
     await session.say("kira", "hi");
     await session.whenIdle();
-    expect((await session.snapshot()).gm).toMatchObject({ phase: "error", message: expect.stringContaining("boom") });
+    expect(session.snapshot().gm).toMatchObject({ phase: "error", message: expect.stringContaining("boom") });
   });
 
   it("keeps the narration the table already saw", async () => {
@@ -409,7 +473,7 @@ describe("when a turn fails", () => {
     const { session, store } = await newSession(scripted([{ fail: "You've hit your usage limit" }]));
     await session.say("kira", "hi");
     await session.whenIdle();
-    const { gm } = await session.snapshot();
+    const { gm } = session.snapshot();
     expect(gm).toMatchObject({ phase: "resting", until: null });
     expect((await store.recentEntries(10)).at(-1)).toMatchObject({ kind: "system", text: expect.stringContaining("usage limit") });
   });
@@ -424,28 +488,34 @@ describe("when a turn fails", () => {
     const { session, events } = await newSession(driver, { now: () => new Date(1_000_000 * 1000) });
     await session.say("kira", "hi");
     await session.whenIdle();
-    expect((await session.snapshot()).gm).toMatchObject({ phase: "resting", until: 1_000_600 });
+    expect(session.snapshot().gm).toMatchObject({ phase: "resting", until: 1_000_600 });
     expect(events).toContainEqual({ type: "usage", usage: { fiveHourUtilization: 1, resetsAt: 1_000_600 } });
   });
 });
 
 describe("rolling for non-player characters", () => {
   it("rolls with the system's dice, shows the table, and tells the GM", async () => {
-    const { session, store, events } = await newSession(scripted([]), { d6: scriptedD6([6, 5, 2, 1]) });
-    const reply = await session.tools.rollNpc({ label: "Ganger fires", pool: 4, threshold: 2 });
+    const runner = toolRunner();
+    const { session, store, events } = await newSession(runner.driver, { d6: scriptedD6([6, 5, 2, 1]) });
+    const reply = await runner.run(session, (ctx) => ctx.tools.rollNpc({ label: "Ganger fires", pool: 4, threshold: 2 }));
     expect(reply).toEqual({
       ok: true,
       text: "NPC ROLL. Ganger fires: 4 dice: 6 5 2 1 = 2 hits.\nThreshold 2: SUCCESS.",
     });
-    expect((await store.recentEntries(5)).at(-1)).toMatchObject({ kind: "npc", label: "Ganger fires", pool: 4, threshold: 2, success: true });
-    expect(types(events)).toEqual(["entry"]);
+    const npc = (await store.recentEntries(10)).find((e) => e.kind === "npc");
+    expect(npc).toMatchObject({ kind: "npc", label: "Ganger fires", pool: 4, threshold: 2, success: true });
+    expect(events.some((e) => e.type === "entry" && e.entry.kind === "npc")).toBe(true);
   });
 
   it("refuses a pool that is out of range", async () => {
-    const { session } = await newSession(scripted([]));
-    expect(await session.tools.rollNpc({ label: "x", pool: 101 })).toMatchObject({ ok: false });
-    expect(await session.tools.rollNpc({ label: "x", pool: -1 })).toMatchObject({ ok: false });
-    expect(await session.tools.rollNpc({ pool: 3 })).toMatchObject({ ok: false });
+    const runner = toolRunner();
+    const { session } = await newSession(runner.driver);
+    const replies = await runner.run(session, async (ctx) => [
+      await ctx.tools.rollNpc({ label: "x", pool: 101 }),
+      await ctx.tools.rollNpc({ label: "x", pool: -1 }),
+      await ctx.tools.rollNpc({ pool: 3 }),
+    ]);
+    expect(replies.every((r) => !r.ok)).toBe(true);
   });
 });
 
@@ -458,7 +528,7 @@ describe("a restart", () => {
 
     const driver = scripted([{ say: ["You slip by."] }]);
     const second = await newSession(driver, { store: first.store });
-    const snapshot = await second.session.snapshot();
+    const snapshot = second.session.snapshot();
     expect(snapshot.pendingRolls).toHaveLength(1);
     expect(snapshot.gm).toEqual({ phase: "waiting_for_rolls" });
     expect(snapshot.transcript.map((e) => e.kind)).toEqual(["gm"]);
@@ -471,11 +541,18 @@ describe("a restart", () => {
   });
 
   it("keeps a roll the GM asked for even if the server stops in the middle of that turn", async () => {
-    const first = await newSession(scripted([]));
-    await first.session.tools.requestRoll(rollInput());
-    // No turn ended and no close() ran: this is a crash.
+    const g = gated();
+    g.onTurn = (ctx) => void ctx.tools.requestRoll(rollInput());
+    const first = await newSession(g.driver);
+    await first.session.say("kira", "go");
+    // The card is announced only once the roll has been saved.
+    await vi.waitFor(() => expect(first.events.some((e) => e.type === "roll.requested")).toBe(true));
+
+    // The turn has not ended and nothing was closed: this is a crash.
     const second = await newSession(scripted([]), { store: first.store });
-    expect((await second.session.snapshot()).pendingRolls).toHaveLength(1);
+    expect(second.session.snapshot().pendingRolls).toHaveLength(1);
+    g.release();
+    await first.session.whenIdle();
   });
 
   it("gives the GM what it never heard before the server stopped", async () => {
@@ -498,7 +575,7 @@ describe("snapshot", () => {
     const { session } = await newSession(driver);
     await session.say("kira", "ready");
     await session.whenIdle();
-    const snapshot = await session.snapshot();
+    const snapshot = session.snapshot();
     expect(snapshot).toMatchObject({
       type: "snapshot",
       gm: { phase: "waiting_for_rolls" },
@@ -534,7 +611,7 @@ describe("the events a client sees", () => {
     await session.say("kira", "hi");
     await session.whenIdle();
     expect(events).toContainEqual({ type: "usage", usage: { fiveHourUtilization: 0.25, resetsAt: 123 } });
-    expect((await session.snapshot()).usage).toEqual({ fiveHourUtilization: 0.25, resetsAt: 123 });
+    expect(session.snapshot().usage).toEqual({ fiveHourUtilization: 0.25, resetsAt: 123 });
   });
 });
 
@@ -543,7 +620,7 @@ describe("the demo script", () => {
     const first = await newSession(new ScriptedGmDriver(demoScript(party)));
     await first.session.start();
     await first.session.whenIdle();
-    const [pending] = (await first.session.snapshot()).pendingRolls;
+    const [pending] = first.session.snapshot().pendingRolls;
     await first.session.submitRoll(pending!.id, { mode: "physical", dice: "6 5 5 1 4 2 3 3" });
     await first.session.whenIdle();
     await first.session.close();
@@ -554,7 +631,7 @@ describe("the demo script", () => {
     await second.session.say("kira", "Still here?");
     await second.session.whenIdle();
     expect(driver.inputs[0]?.kind).toBe("continue");
-    expect((await second.session.snapshot()).pendingRolls).toHaveLength(0);
+    expect(second.session.snapshot().pendingRolls).toHaveLength(0);
     expect((await second.store.recentEntries(20)).filter((e) => e.kind === "gm")).toHaveLength(3);
   });
 });

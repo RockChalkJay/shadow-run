@@ -72,19 +72,19 @@ export class GameSession {
   private blocked = false;
   private current: AbortController | null = null;
   private cancelledByUser = false;
-
-  readonly tools: GmTools = {
-    requestRoll: (input) => this.requestRoll(input),
-    rollNpc: (input) => this.rollNpc(input),
-  };
+  /** The turn whose tools work, while it is running and has not been stopped. */
+  private activeTurn: { id: number; signal: AbortSignal } | null = null;
 
   static async create(opts: SessionOptions): Promise<GameSession> {
-    return new GameSession(opts, await opts.store.loadState());
+    const [saved, recent] = await Promise.all([opts.store.loadState(), opts.store.recentEntries(SNAPSHOT_ENTRIES)]);
+    return new GameSession(opts, saved, recent);
   }
 
   private constructor(
     private readonly opts: SessionOptions,
     saved: SavedState | null,
+    /** The newest transcript entries, kept so a snapshot can be taken without waiting for the disk. */
+    private readonly recent: TranscriptEntry[],
   ) {
     this.d6 = opts.d6 ?? cryptoD6;
     this.rules = opts.rules;
@@ -147,16 +147,24 @@ export class GameSession {
 
   private async record(entry: NewEntry): Promise<TranscriptEntry> {
     const full = await this.opts.store.appendEntry(entry);
+    // Remembering the entry and announcing it happen in one step, so a snapshot taken at any moment
+    // holds exactly the entries announced before it.
+    this.recent.push(full);
+    if (this.recent.length > SNAPSHOT_ENTRIES) this.recent.shift();
     this.opts.emit({ type: "entry", entry: full });
     return full;
   }
 
-  async snapshot(): Promise<Snapshot> {
+  /**
+   * Everything a client needs to catch up. It is taken in one step with no waiting, so a client that
+   * starts listening at the same moment misses nothing and sees nothing twice.
+   */
+  snapshot(): Snapshot {
     return {
       type: "snapshot",
       party: [...this.opts.party],
       pendingRolls: this.rolls.list(),
-      transcript: await this.opts.store.recentEntries(SNAPSHOT_ENTRIES),
+      transcript: [...this.recent],
       gm: this.status,
       usage: this.usage,
     };
@@ -242,6 +250,22 @@ export class GameSession {
 
   // ---- what the GM does ----------------------------------------------------------------------
 
+  /**
+   * The tools for one turn. They work only while that turn is the current one and has not been
+   * stopped: a process that is being shut down can still send one last call, and it must not put
+   * a roll on the table for a turn nobody is waiting on.
+   */
+  private toolsFor(turnId: number, signal: AbortSignal): GmTools {
+    const whileCurrent = (act: () => Promise<ToolReply>): Promise<ToolReply> =>
+      this.activeTurn?.id === turnId && !signal.aborted
+        ? act()
+        : Promise.resolve({ ok: false, text: "That turn is over, so nothing was done. Do not call tools now." });
+    return {
+      requestRoll: (input) => whileCurrent(() => this.requestRoll(input)),
+      rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
+    };
+  }
+
   private async requestRoll(input: unknown): Promise<ToolReply> {
     const created = this.rolls.create(input);
     if (!created.ok) return { ok: false, text: created.error };
@@ -324,6 +348,7 @@ export class GameSession {
     this.cancelledByUser = false;
     const timeout = AbortSignal.timeout(this.opts.turnTimeoutMs ?? 240_000);
     const signal = AbortSignal.any([controller.signal, timeout]);
+    this.activeTurn = { id: turnId, signal };
     this.setStatus({ phase: "thinking", turnId });
 
     let narration = "";
@@ -360,7 +385,7 @@ export class GameSession {
 
     let failure: string | undefined;
     try {
-      await this.opts.driver.takeTurn(this.turnInput(turn), { turnId, signal, onEvent, tools: this.tools });
+      await this.opts.driver.takeTurn(this.turnInput(turn), { turnId, signal, onEvent, tools: this.toolsFor(turnId, signal) });
       failure = reportedError;
     } catch (err) {
       failure =
@@ -369,6 +394,7 @@ export class GameSession {
     } finally {
       active = false;
       this.current = null;
+      this.activeTurn = null;
     }
 
     if (narration.trim()) await this.record({ kind: "gm", text: narration.trim() });

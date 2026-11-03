@@ -61,7 +61,11 @@ export interface Snapshot {
   usage: Usage | null;
 }
 
-/** What the server sends. Entries are also appended to the transcript, so a client that reconnects can catch up from `snapshot`. */
+/**
+ * What the server sends. A client gets a `snapshot` first, taken in one step with its connection, so
+ * every event after it is something the snapshot lacks and nothing is missed or repeated. Entries are
+ * also appended to the transcript, so a client that reconnects catches up from the snapshot.
+ */
 export type ServerEvent =
   | Snapshot
   | { type: "gm.status"; status: GmStatus }

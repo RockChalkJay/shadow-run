@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RollManager } from "../../src/game/rollManager.js";
+import { MAX_PENDING_ROLLS, RollManager } from "../../src/game/rollManager.js";
 import { scriptedD6 } from "../../src/rules/index.js";
 import { rollInput } from "../helpers.js";
 
@@ -42,6 +42,14 @@ describe("creating a roll", () => {
   ])("refuses %s, naming the problem for the GM", (_name, override) => {
     const created = manager().create({ ...rollInput(), ...override });
     expect(created).toMatchObject({ ok: false, error: expect.stringContaining("not valid") });
+  });
+
+  it("stops taking requests when too many are already waiting for dice", () => {
+    const m = manager();
+    for (let i = 0; i < MAX_PENDING_ROLLS; i++) expect(m.create(rollInput())).toMatchObject({ ok: true });
+    expect(m.create(rollInput())).toMatchObject({ ok: false, error: expect.stringContaining("Stop asking") });
+    m.cancel("r1");
+    expect(m.create(rollInput())).toMatchObject({ ok: true });
   });
 
   it("refuses something that is not a roll request at all", () => {

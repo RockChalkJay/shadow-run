@@ -3,6 +3,7 @@ import type { ClientMessage, ServerEvent } from "@shadow-run/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { GameSession } from "../../src/game/session.js";
+import { CampaignStore, type NewEntry } from "../../src/game/store.js";
 import { ScriptedGmDriver, type ScriptedTurn } from "../../src/gm/scriptedDriver.js";
 import { Hub } from "../../src/net/hub.js";
 import { allowedOrigins } from "../../src/net/origin.js";
@@ -48,10 +49,18 @@ afterEach(async () => {
   for (const thing of open.splice(0)) await thing.close();
 });
 
-async function startTable(script: ScriptedTurn[], faces: number[] = []) {
+/** A store whose writes take a while, to leave time for things to happen in the middle of one. */
+class SlowStore extends CampaignStore {
+  override async appendEntry(entry: NewEntry) {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return super.appendEntry(entry);
+  }
+}
+
+async function startTable(script: ScriptedTurn[], faces: number[] = [], store?: CampaignStore) {
   const hub = new Hub({ port: 0, allowedOrigins: (p) => allowedOrigins(p, 5173) });
   const session = await GameSession.create({
-    store: await tempStore(),
+    store: store ?? (await tempStore()),
     driver: new ScriptedGmDriver(script),
     party,
     emit: (event) => hub.broadcast(event),
@@ -196,6 +205,26 @@ describe("playing", () => {
     const late = await connect(port);
     const snapshot = (await late.until((e) => e.type === "snapshot")) as Extract<ServerEvent, { type: "snapshot" }>;
     expect(snapshot.transcript.map((e) => e.kind)).toEqual(["say", "gm"]);
+  });
+
+  it("gives a client that connects in the middle of a save exactly the entries it should see, none missing and none twice", async () => {
+    const dir = (await tempStore()).dir;
+    const { port } = await startTable([], [], new SlowStore(dir));
+    const kira = await connect(port);
+    kira.send({ type: "player.say", characterId: "kira", text: "while you connect" });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    const late = await connect(port);
+    await late.until((e) => e.type === "entry" && e.entry.kind === "say");
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    // What a client shows: the snapshot, then each entry that arrives after it.
+    let shown: number[] = [];
+    for (const event of late.events) {
+      if (event.type === "snapshot") shown = event.transcript.map((e) => e.id);
+      else if (event.type === "entry") shown.push(event.entry.id);
+    }
+    expect(shown).toEqual([1]);
   });
 
   it("refuses words from a character who is not at the table", async () => {

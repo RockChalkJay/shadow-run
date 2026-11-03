@@ -40,7 +40,7 @@ export class Hub {
         socket.destroy();
         return;
       }
-      this.sockets.handleUpgrade(req, socket, head, (ws) => void this.accept(ws));
+      this.sockets.handleUpgrade(req, socket, head, (ws) => this.accept(ws));
     });
   }
 
@@ -67,10 +67,11 @@ export class Hub {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event));
   }
 
-  private async accept(ws: WebSocket): Promise<void> {
+  /** The snapshot is sent in the same step the socket joins the broadcast list, so no update can fall between them. */
+  private accept(ws: WebSocket): void {
     ws.on("error", (err) => console.error("A client connection failed:", err.message));
     ws.on("message", (raw) => void this.receive(ws, raw.toString()));
-    if (this.session) this.send(ws, await this.session.snapshot());
+    if (this.session) this.send(ws, this.session.snapshot());
   }
 
   private async receive(ws: WebSocket, raw: string): Promise<void> {

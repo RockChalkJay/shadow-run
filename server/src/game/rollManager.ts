@@ -5,6 +5,9 @@ import { cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, s
 
 export type Fail = { ok: false; error: string };
 
+/** Most rolls that may wait for dice at once; more than a table can answer is the GM stuck in a loop. */
+export const MAX_PENDING_ROLLS = 10;
+
 export type RollEntry = { mode: "app" } | { mode: "physical"; dice: string };
 
 export interface RollManagerOptions {
@@ -43,6 +46,9 @@ export class RollManager {
     const parsed = RollRequestInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: `The roll request was not valid: ${describeIssues(parsed.error)}` };
     const data = parsed.data;
+    if (this.pending.size >= MAX_PENDING_ROLLS) {
+      return { ok: false, error: `There are already ${MAX_PENDING_ROLLS} rolls waiting for dice. Stop asking and wait for the table to answer them.` };
+    }
     if (!this.opts.knownCharacter(data.characterId)) {
       return { ok: false, error: `There is no character "${data.characterId}" at the table.` };
     }

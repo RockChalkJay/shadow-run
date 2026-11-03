@@ -5,7 +5,7 @@ import type { RollRequestInput, ServerEvent, TranscriptEntry } from "@shadow-run
 import { demoParty } from "../src/game/demoParty.js";
 import { GameSession, type SessionOptions } from "../src/game/session.js";
 import { CampaignStore, type NewEntry, type SavedState } from "../src/game/store.js";
-import type { GmDriver } from "../src/gm/driver.js";
+import type { GmDriver, GmTurnContext } from "../src/gm/driver.js";
 import type { D6 } from "../src/rules/index.js";
 
 export const party = demoParty;
@@ -84,3 +84,28 @@ export async function newSession(driver: GmDriver, extra: Partial<SessionOptions
 export const always = (face: number): D6 => () => face;
 
 export const types = (events: ServerEvent[]) => events.map((e) => e.type);
+
+/**
+ * A driver for tests that need the GM's tools. `run` makes the GM take a turn and, during it, calls
+ * `act` with that turn's context, then hands back whatever `act` returned.
+ */
+export function toolRunner() {
+  let act: ((ctx: GmTurnContext) => Promise<unknown>) | undefined;
+  let result: unknown;
+  const driver: GmDriver = {
+    async takeTurn(_input, ctx) {
+      const job = act;
+      act = undefined;
+      if (job) result = await job(ctx);
+    },
+  };
+  return {
+    driver,
+    async run<T>(session: GameSession, job: (ctx: GmTurnContext) => Promise<T>): Promise<T> {
+      act = job;
+      await session.say("kira", "go");
+      await session.whenIdle();
+      return result as T;
+    },
+  };
+}
