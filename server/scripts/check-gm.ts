@@ -65,6 +65,17 @@ async function turn(label: string, store: CampaignStore, session: GameSession, a
   return said;
 }
 
+/** Skips any roll still waiting, since the GM takes no turn while one is, so the next step starts clean. */
+async function clearRolls(store: CampaignStore, session: GameSession) {
+  for (let round = 0; round < 3; round++) {
+    const waiting = session.snapshot().pendingRolls.filter((r) => !r.soak && r.attack?.role !== "defender");
+    if (waiting.length === 0) return;
+    await turn(`skipping ${waiting.length} roll(s) left over from the last scene`, store, session, async () => {
+      for (const r of waiting) await session.cancelRoll(r.id);
+    });
+  }
+}
+
 async function main() {
   const store = new CampaignStore(await mkdtemp(join(tmpdir(), "shadow-run-check-")));
   await store.saveParty(demoParty);
@@ -115,10 +126,11 @@ async function main() {
   );
   check("the GM does not reveal who is running it", !/@|protonmail|rockchalk/i.test(direct));
 
+  await clearRolls(store, session);
   // A fight: the GM asks for the dice, and once they decide a hit it hurts people through the tools.
   const faces = (request: { pool: { total: number } }, face: number) => String(face).repeat(request.pool.total).split("").join(" ");
   await turn("a ganger shoots a player character", store, session, () =>
-    session.say(undefined, "A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
+    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
   );
   const lastAttack = async () => (await store.recentEntries(50)).findLast((e) => e.kind === "attack");
   const defense = session.snapshot().pendingRolls.find((r) => r.characterId === "kira");
@@ -151,6 +163,25 @@ async function main() {
   const spike = session.snapshot().characters.find((c) => c.kind === "npc");
   check("Kira's shot lands, and the system keeps track of the ganger's wounds", !!spike && spike.monitor.physical + spike.monitor.stun > 0, spike ? `${spike.name}: physical ${spike.monitor.physical}, ${spike.status}` : "no NPC on the table");
 
+  // Healing needs a roll: the GM asks for First Aid through the healing field, then spends the hits with heal.
+  const hurtBefore = session.snapshot().characters.find((c) => c.id === "kira");
+  const damage = (hurtBefore?.monitor.physical ?? 0) + (hurtBefore?.monitor.stun ?? 0);
+  if (damage > 0) {
+    await turn("Doc tries First Aid on Kira", store, session, () => session.say("doc", "I have a first aid kit and I give Kira First Aid right now, while it is quiet."));
+    const aid = session.snapshot().pendingRolls.find((r) => r.healing);
+    check("the GM asks for a First Aid roll through the healing field", aid?.healing?.method === "first_aid" && aid.healing.patient.id === "kira", aid?.healing ? `${aid.healing.method} on ${aid.healing.patient.name}, threshold ${aid.healing.threshold}` : "no healing roll appeared");
+    if (aid) {
+      await turn("Doc's First Aid roll is excellent", store, session, () => session.submitRoll(aid.id, { mode: "physical", dice: faces(aid, 6) }));
+      const healed = (await store.recentEntries(60)).findLast((e) => e.kind === "heal");
+      const hurtAfter = session.snapshot().characters.find((c) => c.id === "kira");
+      const damageAfter = (hurtAfter?.monitor.physical ?? 0) + (hurtAfter?.monitor.stun ?? 0);
+      check("the GM spends the hits through heal, and Kira is better", healed?.kind === "heal" && damageAfter < damage, `damage ${damage} -> ${damageAfter}`);
+    }
+  } else {
+    note("(INFO) the ganger missed, so Kira has nothing to heal; the healing check was skipped");
+  }
+
+  await clearRolls(store, session);
   // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
   await close();
   const razor: PartyMember = {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DamageType } from "./character.js";
+import { DamageType, HealMethod } from "./character.js";
 
 /** Most dice one roll may have. Real pools stay far below it; it stops a mistaken size from exhausting memory. */
 export const MAX_POOL = 100;
@@ -38,6 +38,21 @@ export const RollRequestInput = z.object({
     criticalGlitch: z.string(),
   }),
   edgeAdvice: z.string().describe("Whether and how to spend Edge on this roll"),
+  healing: z
+    .object({
+      method: HealMethod.describe(
+        "'first_aid', 'medkit' or 'magic' (a healing spell) for a healer treating a patient, or 'natural_stun', 'natural_physical' or 'natural_overflow' for the patient's own recovery",
+      ),
+      patient: z.object({ kind: z.enum(["pc", "npc"]), id: z.string() }).describe("Who is being healed"),
+      essence: z
+        .number()
+        .min(0)
+        .max(6)
+        .default(6)
+        .describe("The patient's Essence: 6 with no cyberware or bioware, less with it. Sets the difficulty; ignored for natural recovery"),
+    })
+    .optional()
+    .describe("Set only when this roll is an attempt to heal. The system sets the threshold, so leave it out; after the roll, spend the result with the heal tool"),
 });
 export type RollRequestInput = z.infer<typeof RollRequestInput>;
 
@@ -61,6 +76,18 @@ export const RollRequest = RollRequestInput.extend({
   id: z.string(),
   /** Set when the pool was cut by this many dice for wounds. */
   woundPenalty: z.number().int().min(1).optional(),
+  /** Set when this roll is an attempt to heal; the system worked out the difficulty from the patient's Essence. */
+  healing: z
+    .object({
+      method: HealMethod,
+      patient: z.object({ kind: z.enum(["pc", "npc"]), id: z.string(), name: z.string() }),
+      essence: z.number().min(0).max(6),
+      /** Hits the roll needs before any count toward healing; 0 for natural recovery. */
+      threshold: z.number().int().min(0),
+      /** A free hit added to the roll, for a fully natural patient. */
+      autoHit: z.boolean(),
+    })
+    .optional(),
   /**
    * Set when this roll is one side of an attack: the player's attack roll or their defense roll. The system
    * rolls the other side when the player answers, then works out the damage.

@@ -1,4 +1,5 @@
-import type { CharacterView, DamageType, HealType, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
+import type { CharacterView, DamageType, HealMethod, HealType, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
+import { METHOD_NAMES } from "../rules/index.js";
 import { damageCode } from "./attack.js";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -27,6 +28,8 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
     lines.push(
       `Opposed by ${opposed.by}, ${diceCount(opposed.pool)} rolled by the system: ${showDice(opposed.roll)} = ${plural(opposed.roll.hits, "hit")}.`,
     );
+  } else if (request.healing) {
+    lines.push(`Healing threshold ${request.healing.threshold}${request.healing.autoHit ? ", with a free hit for a fully natural patient" : ""}.`);
   } else {
     lines.push(`Threshold ${request.threshold ?? 1}.`);
   }
@@ -105,11 +108,31 @@ export interface HealReport {
   type: HealType;
   healed: number;
   after: CharacterView;
+  /** Hits still unspent on the healing roll. */
+  left: number;
 }
 
 export function formatHealForGm(r: HealReport): string {
   const did = r.healed === 0 ? `had no ${r.type} damage to heal` : `heals ${r.healed} ${r.type}`;
-  return [`HEAL. ${r.reason}: ${r.after.name} ${did}.`, formatStanding(r.after)].join("\n");
+  return [`HEAL. ${r.reason}: ${r.after.name} ${did}.`, formatStanding(r.after), `${plural(r.left, "hit")} left on this healing roll.`].join("\n");
+}
+
+const rates: Record<HealMethod, string> = {
+  first_aid: "First Aid heals 1 stun box per hit, or 1 physical or overflow box per 2 hits.",
+  medkit: "A medkit heals 1 box of stun, physical or overflow per hit.",
+  magic: "Healing magic heals 1 box of stun, physical or overflow per hit.",
+  natural_stun: "Natural recovery heals 1 stun box per hit.",
+  natural_physical: "Natural recovery heals 1 physical box per hit.",
+  natural_overflow: "Natural recovery heals 1 overflow box per hit.",
+};
+
+/** Tells the GM what a healing roll earned and how to spend it, since it may only heal as much as the roll allows. */
+export function formatHealingOffer(r: { healer: string; patient: string; method: HealMethod; hits: number; rollId: string }): string {
+  const subject = r.method.startsWith("natural_") ? `${r.patient}'s ${METHOD_NAMES[r.method]}` : `${r.healer}'s ${METHOD_NAMES[r.method]} on ${r.patient}`;
+  return [
+    `HEALING AVAILABLE. ${subject}: ${plural(r.hits, "hit")} to spend. Roll id: ${r.rollId}`,
+    `Spend them with the heal tool, giving that roll id, in this turn; hits you do not spend are lost. ${rates[r.method]}${r.method.startsWith("natural_") ? "" : " Overflow damage heals first."}`,
+  ].join("\n");
 }
 
 export interface AttackReport {

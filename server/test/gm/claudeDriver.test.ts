@@ -180,20 +180,13 @@ describe("a turn with the CLI", () => {
     expect(second?.stdin).toContain("Kira: Physical 5/11");
   });
 
-  it("heals through the tools server", async () => {
-    const t = await table([
-      {
-        steps: [
-          { tool: "deal_damage", args: { label: "x", target: { kind: "npc", id: "g", name: "G", body: 3, willpower: 3 }, damageValue: 6, damageType: "stun" } },
-          { tool: "heal", args: { target: { kind: "npc", id: "g" }, type: "stun", boxes: 2, reason: "A medkit" } },
-        ],
-      },
-    ]);
+  it("refuses a heal that has no healing roll behind it, through the tools server", async () => {
+    const t = await table([{ steps: [{ tool: "heal", args: { rollId: "made-up", type: "stun", boxes: 2, reason: "A medkit" } }] }]);
     await t.session.start();
     await t.session.whenIdle();
-    const [, healed] = await t.tools();
-    expect(healed).toMatchObject({ tool: "heal", isError: false });
-    expect(healed?.text).toContain("HEAL. A medkit: G heals 2 stun.");
+    const [healed] = await t.tools();
+    expect(healed).toMatchObject({ tool: "heal", isError: true });
+    expect(healed?.text).toContain("No healing roll with that id has hits to spend this turn");
   });
 
   it("answers an NPC roll straight away with the system's dice", async () => {

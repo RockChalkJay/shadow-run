@@ -85,7 +85,9 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("give edgeAdvice for them as you would for request_roll");
     expect(prompt).toContain("call deal_damage with the Damage Value before they resist");
     expect(prompt).toContain("adds the attacker's net hits to the Damage Value");
-    expect(prompt).toContain("Use heal only after a roll that earned it");
+    expect(prompt).toContain("Healing needs a roll.");
+    expect(prompt).toContain("call heal with that id in that same turn, or the hits are lost");
+    expect(prompt).toContain("each be received only once for a set of injuries");
     expect(prompt).toContain("Never heal without a roll");
   });
 

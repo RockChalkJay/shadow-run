@@ -1,12 +1,16 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ConditionMonitor, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { ConditionMonitor, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
+import { TREATMENTS } from "../rules/index.js";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** A transcript entry before the store gives it an id and a time. */
 export type NewEntry = DistributiveOmit<TranscriptEntry, "id" | "ts">;
+
+/** A treatment a character has had for their current injuries. */
+const Treatment = z.enum(TREATMENTS);
 
 export const SavedState = z.object({
   version: z.literal(1),
@@ -28,10 +32,21 @@ export const SavedState = z.object({
     ]),
   ),
   /** How hurt each player character is. Older saves have none, and everyone starts unhurt. */
-  pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor })).default([]),
+  pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]) })).default([]),
   /** The non-player characters the GM has put on the table, and how hurt they are. */
   npcs: z
-    .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor }))
+    .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]) }))
+    .default([]),
+  /** Hits still unspent on healing rolls the GM has been told about, so a restart does not grant them again. */
+  healBudgets: z
+    .array(
+      z.object({
+        rollId: z.string(),
+        patient: z.object({ kind: z.enum(["pc", "npc"]), id: z.string() }),
+        method: HealMethod,
+        remaining: z.number().int().min(0),
+      }),
+    )
     .default([]),
   /** What players said that the GM has not heard yet. */
   held: z.array(z.object({ characterId: z.string().optional(), name: z.string(), text: z.string() })),

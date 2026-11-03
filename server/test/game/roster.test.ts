@@ -51,6 +51,40 @@ describe("Roster: player characters", () => {
   });
 });
 
+describe("Roster: treatments", () => {
+  it("remembers who has had which treatment, and starts them over when the character is hurt again", () => {
+    const roster = fresh();
+    roster.damage("pc", "kira", "physical", 4);
+    roster.markTreated("pc", "kira", "first_aid");
+    expect(roster.hasBeenTreated("pc", "kira", "first_aid")).toBe(true);
+    expect(roster.hasBeenTreated("pc", "kira", "medkit")).toBe(false);
+    expect(roster.hasBeenTreated("pc", "doc", "first_aid")).toBe(false);
+
+    roster.damage("pc", "kira", "physical", 0);
+    expect(roster.hasBeenTreated("pc", "kira", "first_aid")).toBe(true);
+    roster.damage("pc", "kira", "physical", 1);
+    expect(roster.hasBeenTreated("pc", "kira", "first_aid")).toBe(false);
+  });
+
+  it("keeps treatments when the game is loaded again, for players and non-player characters", () => {
+    const first = fresh();
+    first.resolve(ganger);
+    first.damage("pc", "kira", "physical", 4);
+    first.damage("npc", "ganger-1", "physical", 3);
+    first.markTreated("pc", "kira", "magic");
+    first.markTreated("npc", "ganger-1", "medkit");
+    const second = new Roster(party, first.toSaved());
+    expect(second.hasBeenTreated("pc", "kira", "magic")).toBe(true);
+    expect(second.hasBeenTreated("npc", "ganger-1", "medkit")).toBe(true);
+    expect(second.hasBeenTreated("pc", "kira", "medkit")).toBe(false);
+  });
+
+  it("treats a save from before treatments were tracked as untreated", () => {
+    const roster = new Roster(party, { pcs: [{ id: "kira", monitor: newMonitor(5, 3) }], npcs: [] });
+    expect(roster.hasBeenTreated("pc", "kira", "first_aid")).toBe(false);
+  });
+});
+
 describe("Roster: who can act and what wounds cost", () => {
   it("stops an unconscious or dead character acting, and says why", () => {
     const roster = fresh();

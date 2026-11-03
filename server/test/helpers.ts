@@ -11,7 +11,7 @@ import type { D6 } from "../src/rules/index.js";
 export const party = demoParty;
 
 /** A valid `request_roll` call for Kira, with anything overridden. */
-export function rollInput(overrides: Partial<RollRequestInput> = {}): RollRequestInput {
+export function rollInput(overrides: Partial<Omit<RollRequestInput, "healing">> = {}): Omit<RollRequestInput, "healing"> {
   return {
     characterId: "kira",
     label: "Sneak past the guard",

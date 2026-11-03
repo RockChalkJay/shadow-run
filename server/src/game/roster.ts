@@ -1,5 +1,5 @@
 import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealType, PartyMember } from "@shadow-run/shared";
-import { applyDamage, defaultRuleset, healDamage, newMonitor, statusOf, woundModifier, type Ruleset } from "../rules/index.js";
+import { applyDamage, defaultRuleset, healDamage, newMonitor, statusOf, woundModifier, type Ruleset, type Treatment } from "../rules/index.js";
 import type { Fail } from "./rollManager.js";
 
 /** Most non-player characters the table will track at once; more than that is the GM losing count. */
@@ -10,12 +10,19 @@ interface Entry {
   body: number;
   willpower: number;
   monitor: ConditionMonitor;
+  /** The treatments this character has had for their current injuries; they start over when the character is next hurt. */
+  treated: Set<Treatment>;
 }
 
 export interface SavedRoster {
-  pcs: Array<{ id: string; monitor: ConditionMonitor }>;
-  npcs: Array<{ id: string; name: string; body: number; willpower: number; monitor: ConditionMonitor }>;
+  pcs: Array<{ id: string; monitor: ConditionMonitor; treated: Treatment[] }>;
+  npcs: Array<{ id: string; name: string; body: number; willpower: number; monitor: ConditionMonitor; treated: Treatment[] }>;
 }
+
+/** A roster as saved before treatments were tracked: everyone starts untreated. */
+type OlderSavedRoster = {
+  [K in keyof SavedRoster]: Array<Omit<SavedRoster[K][number], "treated"> & { treated?: Treatment[] }>;
+};
 
 export type Target = { ok: true; kind: "pc" | "npc"; id: string; name: string; body: number } | Fail;
 
@@ -37,16 +44,22 @@ export class Roster {
 
   constructor(
     party: readonly PartyMember[],
-    saved: SavedRoster | undefined,
+    saved: SavedRoster | OlderSavedRoster | undefined,
     private readonly rules: Ruleset = defaultRuleset,
   ) {
     for (const member of party) {
       const fresh = newMonitor(member.body, member.willpower, rules);
-      const before = saved?.pcs.find((p) => p.id === member.id)?.monitor;
-      this.pcs.set(member.id, { name: member.name, body: member.body, willpower: member.willpower, monitor: reconcile(before, fresh) });
+      const before = saved?.pcs.find((p) => p.id === member.id);
+      this.pcs.set(member.id, {
+        name: member.name,
+        body: member.body,
+        willpower: member.willpower,
+        monitor: reconcile(before?.monitor, fresh),
+        treated: new Set(before?.treated),
+      });
     }
     for (const npc of saved?.npcs ?? []) {
-      this.npcs.set(npc.id, { name: npc.name, body: npc.body, willpower: npc.willpower, monitor: npc.monitor });
+      this.npcs.set(npc.id, { name: npc.name, body: npc.body, willpower: npc.willpower, monitor: npc.monitor, treated: new Set(npc.treated) });
     }
   }
 
@@ -100,7 +113,7 @@ export class Roster {
       return { ok: false, error: `"${ref.id}" is new to the table. Give the NPC's name, body and willpower the first time you mention them.` };
     }
     if (this.npcs.size >= MAX_NPCS) return { ok: false, error: `The table is already tracking ${MAX_NPCS} non-player characters.` };
-    this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor: newMonitor(ref.body, ref.willpower, this.rules) });
+    this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor: newMonitor(ref.body, ref.willpower, this.rules), treated: new Set() });
     return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
   }
 
@@ -109,6 +122,8 @@ export class Roster {
     const entry = this.entry(kind, id);
     if (!entry) throw new Error(`No ${kind} "${id}" to hurt.`);
     entry.monitor = applyDamage(entry.monitor, type, amount, this.rules);
+    // New injuries are a new set of injuries, which can be treated again.
+    if (amount > 0) entry.treated.clear();
     return this.view(kind, id)!;
   }
 
@@ -121,10 +136,18 @@ export class Roster {
     return { after: this.view(kind, id)!, healed };
   }
 
+  hasBeenTreated(kind: "pc" | "npc", id: string, treatment: Treatment): boolean {
+    return this.entry(kind, id)?.treated.has(treatment) ?? false;
+  }
+
+  markTreated(kind: "pc" | "npc", id: string, treatment: Treatment): void {
+    this.entry(kind, id)?.treated.add(treatment);
+  }
+
   toSaved(): SavedRoster {
     return {
-      pcs: [...this.pcs].map(([id, e]) => ({ id, monitor: e.monitor })),
-      npcs: [...this.npcs].map(([id, e]) => ({ id, name: e.name, body: e.body, willpower: e.willpower, monitor: e.monitor })),
+      pcs: [...this.pcs].map(([id, e]) => ({ id, monitor: e.monitor, treated: [...e.treated] })),
+      npcs: [...this.npcs].map(([id, e]) => ({ id, name: e.name, body: e.body, willpower: e.willpower, monitor: e.monitor, treated: [...e.treated] })),
     };
   }
 }

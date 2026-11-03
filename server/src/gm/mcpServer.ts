@@ -38,7 +38,9 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "and a bad roll look like; and what happens on a success, a failure, a glitch and a critical glitch. " +
         "Those consequences are binding: the system tells you which applies and you must carry it out. " +
         "After calling it, stop and wait. The players roll and the result comes back as your next message, " +
-        "so never describe the outcome yourself.",
+        "so never describe the outcome yourself. To heal someone, set `healing` (First Aid, a medkit, a healing " +
+        "spell, or the patient's own natural recovery): the system sets the threshold from the patient's Essence, " +
+        "so leave `threshold` out, and the result tells you how to spend the hits with the heal tool.",
       inputSchema: RollRequestInput.shape,
     },
     async (input) => asResult(await handlers.requestRoll(input)),
@@ -96,9 +98,12 @@ function buildServer(handlers: GmToolHandlers): McpServer {
     "heal",
     {
       description:
-        "Heal a character after a roll that earned it: First Aid, a medkit, a healing spell. Heal one box for each " +
-        "net hit over the threshold, and no more. Healing without a roll behind it is not allowed. A dead character " +
-        "cannot be healed.",
+        "Spend the hits of a healing roll to heal someone. Healing needs a roll: ask for it with request_roll and its " +
+        "`healing` field, and when the result comes back it gives you the hits to spend and a roll id. Call heal with that " +
+        "roll id, the track and the number of boxes; the patient is the one on the roll. First Aid heals 1 stun box per " +
+        "hit or 1 physical or overflow box per 2 hits; a medkit and healing magic heal 1 box of any track per hit; natural " +
+        "recovery heals 1 box of its own track per hit. A healer treating someone must heal overflow damage first. Hits you do not spend in the turn " +
+        "you are told the result are lost, and a dead character cannot be healed.",
       inputSchema: HealInput.shape,
     },
     async (input) => asResult(await handlers.heal(input)),

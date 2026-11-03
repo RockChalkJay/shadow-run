@@ -33,7 +33,12 @@ function card(request: RollRequest) {
     line("    /app to roll with the app's dice, or /dice 6 5 3 1 ... for dice you rolled");
     return;
   }
-  line(request.opposed ? `    against: ${request.opposed.by}, ${request.opposed.pool} dice (rolled by the system)` : `    needs: ${request.threshold ?? 1} hit(s)`);
+  if (request.healing) {
+    const { method, patient, threshold, autoHit } = request.healing;
+    line(`    healing: ${method.replaceAll("_", " ")} on ${patient.name}, threshold ${threshold}${autoHit ? " (plus a free hit for a fully natural patient)" : ""}; the hits are spent on healing`);
+  } else {
+    line(request.opposed ? `    against: ${request.opposed.by}, ${request.opposed.pool} dice (rolled by the system)` : `    needs: ${request.threshold ?? 1} hit(s)`);
+  }
   line(`    at stake: ${request.stakes}`);
   line(`    good roll: ${request.goodRoll}`);
   line(`    bad roll:  ${request.badRoll}`);
