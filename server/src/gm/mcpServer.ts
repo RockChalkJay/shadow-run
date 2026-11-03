@@ -1,41 +1,57 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { RollRequestInput, type RollRequest } from "@shadow-run/shared";
+import { NpcRollInput, RollRequestInput } from "@shadow-run/shared";
+import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
+/** The tool names as the GM process calls them, for `--allowedTools`. */
+export const GM_TOOL_NAMES = [`mcp__${GM_MCP_NAME}__request_roll`, `mcp__${GM_MCP_NAME}__roll_npc`];
+
 export interface GmToolHandlers {
-  onRollRequest(request: RollRequest): void;
+  requestRoll(input: unknown): Promise<ToolReply>;
+  rollNpc(input: unknown): Promise<ToolReply>;
 }
 
+const asResult = (reply: ToolReply) => ({
+  content: [{ type: "text" as const, text: reply.text }],
+  isError: !reply.ok,
+});
+
 function buildServer(handlers: GmToolHandlers): McpServer {
-  const server = new McpServer({ name: "shadow-run-gm", version: "0.1.0" });
+  const server = new McpServer({ name: "shadow-run-gm", version: "0.2.0" });
 
   server.registerTool(
     "request_roll",
     {
       description:
-        "Ask a player to roll dice. Use it for every roll the players make. Fill in the stakes, " +
-        "what a good and a bad roll look like, and the consequence of each outcome, so the " +
-        "players can decide how to spend Edge. After calling it, stop and wait: the players roll " +
-        "and the result arrives as the next message. Do not narrate the outcome.",
+        "Ask a player to roll dice for their character. Use it whenever the outcome of an action is uncertain " +
+        "and matters. Fill in everything: the dice pool and how you built it from the character's sheet; " +
+        "either a threshold, or an opposing pool that the system rolls for you; what is at stake; what a good " +
+        "and a bad roll look like; and what happens on a success, a failure, a glitch and a critical glitch. " +
+        "Those consequences are binding: the system tells you which applies and you must carry it out. " +
+        "After calling it, stop and wait. The players roll and the result comes back as your next message, " +
+        "so never describe the outcome yourself.",
       inputSchema: RollRequestInput.shape,
     },
-    async (input) => {
-      handlers.onRollRequest({ id: randomUUID(), ...input });
-      return {
-        content: [
-          {
-            type: "text",
-            text: "The roll card is on the players' screen. End your turn now and wait for the result.",
-          },
-        ],
-      };
+    async (input) => asResult(await handlers.requestRoll(input)),
+  );
+
+  server.registerTool(
+    "roll_npc",
+    {
+      description:
+        "Roll dice for a non-player character when no player is rolling against them, for example an NPC " +
+        "acting on their own or a guard noticing something unopposed. The system rolls and shows the table, " +
+        "and you get the result straight away. Do not use it to oppose a player's roll; set `opposed` on " +
+        "request_roll instead.",
+      inputSchema: NpcRollInput.shape,
     },
+    async (input) => asResult(await handlers.rollNpc(input)),
   );
 
   return server;

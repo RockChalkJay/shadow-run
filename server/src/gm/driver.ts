@@ -21,6 +21,10 @@ export interface GmTurnInput {
 
 export interface GmTurnContext {
   turnId: number;
+  /** The GM's own session from earlier turns, if there is one to pick up. */
+  resumeId?: string;
+  /** The conversation so far as plain text, for a GM that has to start a session over. */
+  recap(): string;
   /** Aborted when the turn is cancelled or runs too long. */
   signal: AbortSignal;
   onEvent(event: GmEvent): void;
@@ -31,4 +35,6 @@ export interface GmTurnContext {
 export interface GmDriver {
   /** Runs one turn. Resolves when it ends cleanly; rejects if it fails or is aborted. */
   takeTurn(input: GmTurnInput, ctx: GmTurnContext): Promise<void>;
+  /** Releases anything the driver holds, such as a local server. */
+  close?(): Promise<void>;
 }

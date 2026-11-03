@@ -7,14 +7,18 @@
 //   FAKE_CLAUDE_EXIT      exit code (default 0)
 //   FAKE_CLAUDE_STDERR    text to print on stderr
 //   FAKE_CLAUDE_HANG      if set, keep running after printing, until killed
+//   FAKE_CLAUDE_FORK      if set, start a long-running child of its own, to check it is stopped too
+import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 let stdin = "";
 process.stdin.setEncoding("utf8");
 for await (const chunk of process.stdin) stdin += chunk;
 
-const { FAKE_CLAUDE_FIXTURE, FAKE_CLAUDE_CAPTURE, FAKE_CLAUDE_EXIT, FAKE_CLAUDE_STDERR, FAKE_CLAUDE_HANG } =
+const { FAKE_CLAUDE_FIXTURE, FAKE_CLAUDE_CAPTURE, FAKE_CLAUDE_EXIT, FAKE_CLAUDE_STDERR, FAKE_CLAUDE_HANG, FAKE_CLAUDE_FORK } =
   process.env;
+
+const grandchild = FAKE_CLAUDE_FORK ? spawn("sleep", ["60"], { stdio: "ignore" }) : undefined;
 
 if (FAKE_CLAUDE_CAPTURE) {
   writeFileSync(
@@ -23,6 +27,11 @@ if (FAKE_CLAUDE_CAPTURE) {
       args: process.argv.slice(2),
       stdin,
       pid: process.pid,
+      grandchildPid: grandchild?.pid,
+      user: process.env.USER,
+      home: process.env.HOME,
+      disableMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS,
+      cwd: process.cwd(),
       envKeys: Object.keys(process.env).filter((k) => /^(ANTHROPIC_|CLAUDE_CODE_USE_)/.test(k)),
     }),
   );

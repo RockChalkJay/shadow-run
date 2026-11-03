@@ -1,5 +1,5 @@
 import {
-  MAX_POOL,
+  NpcRollInput,
   type GmEvent,
   type GmStatus,
   type PartyMember,
@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
 import { cryptoD6, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { formatRecap } from "./recap.js";
 import { formatCancelledForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
@@ -28,12 +29,6 @@ interface Turn {
   held: Held[];
   openRequested: boolean;
 }
-
-const NpcRollInput = z.object({
-  label: z.string().min(1).describe("Who is rolling and why, e.g. 'Ganger sprays the doorway'"),
-  pool: z.number().int().min(0).max(MAX_POOL).describe("Number of d6"),
-  threshold: z.number().int().min(1).optional().describe("Hits needed, if the roll is against a fixed threshold"),
-});
 
 export interface SessionOptions {
   store: CampaignStore;
@@ -340,6 +335,15 @@ export class GameSession {
     return { kind: this.opened ? "continue" : "open", text: parts.join("\n\n") };
   }
 
+  /**
+   * The conversation up to the GM's last reply. What came after it is in the turn's own input, so
+   * leaving it out here keeps a GM that starts over from hearing it twice.
+   */
+  private recapBeforeThisTurn(): string {
+    const lastGm = this.recent.findLastIndex((entry) => entry.kind === "gm");
+    return formatRecap(this.recent.slice(0, lastGm + 1), (id) => this.nameOf(id));
+  }
+
   /** Returns false when the turn failed and the GM should wait for the table. */
   private async runTurn(turn: Turn): Promise<boolean> {
     const turnId = ++this.turnCounter;
@@ -385,7 +389,14 @@ export class GameSession {
 
     let failure: string | undefined;
     try {
-      await this.opts.driver.takeTurn(this.turnInput(turn), { turnId, signal, onEvent, tools: this.toolsFor(turnId, signal) });
+      await this.opts.driver.takeTurn(this.turnInput(turn), {
+        turnId,
+        signal,
+        onEvent,
+        tools: this.toolsFor(turnId, signal),
+        ...(this.claudeSessionId !== undefined && { resumeId: this.claudeSessionId }),
+        recap: () => this.recapBeforeThisTurn(),
+      });
       failure = reportedError;
     } catch (err) {
       failure =
