@@ -194,6 +194,17 @@ describe("a group attack", () => {
     expect(result).toMatchObject({ ok: false, text: expect.stringMatching(message) });
   });
 
+  it("tells the GM that someone first named as a character cannot become a grunt later", async () => {
+    const { result } = await turn([3, 3, 3], async (tools) => {
+      await tools.dealDamage(hurt({ kind: "npc", id: "guard-1", name: "Guard 1", body: 2, willpower: 2 }, 1));
+      return tools.attack(groupAttack(2));
+    });
+    expect(result).toEqual({
+      ok: false,
+      text: "Guard 1 is not a grunt. Only grunts attack as a group, and a grunt has to be named with a professionalRating the first time; someone already on the table as a named character stays one.",
+    });
+  });
+
   it("is refused for a member who is down", async () => {
     const { result } = await turn([3, 3], async (tools) => {
       await tools.dealDamage(hurt(guard(2), 20, "stun"));

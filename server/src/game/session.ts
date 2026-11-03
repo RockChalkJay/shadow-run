@@ -560,7 +560,7 @@ export class GameSession {
     const max = (this.rules ?? defaultRuleset).grunt.maxGroupSize;
     if (alongside.length + 1 > max) return { ok: false, error: `A group attack has at most ${max} grunts, including the attacker.` };
     const isGrunt = (who: Found) => who.kind === "npc" && this.roster.view("npc", who.id)?.grunt !== undefined;
-    if (!isGrunt(attacker)) return { ok: false, error: `${attacker.name} is not a grunt. Only grunts attack as a group; leave out alongside, or give the attacker a professionalRating.` };
+    if (!isGrunt(attacker)) return { ok: false, error: `${attacker.name} is not a grunt. Only grunts attack as a group, and a grunt has to be named with a professionalRating the first time; someone already on the table as a named character stays one.` };
     const seen = new Set([`${attacker.kind}:${attacker.id}`]);
     const names = [attacker.name];
     for (const ref of alongside) {

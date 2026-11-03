@@ -75,6 +75,7 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("untrained groups run as soon as one of them goes down");
     expect(prompt).toContain("semi-trained ones (rating 1 to 4) retreat after losing about a quarter");
     expect(prompt).toContain("elite ones (8 to 10) fight on to the last");
+    expect(prompt).toContain("these points are your guide for a whole group");
   });
 
   it("tells the GM the system owns injuries, and how to hurt and heal", () => {
