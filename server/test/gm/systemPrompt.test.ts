@@ -64,8 +64,8 @@ describe("the GM's system prompt", () => {
 
   it("gives the GM the rulebook's numbers for opposition, not rules of thumb", () => {
     expect(prompt).toContain("taken from the rulebook's NPC stat blocks");
-    expect(prompt).toContain("about 9 to 12 at rating 5 to 7");
-    expect(prompt).toContain("about 12 to 16 at rating 8 to 10");
+    expect(prompt).toContain("about 9 to 15 at rating 5 to 7");
+    expect(prompt).toContain("about 13 to 21 at rating 8 to 10");
     expect(prompt).not.toContain("trained professionals 7 to 10");
     expect(prompt).toContain("light pistol 2P, heavy pistol 3P, submachine gun 4P, rifle 5P");
     expect(prompt).not.toContain("Ares Predator VI");
