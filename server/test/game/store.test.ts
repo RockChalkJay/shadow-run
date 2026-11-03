@@ -1,31 +1,72 @@
-import { appendFile, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CampaignStore, type SavedState } from "../../src/game/store.js";
+import { CampaignStore, sheetFiles, type SavedState } from "../../src/game/store.js";
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
 const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], held: [] };
 
-describe("party", () => {
-  it("is null before anything is saved, and round-trips after", async () => {
-    const store = new CampaignStore(await dir());
+describe("character sheets", () => {
+  const sheetsIn = (d: string) => readdir(join(d, "characters"));
+
+  it("is null before anything is saved, and round-trips after, one file per character", async () => {
+    const d = await dir();
+    const store = new CampaignStore(d);
     expect(await store.loadParty()).toBeNull();
     await store.saveParty(demoParty);
-    expect(await store.loadParty()).toEqual(demoParty);
+    expect((await sheetsIn(d)).sort()).toEqual(["doc.json", "kira.json"]);
+    expect(await store.loadParty()).toEqual([...demoParty].sort((a, b) => a.id.localeCompare(b.id)));
   });
 
-  it("refuses a party file that is not valid, naming the file", async () => {
+  it("is null when the folder holds no sheets", async () => {
     const d = await dir();
-    await writeFile(join(d, "party.json"), JSON.stringify([{ id: "Bad Id", name: "X" }]));
-    await expect(new CampaignStore(d).loadParty()).rejects.toThrow(/party\.json is not a valid party/);
+    await mkdir(join(d, "characters"));
+    await writeFile(join(d, "characters", "notes.txt"), "not a sheet");
+    expect(await new CampaignStore(d).loadParty()).toBeNull();
   });
 
-  it("refuses two characters with the same id", async () => {
+  it("fills in what a sheet leaves out and leaves no temporary files behind", async () => {
     const d = await dir();
-    await writeFile(join(d, "party.json"), JSON.stringify([demoParty[0], demoParty[0]]));
-    await expect(new CampaignStore(d).loadParty()).rejects.toThrow(/unique/);
+    const { gear: _g, qualities: _q, notes: _n, specializations: _s, skills: _k, initiativeDice: _i, ...bare } = demoParty[0]!;
+    const { magic: _m, resonance: _r, ...attributes } = bare.attributes;
+    await mkdir(join(d, "characters"));
+    await writeFile(join(d, "characters", "kira.json"), JSON.stringify({ ...bare, attributes }));
+    expect(await new CampaignStore(d).loadParty()).toMatchObject([{ initiativeDice: 1, skills: {}, specializations: [], gear: "", attributes: { magic: 0, resonance: 0 } }]);
+    await new CampaignStore(d).saveParty(demoParty);
+    expect((await sheetsIn(d)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("refuses a sheet that is not valid, naming the file and the problem", async () => {
+    const d = await dir();
+    await mkdir(join(d, "characters"));
+    await writeFile(join(d, "characters", "kira.json"), JSON.stringify({ ...demoParty[0], attributes: { ...demoParty[0]!.attributes, willpowr: 3 } }));
+    await expect(new CampaignStore(d).loadParty()).rejects.toThrow(/characters[/\\]kira\.json is not a valid character sheet/);
+  });
+
+  it("refuses a file that is not named after its character, so two cannot share an id", async () => {
+    const d = await dir();
+    await mkdir(join(d, "characters"));
+    await writeFile(join(d, "characters", "second.json"), JSON.stringify(demoParty[0]));
+    await expect(new CampaignStore(d).loadParty()).rejects.toThrow(/holds the character "kira", so the file must be named kira\.json/);
+  });
+
+  it("refuses a file that is not JSON, naming it", async () => {
+    const d = await dir();
+    await mkdir(join(d, "characters"));
+    await writeFile(join(d, "characters", "kira.json"), "{not json");
+    await expect(new CampaignStore(d).loadParty()).rejects.toThrow(/kira\.json could not be read/);
+  });
+
+  it("reads sheets in order of id, whatever order the disk lists them in, and only the .json ones", () => {
+    expect(sheetFiles(["razor.json", "notes.txt", "doc.json", "kira.json", "kira.json.tmp"])).toEqual(["doc.json", "kira.json", "razor.json"]);
+  });
+
+  it("no longer reads an old party.json", async () => {
+    const d = await dir();
+    await writeFile(join(d, "party.json"), JSON.stringify(demoParty));
+    expect(await new CampaignStore(d).loadParty()).toBeNull();
   });
 });
 

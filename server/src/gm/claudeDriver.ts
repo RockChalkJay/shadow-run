@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PartyMember } from "@shadow-run/shared";
+import type { CharacterSheet } from "@shadow-run/shared";
 import type { EdgeCatalog } from "../rules/index.js";
 import { runGmTurn, type GmTurnOptions } from "./claudeProcess.js";
 import type { GmDriver, GmTurnContext, GmTurnInput, ToolReply } from "./driver.js";
@@ -9,7 +9,7 @@ import { privateDir, writePrivateFile } from "./privateDir.js";
 import { buildSystemPrompt } from "./systemPrompt.js";
 
 export interface ClaudeDriverOptions {
-  party: readonly PartyMember[];
+  party: readonly CharacterSheet[];
   premise?: string;
   edge?: EdgeCatalog;
   /** A model alias or name for the `claude` CLI. */

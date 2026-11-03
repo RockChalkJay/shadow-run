@@ -10,7 +10,7 @@ import {
   type GmEvent,
   type HealMethod,
   type GmStatus,
-  type PartyMember,
+  type CharacterSheet,
   type ResolvedRoll,
   type RollRequest,
   type RollResult,
@@ -50,7 +50,7 @@ interface Turn {
 export interface SessionOptions {
   store: CampaignStore;
   driver: GmDriver;
-  party: PartyMember[];
+  party: CharacterSheet[];
   emit: (event: ServerEvent) => void;
   d6?: D6;
   rules?: Ruleset;
@@ -128,7 +128,7 @@ export class GameSession {
     this.status = this.restingStatus();
   }
 
-  get party(): readonly PartyMember[] {
+  get party(): readonly CharacterSheet[] {
     return this.opts.party;
   }
 
@@ -137,7 +137,7 @@ export class GameSession {
     return this.claudeSessionId;
   }
 
-  private member(id: string | undefined): PartyMember | undefined {
+  private member(id: string | undefined): CharacterSheet | undefined {
     return id === undefined ? undefined : this.opts.party.find((m) => m.id === id);
   }
 
@@ -355,9 +355,11 @@ export class GameSession {
       if (view.monitor[track] === 0) return { ok: false, error: `${patient.name} has no ${track} damage to recover from.` };
     }
 
+    // A player character's Essence is on their sheet, so the GM's word for it is not taken.
+    const essence = patient.kind === "pc" ? this.member(patient.id)?.attributes.essence ?? asked.essence : asked.essence;
     const natural = !isTreatment(method);
-    const threshold = natural ? 0 : healingThreshold(asked.essence);
-    const healing = { method, patient: { kind: patient.kind, id: patient.id, name: patient.name }, essence: asked.essence, threshold, autoHit: healingAutoHit(method, asked.essence) };
+    const threshold = natural ? 0 : healingThreshold(essence);
+    const healing = { method, patient: { kind: patient.kind, id: patient.id, name: patient.name }, essence, threshold, autoHit: healingAutoHit(method, essence) };
     return { ok: true, extra: { healing, threshold: Math.max(1, threshold) } };
   }
 

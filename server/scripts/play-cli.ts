@@ -4,16 +4,16 @@
 //   npm run play           in another
 
 import { createInterface } from "node:readline";
-import type { CharacterView, ClientMessage, PartyMember, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, CharacterSheet, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
 import { WebSocket } from "ws";
 import { formatStanding, showDice } from "../src/game/rollReport.js";
 
 const url = process.env.TABLE_URL ?? `ws://127.0.0.1:${process.env.PORT ?? 8787}/ws`;
 const ws = new WebSocket(url);
 
-let party: PartyMember[] = [];
+let party: CharacterSheet[] = [];
 let characters: CharacterView[] = [];
-let active: PartyMember | undefined;
+let active: CharacterSheet | undefined;
 let pending: RollRequest[] = [];
 let streaming = false;
 

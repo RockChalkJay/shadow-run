@@ -41,7 +41,7 @@ describe("Roster: player characters", () => {
     const stronger = new Roster(party, saved);
     expect(stronger.view("pc", "kira")?.monitor).toMatchObject({ physicalBoxes: 11, physical: 8, overflow: 2 });
 
-    const weaker = new Roster([{ ...party[0]!, body: 1 }], { pcs: [{ id: "kira", monitor: { ...newMonitor(5, 3), physical: 11 } }], npcs: [] });
+    const weaker = new Roster([{ ...party[0]!, attributes: { ...party[0]!.attributes, body: 1 } }], { pcs: [{ id: "kira", monitor: { ...newMonitor(5, 3), physical: 11 } }], npcs: [] });
     expect(weaker.view("pc", "kira")?.monitor).toMatchObject({ physicalBoxes: 9, physical: 9 });
   });
 

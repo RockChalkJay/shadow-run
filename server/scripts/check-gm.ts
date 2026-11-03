@@ -7,7 +7,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PartyMember, ServerEvent } from "@shadow-run/shared";
+import type { CharacterSheet, ServerEvent } from "@shadow-run/shared";
 import { demoParty } from "../src/game/demoParty.js";
 import { GameSession } from "../src/game/session.js";
 import { CampaignStore } from "../src/game/store.js";
@@ -37,7 +37,7 @@ const tap = (inner: GmDriver): GmDriver => ({
   close: () => inner.close?.() ?? Promise.resolve(),
 });
 
-async function open(store: CampaignStore, party: PartyMember[]) {
+async function open(store: CampaignStore, party: CharacterSheet[]) {
   const real = await ClaudeGmDriver.start({ party, model });
   const session = await GameSession.create({ store, party, driver: tap(real), emit: (e) => events.push(e) });
   return { session, close: async () => (await session.close(), await real.close()) };
@@ -203,13 +203,18 @@ async function main() {
   await clearRolls(store, session);
   // A new player joins mid-campaign. The GM's session carries on, and it has to learn about them.
   await close();
-  const razor: PartyMember = {
+  const razor: CharacterSheet = {
+    version: 1,
     id: "razor",
     name: "Razor",
-    body: 3,
-    willpower: 4,
-    edge: 3,
-    sheet: "Demo character. Human decker. Body 3, Agility 3, Reaction 4, Strength 2, Willpower 4, Logic 6, Intuition 5, Charisma 2, Edge 3. Hacking 6, Electronics 4, Cracking 5. Carries a battered cyberdeck named Mother.",
+    metatype: "human",
+    attributes: { body: 3, agility: 3, reaction: 4, strength: 2, willpower: 4, logic: 6, intuition: 5, charisma: 2, edge: 3, essence: 6, magic: 0, resonance: 0 },
+    initiativeDice: 1,
+    skills: { cracking: 5, electronics: 4 },
+    specializations: [],
+    gear: "A battered cyberdeck named Mother.",
+    qualities: "",
+    notes: "Demo character. Human decker.",
   };
   const party = [...demoParty, razor];
   const sessionBefore = (JSON.parse(await readFile(join(store.dir, "state.json"), "utf8")) as { claudeSessionId?: string }).claudeSessionId;

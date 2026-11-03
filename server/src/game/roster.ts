@@ -1,4 +1,4 @@
-import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealType, PartyMember } from "@shadow-run/shared";
+import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealType, CharacterSheet } from "@shadow-run/shared";
 import { applyDamage, defaultRuleset, gruntBoxes, gruntStatus, gruntWoundModifier, healDamage, newMonitor, statusOf, woundModifier, type Ruleset, type Treatment } from "../rules/index.js";
 import type { Fail } from "./rollManager.js";
 
@@ -53,17 +53,17 @@ export class Roster {
   private readonly npcs = new Map<string, Entry>();
 
   constructor(
-    party: readonly PartyMember[],
+    party: readonly CharacterSheet[],
     saved: SavedRoster | OlderSavedRoster | undefined,
     private readonly rules: Ruleset = defaultRuleset,
   ) {
     for (const member of party) {
-      const fresh = newMonitor(member.body, member.willpower, rules);
+      const fresh = newMonitor(member.attributes.body, member.attributes.willpower, rules);
       const before = saved?.pcs.find((p) => p.id === member.id);
       this.pcs.set(member.id, {
         name: member.name,
-        body: member.body,
-        willpower: member.willpower,
+        body: member.attributes.body,
+        willpower: member.attributes.willpower,
         monitor: reconcile(before?.monitor, fresh),
         treated: new Set(before?.treated),
       });
