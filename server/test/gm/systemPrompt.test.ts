@@ -62,6 +62,10 @@ describe("the GM's system prompt", () => {
     expect(prompt).not.toContain("does not track injuries");
   });
 
+  it("explains both speaker names for out-of-character chat, since older campaigns saved the first", () => {
+    expect(prompt).toContain('The name "The players" (or "Table", in older entries) means someone speaking to you out of character.');
+  });
+
   it("gives the GM the rulebook's numbers for opposition, not rules of thumb", () => {
     expect(prompt).toContain("taken from the rulebook's NPC stat blocks");
     expect(prompt).toContain("about 9 to 15 at rating 5 to 7");

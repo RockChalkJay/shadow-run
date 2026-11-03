@@ -26,8 +26,8 @@ const describeIssues = (error: z.ZodError) =>
   error.issues.map((i) => `${i.path.join(".") || "request"}: ${i.message}`).join("; ");
 
 /**
- * The life of a roll the GM asked for: validated when requested, then rolled (by the app or at the
- * the players' own dice) and counted by the rules engine. The GM never sees or sets a die, so it cannot fudge one.
+ * The life of a roll the GM asked for: validated when requested, then rolled (by the app or with the
+ * players' own dice) and counted by the rules engine. The GM never sees or sets a die, so it cannot fudge one.
  */
 export class RollManager {
   private readonly pending = new Map<string, RollRequest>();
