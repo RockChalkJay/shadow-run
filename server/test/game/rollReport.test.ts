@@ -1,6 +1,6 @@
 import type { ResolvedRoll } from "@shadow-run/shared";
 import { describe, expect, it } from "vitest";
-import { formatAttackForGm, formatCancelledForGm, formatNpcRoll, formatRollForGm, showDice } from "../../src/game/rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm, showDice } from "../../src/game/rollReport.js";
 import { RollManager } from "../../src/game/rollManager.js";
 import { evaluate, scriptedD6 } from "../../src/rules/index.js";
 import { rollInput } from "../helpers.js";
@@ -132,5 +132,25 @@ describe("formatAttackForGm", () => {
     const text = formatAttackForGm(attack("1 1 1 6", "1 1 1", { hit: false, damageValue: 0 }));
     expect(text).toContain("Kira: GLITCH. The GM decides what goes wrong, keeping it inconvenient, not disastrous.");
     expect(text).toContain("Ganger: CRITICAL GLITCH. The GM decides what goes wrong, keeping it serious but not fatal.");
+  });
+});
+
+describe("healing reports", () => {
+  it("offers the hits of a healing roll with the rate for its kind, and its roll id", () => {
+    expect(formatHealingOffer({ healer: "Doc", patient: "Kira", method: "first_aid", hits: 4, rollId: "r-9" })).toBe(
+      [
+        "HEALING AVAILABLE. Doc's First Aid on Kira: 4 hits to spend. Roll id: r-9",
+        "Spend them with the heal tool, giving that roll id, in this turn; hits you do not spend are lost. First Aid heals 1 stun box per hit, or 1 physical or overflow box per 2 hits. Overflow damage heals first.",
+      ].join("\n"),
+    );
+    expect(formatHealingOffer({ healer: "Kira", patient: "Kira", method: "natural_stun", hits: 1, rollId: "r" })).toContain("Kira's natural recovery from stun: 1 hit to spend.");
+  });
+
+  it("says how many hits are left after a heal", () => {
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 4, stun: 0, overflow: 0 };
+    const after = { id: "kira", kind: "pc" as const, name: "Kira", monitor, status: "active" as const, woundModifier: 1 };
+    expect(formatHealForGm({ reason: "Doc's First Aid on Kira", type: "physical", healed: 2, after, left: 1 })).toBe(
+      "HEAL. Doc's First Aid on Kira: Kira heals 2 physical.\nKira: Physical 4/11, Stun 0/10, Overflow 0/10. Wound penalty: -1 dice on everything but damage resistance.\n1 hit left on this healing roll.",
+    );
   });
 });

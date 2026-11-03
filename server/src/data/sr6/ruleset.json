@@ -23,7 +23,15 @@
   "rulesInCode": {
     "ties go to the attacker": "36, 106",
     "damage resistance rolls Body only": "106",
-    "initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107"
+    "initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107",
+    "first aid, a medkit and healing magic roll against a threshold of 5 minus the patient's Essence": "120, 121",
+    "first aid and medkits add a free hit for a fully natural patient": "120, 121",
+    "first aid heals one stun box per hit over the threshold, or one physical or overflow box per 2 hits": "120",
+    "a medkit or healing magic heals one box of stun, physical or overflow per hit over the threshold": "121",
+    "first aid, a medkit and healing magic can each be received once for any single set of injuries": "120, 121",
+    "overflow damage heals first": "120, 122",
+    "natural recovery: Body + Willpower each hour heals a stun box per hit; Body + Body each day heals a physical box per hit": "122",
+    "natural recovery of overflow: Body + Body minus wound modifiers, a box per hit": "122"
   },
   "unverified": [
     "exploding 6s: the extra dice can hit, but they are not counted as 1s and not counted in the pool when checking for a glitch",
@@ -32,6 +40,13 @@
     "an attack whose attacker rolls no hits misses even when the defender also rolls none; the book says ties go to the aggressor and the most hits wins, but does not say whether 0 against 0 hits",
     "a bought automatic hit counts as a hit when deciding whether a glitch is critical",
     "+1 to a single die cannot be used on a 6",
-    "Edge given to an ally counts toward the ally's per-round gain cap and the overall maximum"
+    "Edge given to an ally counts toward the ally's per-round gain cap and the overall maximum",
+    "the healing threshold is 5 minus Essence rounded up, never below 0, so a fully natural patient (Essence 6) has threshold 0",
+    "the free hit for a fully natural patient applies to first aid and medkits, where the book states it, and not to healing magic",
+    "an attempt at first aid, a medkit or healing magic uses up that treatment for the set of injuries even if it heals nothing",
+    "a new set of injuries begins when the character next takes damage, after which each treatment can be received again",
+    "no physical or stun box heals while any overflow box is filled, whatever the kind of healing",
+    "the book's time limits (a minute for first aid, an hour for a medkit, an hour or a day between natural recovery rolls) and medkit supplies are the GM's to keep; the system tracks no game time",
+    "natural recovery can be rolled only by a player character for their own injuries"
   ]
 }

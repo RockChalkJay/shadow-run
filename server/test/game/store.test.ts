@@ -52,12 +52,20 @@ describe("game state", () => {
     const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 4, stun: 0, overflow: 0 };
     const state = {
       ...emptyState,
-      pcs: [{ id: "kira", monitor }],
-      npcs: [{ id: "ganger-1", name: "Ganger", body: 3, willpower: 3, monitor }],
+      pcs: [{ id: "kira", monitor, treated: ["first_aid" as const] }],
+      npcs: [{ id: "ganger-1", name: "Ganger", body: 3, willpower: 3, monitor, treated: [] }],
       results: [{ kind: "report" as const, text: "DAMAGE RESULT. x" }],
     };
     await store.saveState(state);
     expect(await store.loadState()).toEqual(state);
+  });
+
+  it("reads a save from before treatments were tracked as untreated", async () => {
+    const d = await dir();
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 4, stun: 0, overflow: 0 };
+    const old = { ...emptyState, pcs: [{ id: "kira", monitor }], npcs: [{ id: "g", name: "G", body: 3, willpower: 3, monitor }] };
+    await writeFile(join(d, "state.json"), JSON.stringify(old));
+    expect(await new CampaignStore(d).loadState()).toMatchObject({ pcs: [{ treated: [] }], npcs: [{ treated: [] }] });
   });
 
   it("refuses a state file it cannot understand rather than starting over silently", async () => {

@@ -23,10 +23,10 @@ export const DealDamageInput = z.object({
 export type DealDamageInput = z.infer<typeof DealDamageInput>;
 
 export const HealInput = z.object({
-  target: CharacterRef,
-  type: HealType.describe("Which track to heal; overflow is healed first and brings a character back from the brink"),
-  boxes: z.number().int().min(1).max(12).describe("How many boxes to heal, no more than the hits that earned it"),
-  reason: z.string().min(1).describe("What did the healing, e.g. 'Doc's First Aid, 3 net hits'"),
+  rollId: z.string().min(1).describe("The id of the healing roll, from its ROLL RESULT report in this turn's input"),
+  type: HealType.describe("Which track to heal. Overflow must be cleared before any other track"),
+  boxes: z.number().int().min(1).max(12).describe("How many boxes to heal. The roll's hits must cover them at the rate for this kind of healing"),
+  reason: z.string().min(1).describe("What did the healing, e.g. 'Doc's First Aid on Kira'"),
 });
 export type HealInput = z.infer<typeof HealInput>;
 

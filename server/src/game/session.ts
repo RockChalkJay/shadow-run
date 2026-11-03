@@ -3,9 +3,11 @@ import {
   DealDamageInput,
   HealInput,
   NpcRollInput,
+  RollRequestInput,
   type CharacterView,
   type DamageType,
   type GmEvent,
+  type HealMethod,
   type GmStatus,
   type PartyMember,
   type ResolvedRoll,
@@ -20,11 +22,11 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, cryptoD6, damageAfterResistance, damageResistancePool, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest } from "./attack.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
-import { formatAttackForGm, formatCancelledForGm, formatDamageForGm, formatHealForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { MAX_PENDING_ROLLS, RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
@@ -84,6 +86,11 @@ export class GameSession {
   private cancelledByUser = false;
   /** The turn whose tools work, while it is running and has not been stopped. */
   private activeTurn: { id: number; signal: AbortSignal } | null = null;
+  /**
+   * Hits the GM may still spend on each healing roll it has been told the result of, by roll id. They last for the
+   * turn that delivers them, and a turn that fails keeps what was spent so that its retry does not grant them again.
+   */
+  private readonly healBudgets = new Map<string, { patient: { kind: "pc" | "npc"; id: string }; method: HealMethod; remaining: number }>();
 
   static async create(opts: SessionOptions): Promise<GameSession> {
     const [saved, recent] = await Promise.all([opts.store.loadState(), opts.store.recentEntries(SNAPSHOT_ENTRIES)]);
@@ -225,6 +232,9 @@ export class GameSession {
     const result = this.rolls.resolve(requestId, entry);
     if (!result.ok) return result;
     const { resolved } = result;
+    const healing = resolved.request.healing;
+    // Having the treatment done uses it up for these injuries, whatever it healed.
+    if (healing && isTreatment(healing.method)) this.roster.markTreated(healing.patient.kind, healing.patient.id, healing.method);
     // A roll to resist damage is not a result for the GM to interpret: the damage is applied now, in this step,
     // and the GM is told how the character stands.
     const soak = resolved.request.soak ? this.applySoak(resolved) : undefined;
@@ -317,8 +327,43 @@ export class GameSession {
     };
   }
 
+  /** Works out the patient and difficulty of a healing roll, or says why it cannot be asked for. */
+  private healingFor(data: RollRequestInput): { ok: true; extra: NonNullable<Parameters<RollManager["create"]>[1]> } | { ok: false; error: string } {
+    const asked = data.healing!;
+    const patient = this.roster.resolve({ kind: asked.patient.kind, id: asked.patient.id }, { create: false });
+    if (!patient.ok) return { ok: false, error: patient.error };
+    const view = this.roster.view(patient.kind, patient.id)!;
+    if (view.status === "dead") return { ok: false, error: `${patient.name} is dead, beyond the reach of any healing.` };
+
+    const { method } = asked;
+    if (isTreatment(method)) {
+      if (this.roster.hasBeenTreated(patient.kind, patient.id, method)) {
+        return { ok: false, error: `${patient.name} has already had ${METHOD_NAMES[method]} for these injuries. It can be received only once until they are hurt again.` };
+      }
+      if (view.monitor.physical + view.monitor.stun + view.monitor.overflow === 0) return { ok: false, error: `${patient.name} has no damage to heal.` };
+    } else {
+      if (patient.kind !== "pc" || patient.id !== data.characterId) {
+        return { ok: false, error: "Natural recovery is the patient's own roll. Ask for it from the player character who is recovering." };
+      }
+      const track = method.slice("natural_".length) as "stun" | "physical" | "overflow";
+      if (view.monitor[track] === 0) return { ok: false, error: `${patient.name} has no ${track} damage to recover from.` };
+    }
+
+    const natural = !isTreatment(method);
+    const threshold = natural ? 0 : healingThreshold(asked.essence);
+    const healing = { method, patient: { kind: patient.kind, id: patient.id, name: patient.name }, essence: asked.essence, threshold, autoHit: healingAutoHit(method, asked.essence) };
+    return { ok: true, extra: { healing, threshold: Math.max(1, threshold) } };
+  }
+
   private async requestRoll(input: unknown): Promise<ToolReply> {
-    const created = this.rolls.create(input);
+    const parsed = RollRequestInput.safeParse(input);
+    let extra: NonNullable<Parameters<RollManager["create"]>[1]> | undefined;
+    if (parsed.success && parsed.data.healing) {
+      const prepared = this.healingFor(parsed.data);
+      if (!prepared.ok) return { ok: false, text: prepared.error };
+      extra = prepared.extra;
+    }
+    const created = this.rolls.create(input, extra);
     if (!created.ok) return { ok: false, text: created.error };
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
@@ -570,17 +615,36 @@ export class GameSession {
   private async heal(input: unknown): Promise<ToolReply> {
     const parsed = HealInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: `The healing was not valid: ${z.prettifyError(parsed.error)}` };
-    const { target: ref, type, boxes, reason } = parsed.data;
-    const target = this.roster.resolve(ref, { create: false });
-    if (!target.ok) return { ok: false, text: target.error };
-    if (this.roster.view(target.kind, target.id)?.status === "dead") {
-      return { ok: false, text: `${target.name} is dead, beyond the reach of any healing.` };
+    const { rollId, type, boxes, reason } = parsed.data;
+    const budget = this.healBudgets.get(rollId);
+    if (!budget) {
+      return { ok: false, text: "No healing roll with that id has hits to spend this turn. Ask for a healing roll with request_roll and heal only from its result, in the turn you are told it." };
     }
-    const { after, healed } = this.roster.heal(target.kind, target.id, type, boxes);
+    const target = this.roster.resolve(budget.patient, { create: false });
+    if (!target.ok) return { ok: false, text: target.error };
+    const standing = this.roster.view(target.kind, target.id)!;
+    if (standing.status === "dead") return { ok: false, text: `${target.name} is dead, beyond the reach of any healing.` };
+
+    const perBox = hitsPerBox(budget.method, type);
+    if (perBox === null) return { ok: false, text: `${METHOD_NAMES[budget.method]} cannot heal ${type} damage.` };
+    if (type !== "overflow" && standing.monitor.overflow > 0) {
+      return { ok: false, text: `${target.name} has overflow damage, which heals first. Heal overflow before ${type}.` };
+    }
+    const toHeal = Math.min(boxes, standing.monitor[type]);
+    if (toHeal * perBox > budget.remaining) {
+      const affordable = Math.floor(budget.remaining / perBox);
+      return {
+        ok: false,
+        text: `That would cost ${toHeal * perBox} hits (${perBox} per ${type} box) and the roll has ${budget.remaining} left, enough for ${affordable} ${type} ${affordable === 1 ? "box" : "boxes"}.`,
+      };
+    }
+
+    const { after, healed } = this.roster.heal(target.kind, target.id, type, toHeal);
+    budget.remaining -= healed * perBox;
     this.announce(after);
     await this.record({ kind: "heal", reason, type, healed, after });
     await this.persist();
-    return { ok: true, text: formatHealForGm({ reason, type, healed, after }) };
+    return { ok: true, text: formatHealForGm({ reason, type, healed, after, left: budget.remaining }) };
   }
 
   // ---- the GM's turns ------------------------------------------------------------------------
@@ -629,7 +693,14 @@ export class GameSession {
     if (!this.opened) parts.push("BEGIN SESSION. Open the first scene.");
     for (const outcome of turn.results) {
       if (outcome.kind === "report") parts.push(outcome.text);
-      else if (outcome.kind === "resolved") parts.push(formatRollForGm(outcome.resolved, this.nameOf(outcome.resolved.request.characterId)));
+      else if (outcome.kind === "resolved") {
+        const { request } = outcome.resolved;
+        parts.push(formatRollForGm(outcome.resolved, this.nameOf(request.characterId)));
+        const budget = this.healBudgets.get(request.id);
+        if (budget && request.healing) {
+          parts.push(formatHealingOffer({ healer: this.nameOf(request.characterId), patient: request.healing.patient.name, method: budget.method, hits: budget.remaining, rollId: request.id }));
+        }
+      }
       else parts.push(formatCancelledForGm(outcome.request, this.nameOf(outcome.request.characterId)));
     }
     if (turn.held.length > 0) parts.push(`The players say:\n${turn.held.map((m) => `- ${m.name}: ${m.text}`).join("\n")}`);
@@ -655,6 +726,12 @@ export class GameSession {
     const signal = AbortSignal.any([controller.signal, timeout]);
     this.activeTurn = { id: turnId, signal };
     this.setStatus({ phase: "thinking", turnId });
+    for (const outcome of turn.results) {
+      const healing = outcome.kind === "resolved" ? outcome.resolved.request.healing : undefined;
+      if (outcome.kind === "resolved" && healing && outcome.resolved.outcome.netHits > 0 && !this.healBudgets.has(outcome.resolved.request.id)) {
+        this.healBudgets.set(outcome.resolved.request.id, { patient: healing.patient, method: healing.method, remaining: outcome.resolved.outcome.netHits });
+      }
+    }
 
     let narration = "";
     let reportedError: string | undefined;
@@ -713,6 +790,7 @@ export class GameSession {
     this.opts.emit({ type: "gm.turn_done", turnId });
 
     if (failure === undefined) {
+      this.healBudgets.clear();
       this.opened = true;
       this.blocked = false;
       await this.persist();

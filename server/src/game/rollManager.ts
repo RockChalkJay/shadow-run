@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RollRequest, RollRequestInput, type ResolvedRoll, type RollResult } from "@shadow-run/shared";
 import { z } from "zod";
-import { attackDamage, cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, cryptoD6, defaultRuleset, evaluate, healingHits, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 
 export type Fail = { ok: false; error: string };
 
@@ -46,7 +46,11 @@ export class RollManager {
     return [...this.pending.values()];
   }
 
-  create(input: unknown, extra: Pick<RollRequest, "attack"> = {}): { ok: true; request: RollRequest } | Fail {
+  /**
+   * `extra` is what only the session can know: the other side of an attack, or the patient and difficulty of a healing roll
+   * (whose threshold the rules set, not the GM).
+   */
+  create(input: unknown, extra: Partial<Pick<RollRequest, "attack" | "healing">> & { threshold?: number } = {}): { ok: true; request: RollRequest } | Fail {
     const parsed = RollRequestInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: `The roll request was not valid: ${describeIssues(parsed.error)}` };
     const data = parsed.data;
@@ -59,6 +63,9 @@ export class RollManager {
     if (data.threshold !== undefined && data.opposed) {
       return { ok: false, error: "A roll is either against a threshold or opposed, not both. Send one of them." };
     }
+    if (data.healing && (data.opposed || !extra.healing)) {
+      return { ok: false, error: "A healing roll is a simple test, set up by the game; leave out `opposed`." };
+    }
     const refusal = this.opts.canAct?.(data.characterId);
     if (refusal) return { ok: false, error: `${refusal} Narrate what happens instead of asking for a roll.` };
 
@@ -69,12 +76,14 @@ export class RollManager {
     }
     const pool = penalty > 0 ? { total: dice, breakdown: `${data.pool.breakdown}, minus ${penalty} for wounds` } : data.pool;
 
+    const { healing: _asked, ...rest } = data;
+    const { threshold: setByRules, ...stored } = extra;
     const request: RollRequest = {
-      ...data,
-      ...extra,
+      ...rest,
+      ...stored,
       pool,
       ...(penalty > 0 && { woundPenalty: penalty }),
-      threshold: data.opposed ? undefined : (data.threshold ?? 1),
+      threshold: data.opposed ? undefined : (setByRules ?? data.threshold ?? 1),
       id: this.newId(),
     };
     this.pending.set(request.id, request);
@@ -136,6 +145,11 @@ export class RollManager {
       }
     } else {
       ({ success, netHits } = simpleTest(roll, request.threshold ?? 1));
+      if (request.healing) {
+        // The hits to heal with include the free hit and use the Essence-based threshold; the threshold shown on the roll is only that threshold with a floor of 1.
+        netHits = healingHits(request.healing, roll.hits);
+        success = netHits > 0;
+      }
     }
 
     this.pending.delete(requestId);

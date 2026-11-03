@@ -179,61 +179,9 @@ describe("hurting a player character", () => {
     expect(t.session.snapshot().characters.find((c) => c.id === "kira")).toMatchObject({ status: "dead", monitor: { physical: 11, overflow: 10 } });
     expect(t.inputs[1]?.text).toContain("Kira is DEAD.");
 
-    const [roll, damage, heal] = await t.run(async (ctx) => [
-      await ctx.tools.requestRoll(rollInput()),
-      await ctx.tools.dealDamage(hurt(kira, 2)),
-      await ctx.tools.heal({ target: kira, type: "overflow", boxes: 3, reason: "A miracle" }),
-    ]);
+    const [roll, damage] = await t.run(async (ctx) => [await ctx.tools.requestRoll(rollInput()), await ctx.tools.dealDamage(hurt(kira, 2))]);
     expect(roll).toMatchObject({ ok: false, text: expect.stringContaining("Kira is dead and cannot act.") });
     expect(damage).toEqual({ ok: false, text: "Kira is already dead." });
-    expect(heal).toEqual({ ok: false, text: "Kira is dead, beyond the reach of any healing." });
-  });
-
-  it("brings someone round from unconscious when healing clears the full track", async () => {
-    const t = await afterwards([hurt(kira, 10, "stun", "Shock baton")], "2 2 2 2 2");
-    expect(t.session.snapshot().characters.find((c) => c.id === "kira")?.status).toBe("unconscious");
-
-    const healed = await t.run((ctx) => ctx.tools.heal({ target: kira, type: "stun", boxes: 1, reason: "Doc's First Aid, 1 net hit" }));
-    expect(healed.ok).toBe(true);
-    expect(t.session.snapshot().characters.find((c) => c.id === "kira")).toMatchObject({ status: "active", monitor: { stun: 9 } });
-    const allowed = await t.run((ctx) => ctx.tools.requestRoll(rollInput({ pool: { total: 6, breakdown: "x" } })));
-    expect(allowed).toMatchObject({ ok: true });
-  });
-});
-
-describe("healing", () => {
-  it("clears damage the GM earned by a roll, and says how many boxes it really cleared", async () => {
-    const runner = toolRunner();
-    const { session, events, store } = await newSession(runner.driver, { d6: scriptedD6([2, 2, 2, 2, 2]) });
-    const [damage, healed, over] = await runner.run(session, async (ctx) => [
-      await ctx.tools.dealDamage(hurt(ganger, 6)),
-      await ctx.tools.heal({ target: { kind: "npc", id: "ganger-1" }, type: "physical", boxes: 2, reason: "A medkit, 2 net hits" }),
-      await ctx.tools.heal({ target: { kind: "npc", id: "ganger-1" }, type: "physical", boxes: 12, reason: "More medkit" }),
-    ]);
-    expect(damage.ok).toBe(true);
-    expect(healed.text).toBe(
-      "HEAL. A medkit, 2 net hits: Ganger heals 2 physical.\nGanger: Physical 4/10, Stun 0/10, Overflow 0/6. Wound penalty: -1 dice on everything but damage resistance.",
-    );
-    expect(over.text).toContain("Ganger heals 4 physical");
-    expect(session.snapshot().characters.find((c) => c.id === "ganger-1")?.monitor.physical).toBe(0);
-    expect(events.filter((e) => e.type === "character.updated").length).toBeGreaterThanOrEqual(3);
-    expect((await store.recentEntries(10)).filter((e) => e.kind === "heal")).toHaveLength(2);
-  });
-
-  it("refuses to heal someone who is dead, or who is not on the table, or without a reason", async () => {
-    const runner = toolRunner();
-    const { session } = await newSession(runner.driver, { d6: scriptedD6([2, 2, 2]) });
-    const replies = await runner.run(session, async (ctx) => [
-      await ctx.tools.dealDamage(hurt(ganger, 30)),
-      await ctx.tools.heal({ target: { kind: "npc", id: "ganger-1" }, type: "physical", boxes: 1, reason: "Wishful thinking" }),
-      await ctx.tools.heal({ target: { kind: "npc", id: "ghost" }, type: "physical", boxes: 1, reason: "x" }),
-      await ctx.tools.heal({ target: kira, type: "physical", boxes: 1 }),
-      await ctx.tools.heal({ target: kira, type: "physical", boxes: 0, reason: "x" }),
-    ]);
-    expect(replies[1]).toEqual({ ok: false, text: "Ganger is dead, beyond the reach of any healing." });
-    expect(replies[2]).toEqual({ ok: false, text: 'There is no non-player character "ghost" on the table.' });
-    expect(replies[3]).toMatchObject({ ok: false, text: expect.stringContaining("healing was not valid") });
-    expect(replies[4]).toMatchObject({ ok: false });
   });
 });
 

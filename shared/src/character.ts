@@ -6,6 +6,10 @@ export type DamageType = z.infer<typeof DamageType>;
 export const HealType = z.enum(["physical", "stun", "overflow"]);
 export type HealType = z.infer<typeof HealType>;
 
+/** How a character is being healed. The first three can each be received once per set of injuries. */
+export const HealMethod = z.enum(["first_aid", "medkit", "magic", "natural_stun", "natural_physical", "natural_overflow"]);
+export type HealMethod = z.infer<typeof HealMethod>;
+
 export const Status = z.enum(["active", "unconscious", "dead"]);
 export type Status = z.infer<typeof Status>;
 

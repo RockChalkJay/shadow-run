@@ -143,15 +143,27 @@ describe("GM MCP server", () => {
   });
 
   it("passes healing to the session", async () => {
-    const args = { target: { kind: "pc", id: "kira" }, type: "physical", boxes: 2, reason: "First Aid, 2 net hits" };
+    const args = { rollId: "r-1", type: "physical", boxes: 2, reason: "Doc's First Aid on Kira" };
     await client.callTool({ name: "heal", arguments: args });
     expect(calls).toEqual([{ tool: "heal", input: args }]);
+  });
+
+  it("rejects a heal that does not name its healing roll before it reaches the session", async () => {
+    const outcome = await client.callTool({ name: "heal", arguments: { target: { kind: "pc", id: "kira" }, type: "physical", boxes: 2, reason: "x" } }).catch((e) => e);
+    expect(outcome instanceof Error || outcome.isError === true).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("passes a healing roll's details through request_roll", async () => {
+    const healing = { method: "first_aid", patient: { kind: "pc", id: "kira" }, essence: 3 };
+    await client.callTool({ name: "request_roll", arguments: { ...rollInput({ characterId: "doc" }), healing } });
+    expect(calls[0]?.input).toMatchObject({ characterId: "doc", healing });
   });
 
   it("tells the GM never to decide the damage itself and not to heal without a roll", async () => {
     const { tools } = await client.listTools();
     expect(tools.find((t) => t.name === "deal_damage")?.description).toMatch(/never decide\s+yourself how much damage lands/);
-    expect(tools.find((t) => t.name === "heal")?.description).toMatch(/Healing without a roll behind it is not allowed/);
+    expect(tools.find((t) => t.name === "heal")?.description).toMatch(/Healing needs a roll/);
   });
 
   it("rejects an NPC roll with an impossible pool", async () => {
