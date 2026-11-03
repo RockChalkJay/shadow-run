@@ -1,9 +1,8 @@
-import type { RollResult } from "@shadow-run/shared";
+import { MAX_POOL, type RollResult } from "@shadow-run/shared";
 import type { D6 } from "./rng.js";
 import { defaultRuleset, type Ruleset } from "./ruleset.js";
 
-/** Most dice one roll may have. Real pools stay far below it; it stops a mistaken size from exhausting memory. */
-export const MAX_POOL = 100;
+export { MAX_POOL };
 
 /** Most extra dice exploding 6s may add to one roll, so a die that keeps showing 6 cannot loop forever. */
 export const MAX_EXPLOSIONS = 1000;

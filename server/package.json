@@ -5,15 +5,19 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p .",
+    "dev": "tsx src/index.ts",
+    "play": "tsx scripts/play-cli.ts",
     "spike:gm": "tsx scripts/spike-gm.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
     "@shadow-run/shared": "*",
+    "ws": "^8.22.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5"
