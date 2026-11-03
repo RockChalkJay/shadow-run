@@ -16,10 +16,8 @@ async function main() {
   const config = loadConfig();
   const store = new CampaignStore(join(config.campaignsDir, config.campaign));
 
-  let party = await store.loadParty();
-  if (!party) {
-    party = demoParty;
-    await store.saveParty(party);
+  const { party, created } = await store.loadOrCreateParty(demoParty);
+  if (created) {
     console.log(`No character sheets in ${join(store.dir, "characters")}; wrote two demo characters there. Edit them or add your own, then restart.`);
     if (existsSync(join(store.dir, "party.json"))) console.log("The party.json in that folder is no longer read.");
   }

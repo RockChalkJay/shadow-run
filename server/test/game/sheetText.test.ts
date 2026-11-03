@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { SKILL_NAMES } from "@shadow-run/shared";
 import { describe, expect, it } from "vitest";
 import { demoParty } from "../../src/game/demoParty.js";
 import { describeCharacter } from "../../src/game/sheetText.js";
@@ -36,5 +38,12 @@ describe("describeCharacter", () => {
 
   it("says so when a character has no skills", () => {
     expect(describeCharacter({ ...kira, skills: {} })).toContain("No skills.");
+  });
+});
+
+describe("the README", () => {
+  it("names every skill key a sheet accepts", () => {
+    const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+    for (const key of Object.keys(SKILL_NAMES)) expect(readme, key).toContain(`\`${key}\``);
   });
 });

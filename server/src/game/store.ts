@@ -136,6 +136,17 @@ export class CampaignStore {
     return sheets;
   }
 
+  /**
+   * The campaign's characters, or `fallback` written out as sheets when it has none. Either way they are read back
+   * from disk, so every start sees them in the same order, and `created` says which happened.
+   */
+  async loadOrCreateParty(fallback: Party): Promise<{ party: Party; created: boolean }> {
+    const existing = await this.loadParty();
+    if (existing) return { party: existing, created: false };
+    await this.saveParty(fallback);
+    return { party: (await this.loadParty()) ?? fallback, created: true };
+  }
+
   async saveParty(party: Party): Promise<void> {
     await Promise.all(party.map((sheet) => this.writeJson(join("characters", `${sheet.id}.json`), sheet)));
   }

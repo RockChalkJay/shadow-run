@@ -63,6 +63,16 @@ describe("character sheets", () => {
     expect(sheetFiles(["razor.json", "notes.txt", "doc.json", "kira.json", "kira.json.tmp"])).toEqual(["doc.json", "kira.json", "razor.json"]);
   });
 
+  it("writes the fallback characters to a new campaign and reads them back, in the same order as every later start", async () => {
+    const d = await dir();
+    const first = await new CampaignStore(d).loadOrCreateParty(demoParty);
+    expect(first.created).toBe(true);
+    const second = await new CampaignStore(d).loadOrCreateParty(demoParty);
+    expect(second.created).toBe(false);
+    expect(first.party.map((m) => m.id)).toEqual(second.party.map((m) => m.id));
+    expect(first.party.map((m) => m.id)).toEqual(["doc", "kira"]);
+  });
+
   it("no longer reads an old party.json", async () => {
     const d = await dir();
     await writeFile(join(d, "party.json"), JSON.stringify(demoParty));
