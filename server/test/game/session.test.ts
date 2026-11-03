@@ -635,3 +635,26 @@ describe("the demo script", () => {
     expect((await second.store.recentEntries(20)).filter((e) => e.kind === "gm")).toHaveLength(3);
   });
 });
+
+const idOfRequestedRoll = (events: Array<{ type: string }>) =>
+  (events.find((e) => e.type === "roll.requested") as unknown as { request: { id: string } }).request.id;
+
+describe("the demo GM and injuries", () => {
+  it("hurts a character who fails the first roll, and carries on once they have resisted", async () => {
+    const driver = new ScriptedGmDriver(demoScript(party));
+    const { session, events } = await newSession(driver);
+    await session.start();
+    await session.whenIdle();
+    await session.submitRoll(idOfRequestedRoll(events), { mode: "physical", dice: "2 2 2 2 2 2 2 2" });
+    await session.whenIdle();
+
+    const soak = session.snapshot().pendingRolls[0];
+    expect(soak).toMatchObject({ characterId: "kira", soak: { damageValue: 5, source: "The guard's baton" } });
+    await session.submitRoll(soak!.id, { mode: "physical", dice: "6 5 3 1 1" });
+    await session.whenIdle();
+
+    expect(session.snapshot().characters.find((c) => c.id === "kira")?.monitor.physical).toBe(3);
+    expect(driver.inputs.at(-1)?.text).toContain("DAMAGE RESULT. The guard's baton");
+    expect(session.snapshot().gm).toEqual({ phase: "idle" });
+  });
+});

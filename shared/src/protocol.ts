@@ -1,6 +1,9 @@
 import { z } from "zod";
+import type { CharacterView, DamageType, HealType, Status } from "./character.js";
 import type { PartyMember } from "./party.js";
 import type { ResolvedRoll, RollRequest, RollResult } from "./roll.js";
+
+export type { Status };
 
 /** Longest message one player can say to the GM. */
 export const MAX_SAY = 2000;
@@ -42,6 +45,20 @@ export type TranscriptEntry =
   | (EntryBase & { kind: "roll"; resolved: ResolvedRoll })
   | (EntryBase & { kind: "roll_cancelled"; requestId: string; characterId: string; label: string })
   | (EntryBase & { kind: "npc"; label: string; pool: number; roll: RollResult; threshold?: number; success?: boolean })
+  | (EntryBase & {
+      kind: "damage";
+      /** What caused the damage, as the GM described it. */
+      label: string;
+      damageType: DamageType;
+      damageValue: number;
+      /** The resistance roll: made by the app or at the table for a player character, by the system for an NPC. */
+      resistance: RollResult;
+      resistedBy: "app" | "physical" | "system";
+      /** Damage that got through. */
+      taken: number;
+      after: CharacterView;
+    })
+  | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });
 
 export interface Usage {
@@ -54,6 +71,8 @@ export interface Usage {
 export interface Snapshot {
   type: "snapshot";
   party: PartyMember[];
+  /** Every player character, and every non-player character the GM has put on the table. */
+  characters: CharacterView[];
   pendingRolls: RollRequest[];
   /** The most recent entries, oldest first. */
   transcript: TranscriptEntry[];
@@ -74,6 +93,7 @@ export type ServerEvent =
   | { type: "gm.text"; turnId: number; text: string }
   | { type: "gm.turn_done"; turnId: number }
   | { type: "usage"; usage: Usage }
+  | { type: "character.updated"; character: CharacterView }
   | { type: "entry"; entry: TranscriptEntry }
   | { type: "roll.requested"; request: RollRequest }
   | { type: "roll.cancelled"; requestId: string }

@@ -4,14 +4,15 @@
 //   npm run play           in another
 
 import { createInterface } from "node:readline";
-import type { ClientMessage, PartyMember, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, PartyMember, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
 import { WebSocket } from "ws";
-import { showDice } from "../src/game/rollReport.js";
+import { formatStanding, showDice } from "../src/game/rollReport.js";
 
 const url = process.env.TABLE_URL ?? `ws://127.0.0.1:${process.env.PORT ?? 8787}/ws`;
 const ws = new WebSocket(url);
 
 let party: PartyMember[] = [];
+let characters: CharacterView[] = [];
 let active: PartyMember | undefined;
 let pending: RollRequest[] = [];
 let streaming = false;
@@ -27,6 +28,11 @@ const line = (text = "") => {
 function card(request: RollRequest) {
   line(`\n  ROLL #${pending.indexOf(request) + 1}: ${name(request.characterId)} to ${request.label}`);
   line(`    dice: ${request.pool.total} (${request.pool.breakdown})`);
+  if (request.soak) {
+    line(`    resisting ${request.soak.damageValue} ${request.soak.damageType} damage: every hit removes one point of it`);
+    line("    /app to roll with the app's dice, or /dice 6 5 3 1 ... for dice you rolled");
+    return;
+  }
   line(request.opposed ? `    against: ${request.opposed.by}, ${request.opposed.pool} dice (rolled by the system)` : `    needs: ${request.threshold ?? 1} hit(s)`);
   line(`    at stake: ${request.stakes}`);
   line(`    good roll: ${request.goodRoll}`);
@@ -48,6 +54,8 @@ function show(entry: TranscriptEntry) {
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
       line(`\n  ${name(request.characterId)} rolled: ${showDice(roll)} = ${roll.hits} hit(s)`);
+      // Resisting damage has no success or failure; the damage entry that follows says what got through.
+      if (request.soak) return line();
       if (opposed) line(`  ${opposed.by} rolled: ${showDice(opposed.roll)} = ${opposed.roll.hits} hit(s)`);
       line(`  ${outcome.success ? "SUCCESS" : "FAILURE"}${outcome.netHits ? ` by ${outcome.netHits} net hit(s)` : ""}${roll.criticalGlitch ? ", CRITICAL GLITCH" : roll.glitch ? ", GLITCH" : ""}`);
       line(`  ${outcome.consequence}`);
@@ -58,6 +66,14 @@ function show(entry: TranscriptEntry) {
       return line(`  (roll skipped: ${entry.label})`);
     case "npc":
       return line(`  NPC roll, ${entry.label}: ${entry.pool} dice ${showDice(entry.roll)} = ${entry.roll.hits} hits`);
+    case "damage":
+      line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
+      line(`  ${formatStanding(entry.after)}\n`);
+      return;
+    case "heal":
+      line(`\n  ${entry.reason}: ${entry.after.name} heals ${entry.healed} ${entry.type}`);
+      line(`  ${formatStanding(entry.after)}\n`);
+      return;
     case "system":
       return line(`  [${entry.text}]`);
   }
@@ -67,6 +83,7 @@ function handle(event: ServerEvent) {
   switch (event.type) {
     case "snapshot":
       party = event.party;
+      characters = event.characters;
       active ??= party[0];
       pending = event.pendingRolls;
       line(`Connected. Party: ${party.map((m) => `${m.name} (${m.id})`).join(", ")}. Speaking as ${active?.name}. Type /help for commands.`);
@@ -106,6 +123,9 @@ function handle(event: ServerEvent) {
       if (entry.kind !== "gm") show(entry);
       break;
     }
+    case "character.updated":
+      characters = [...characters.filter((c) => !(c.kind === event.character.kind && c.id === event.character.id)), event.character];
+      break;
     case "usage":
       break;
     case "error":
@@ -131,6 +151,7 @@ const help = [
   "  /app [n]          roll pending roll n (default 1) with the app's dice",
   "  /dice [n:] f f f  report dice rolled at the table, e.g. /dice 6 5 3 1 or /dice 2: 4 4 1",
   "  /skip [n]         skip a pending roll",
+  "  /status           show how hurt everyone is",
   "  /stop             stop the GM mid-turn",
   "  /retry            try the GM's turn again",
   "  /quit",
@@ -150,6 +171,8 @@ createInterface({ input: process.stdin }).on("line", (input) => {
       return ws.close();
     case "start":
       return send({ type: "session.start" });
+    case "status":
+      return console.log(characters.map((c) => `  ${c.kind === "npc" ? "(NPC) " : ""}${formatStanding(c)}`).join("\n") || "  Nobody is on the table yet.");
     case "stop":
       return send({ type: "turn.cancel" });
     case "retry":

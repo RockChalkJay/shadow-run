@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { RollRequestInput, type ResolvedRoll, type RollRequest, type RollResult } from "@shadow-run/shared";
+import { RollRequest, RollRequestInput, type ResolvedRoll, type RollResult } from "@shadow-run/shared";
 import { z } from "zod";
 import { cryptoD6, defaultRuleset, evaluate, opposedTest, parseDice, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 
@@ -13,6 +13,10 @@ export type RollEntry = { mode: "app" } | { mode: "physical"; dice: string };
 export interface RollManagerOptions {
   /** Is this a character at the table? */
   knownCharacter: (id: string) => boolean;
+  /** Why this character cannot act right now (unconscious, dead), or null. */
+  canAct?: (id: string) => string | null;
+  /** Dice this character loses on every test they are asked to make. */
+  woundPenalty?: (id: string) => number;
   d6?: D6;
   rules?: Ruleset;
   newId?: () => string;
@@ -55,9 +59,32 @@ export class RollManager {
     if (data.threshold !== undefined && data.opposed) {
       return { ok: false, error: "A roll is either against a threshold or opposed, not both. Send one of them." };
     }
-    const request: RollRequest = { ...data, threshold: data.opposed ? undefined : (data.threshold ?? 1), id: this.newId() };
+    const refusal = this.opts.canAct?.(data.characterId);
+    if (refusal) return { ok: false, error: `${refusal} Narrate what happens instead of asking for a roll.` };
+
+    const penalty = this.opts.woundPenalty?.(data.characterId) ?? 0;
+    const dice = data.pool.total - penalty;
+    if (dice < 1) {
+      return { ok: false, error: `Wounds cost ${penalty} dice and leave this roll with none, so the attempt fails outright. Narrate that instead of asking for a roll.` };
+    }
+    const pool = penalty > 0 ? { total: dice, breakdown: `${data.pool.breakdown}, minus ${penalty} for wounds` } : data.pool;
+
+    const request: RollRequest = {
+      ...data,
+      pool,
+      ...(penalty > 0 && { woundPenalty: penalty }),
+      threshold: data.opposed ? undefined : (data.threshold ?? 1),
+      id: this.newId(),
+    };
     this.pending.set(request.id, request);
     return { ok: true, request };
+  }
+
+  /** Adds a roll the system itself asks for, such as resisting damage. It is not checked as a request from the GM. */
+  createInternal(request: Omit<RollRequest, "id">): RollRequest {
+    const full = RollRequest.parse({ ...request, id: this.newId() });
+    this.pending.set(full.id, full);
+    return full;
   }
 
   /** Counts the player's roll, rolls any opposition, and takes the request off the pending list. */

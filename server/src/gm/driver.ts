@@ -10,6 +10,9 @@ export interface ToolReply {
 export interface GmTools {
   requestRoll(input: unknown): Promise<ToolReply>;
   rollNpc(input: unknown): Promise<ToolReply>;
+  /** Hurts someone. The target resists, and the system applies what gets through. */
+  dealDamage(input: unknown): Promise<ToolReply>;
+  heal(input: unknown): Promise<ToolReply>;
 }
 
 export interface GmTurnInput {

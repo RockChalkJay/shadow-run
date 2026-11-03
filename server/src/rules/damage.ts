@@ -1,18 +1,7 @@
+import type { ConditionMonitor, DamageType, HealType, Status } from "@shadow-run/shared";
 import { defaultRuleset, type Ruleset } from "./ruleset.js";
 
-export type DamageType = "physical" | "stun";
-export type HealType = DamageType | "overflow";
-export type Status = "active" | "unconscious" | "dead";
-
-export interface ConditionMonitor {
-  physicalBoxes: number;
-  stunBoxes: number;
-  /** Physical damage past the last physical box; the character dies when all of these are filled. */
-  overflowBoxes: number;
-  physical: number;
-  stun: number;
-  overflow: number;
-}
+export type { ConditionMonitor, DamageType, HealType, Status };
 
 export function newMonitor(body: number, willpower: number, rules: Ruleset = defaultRuleset): ConditionMonitor {
   for (const [name, value] of [["Body", body], ["Willpower", willpower]] as const) {

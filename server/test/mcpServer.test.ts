@@ -17,6 +17,8 @@ describe("GM MCP server", () => {
     server = await startGmMcpServer({
       requestRoll: async (input) => (calls.push({ tool: "request_roll", input }), reply),
       rollNpc: async (input) => (calls.push({ tool: "roll_npc", input }), reply),
+      dealDamage: async (input) => (calls.push({ tool: "deal_damage", input }), reply),
+      heal: async (input) => (calls.push({ tool: "heal", input }), reply),
     });
     client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(
@@ -87,6 +89,37 @@ describe("GM MCP server", () => {
     const result = await client.callTool({ name: "roll_npc", arguments: { label: "Ganger", pool: 4, threshold: 2 } });
     expect(result.isError).toBeFalsy();
     expect(calls).toEqual([{ tool: "roll_npc", input: { label: "Ganger", pool: 4, threshold: 2 } }]);
+  });
+
+  it("passes damage to the session, with the NPC's details on first mention", async () => {
+    const target = { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower: 3 };
+    await client.callTool({ name: "deal_damage", arguments: { label: "Pistol shot", target, damageValue: 5, damageType: "physical" } });
+    expect(calls).toEqual([{ tool: "deal_damage", input: { label: "Pistol shot", target, damageValue: 5, damageType: "physical" } }]);
+  });
+
+  it.each([
+    ["no damage", { damageValue: 0, damageType: "physical" }],
+    ["a damage type that does not exist", { damageValue: 4, damageType: "psychic" }],
+    ["a target kind that does not exist", { damageValue: 4, damageType: "stun", kind: "robot" }],
+  ])("rejects damage with %s before it reaches the session", async (_name, extra) => {
+    const { kind = "pc", ...rest } = extra as { kind?: string };
+    const outcome = await client
+      .callTool({ name: "deal_damage", arguments: { label: "x", target: { kind, id: "kira" }, ...rest } })
+      .catch((e) => e);
+    expect(outcome instanceof Error || outcome.isError === true).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("passes healing to the session", async () => {
+    const args = { target: { kind: "pc", id: "kira" }, type: "physical", boxes: 2, reason: "First Aid, 2 net hits" };
+    await client.callTool({ name: "heal", arguments: args });
+    expect(calls).toEqual([{ tool: "heal", input: args }]);
+  });
+
+  it("tells the GM never to decide the damage itself and not to heal without a roll", async () => {
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "deal_damage")?.description).toMatch(/never decide\s+yourself how much damage lands/);
+    expect(tools.find((t) => t.name === "heal")?.description).toMatch(/Healing without a roll behind it is not allowed/);
   });
 
   it("rejects an NPC roll with an impossible pool", async () => {

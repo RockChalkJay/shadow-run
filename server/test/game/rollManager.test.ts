@@ -58,6 +58,50 @@ describe("creating a roll", () => {
   });
 });
 
+describe("wounds", () => {
+  const hurtManager = (penalty: number, refusal: string | null = null) =>
+    new RollManager({ knownCharacter: () => true, woundPenalty: () => penalty, canAct: () => refusal, newId: () => "r1" });
+
+  it("takes dice off the pool, says so on the card, and records the penalty", () => {
+    const created = hurtManager(2).create(rollInput({ pool: { total: 6, breakdown: "Agility 4 + Stealth 2" } }));
+    expect(created).toMatchObject({
+      ok: true,
+      request: { pool: { total: 4, breakdown: "Agility 4 + Stealth 2, minus 2 for wounds" }, woundPenalty: 2 },
+    });
+  });
+
+  it("asks for exactly the reduced number of dice", () => {
+    const m = hurtManager(2);
+    m.create(rollInput({ pool: { total: 6, breakdown: "x" } }));
+    expect(m.resolve("r1", { mode: "physical", dice: "6 5 3 1 1 1" })).toEqual({ ok: false, error: "This roll is 4 dice; you entered 6." });
+    expect(m.resolve("r1", { mode: "physical", dice: "6 5 3 1" })).toMatchObject({ ok: true });
+  });
+
+  it("leaves the pool alone for someone who is unhurt", () => {
+    const created = hurtManager(0).create(rollInput());
+    expect(created).toMatchObject({ ok: true, request: { pool: { total: 4, breakdown: "Agility 3 + Sneaking 1" } } });
+    expect((created as { request: object }).request).not.toHaveProperty("woundPenalty");
+  });
+
+  it("refuses a roll that wounds leave with no dice, telling the GM to narrate the failure", () => {
+    const created = hurtManager(4).create(rollInput());
+    expect(created).toMatchObject({ ok: false, error: expect.stringContaining("leave this roll with none") });
+  });
+
+  it("refuses a roll for someone who cannot act, with the reason", () => {
+    const created = hurtManager(0, "Kira is unconscious and cannot act until healed.").create(rollInput());
+    expect(created).toEqual({ ok: false, error: "Kira is unconscious and cannot act until healed. Narrate what happens instead of asking for a roll." });
+  });
+
+  it("does not apply wounds to a roll the system asks for itself, such as resisting damage", () => {
+    const m = hurtManager(3);
+    const request = m.createInternal({ ...rollInput({ pool: { total: 5, breakdown: "Body 5" } }), threshold: 1 });
+    expect(request.pool).toEqual({ total: 5, breakdown: "Body 5" });
+    expect(request).not.toHaveProperty("woundPenalty");
+    expect(m.list()).toHaveLength(1);
+  });
+});
+
 describe("rolling with the app", () => {
   it("rolls the pool, counts it, and clears the request", () => {
     const m = manager([6, 5, 3, 1]);

@@ -22,6 +22,10 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Roll skipped] ${nameOf(entry.characterId)}, ${entry.label}.`;
     case "npc":
       return `[NPC roll] ${entry.label}: ${hits(entry.roll.hits)}${entry.success === undefined ? "" : entry.success ? ", success" : ", failure"}.`;
+    case "damage":
+      return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}`;
+    case "heal":
+      return `[Heal] ${entry.after.name} healed ${entry.healed} ${entry.type}: ${entry.reason}.`;
     case "system":
       return null;
   }

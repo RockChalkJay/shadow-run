@@ -40,6 +40,27 @@ describe("formatRecap", () => {
     );
   });
 
+  it("reports damage and healing, and who is down", () => {
+    const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 6, stun: 0, overflow: 0 };
+    const after = (status: "active" | "unconscious" | "dead") => ({ id: "kira", kind: "pc" as const, name: "Kira", monitor, status, woundModifier: 2 });
+    const resistance = { dice: [6, 5, 1], hits: 2, ones: 1, glitch: false, criticalGlitch: false };
+    const text = formatRecap(
+      [
+        entry({ kind: "damage", label: "Ganger's pistol", damageType: "physical", damageValue: 8, resistance, resistedBy: "physical", taken: 6, after: after("active") }),
+        entry({ kind: "damage", label: "Shock baton", damageType: "stun", damageValue: 12, resistance, resistedBy: "app", taken: 10, after: after("unconscious") }),
+        entry({ kind: "heal", reason: "Doc's First Aid", type: "stun", healed: 2, after: after("active") }),
+      ],
+      nameOf,
+    );
+    expect(text).toBe(
+      [
+        "[Damage] Kira took 6 physical from Ganger's pistol.",
+        "[Damage] Kira took 10 stun from Shock baton. Kira is unconscious.",
+        "[Heal] Kira healed 2 stun: Doc's First Aid.",
+      ].join("\n"),
+    );
+  });
+
   it("summarizes a roll with its verdict and declared consequence", () => {
     expect(formatRecap([resolvedRoll("6 5 3 1")], nameOf)).toBe("[Roll] Kira, Sneak past the guard: success (2 hits). Kira slips through.");
     expect(formatRecap([resolvedRoll("6 5 3 1", true)], nameOf)).toContain("success (2 hits against Guard (0 hits))");

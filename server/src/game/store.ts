@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { ConditionMonitor, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -23,8 +23,16 @@ export const SavedState = z.object({
     z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("resolved"), resolved: ResolvedRoll }),
       z.object({ kind: z.literal("cancelled"), request: RollRequest }),
+      /** A report the system wrote for the GM, such as how a character fared against damage. */
+      z.object({ kind: z.literal("report"), text: z.string() }),
     ]),
   ),
+  /** How hurt each player character is. Older saves have none, and everyone starts unhurt. */
+  pcs: z.array(z.object({ id: z.string(), monitor: ConditionMonitor })).default([]),
+  /** The non-player characters the GM has put on the table, and how hurt they are. */
+  npcs: z
+    .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor }))
+    .default([]),
   /** What players said that the GM has not heard yet. */
   held: z.array(z.object({ characterId: z.string().optional(), name: z.string(), text: z.string() })),
 });

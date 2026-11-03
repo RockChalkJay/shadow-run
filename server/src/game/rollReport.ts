@@ -1,4 +1,4 @@
-import type { ResolvedRoll, RollRequest, RollResult } from "@shadow-run/shared";
+import type { CharacterView, DamageType, HealType, ResolvedRoll, RollRequest, RollResult } from "@shadow-run/shared";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const diceCount = (n: number) => `${n} ${n === 1 ? "die" : "dice"}`;
@@ -64,4 +64,49 @@ export function formatNpcRoll({ label, pool, roll, threshold, success }: NpcRoll
   const glitch = glitchNote(roll);
   if (glitch) lines.push(`${glitch}: the GM decides what goes wrong, keeping it ${roll.criticalGlitch ? "serious but not fatal" : "inconvenient, not disastrous"}.`);
   return lines.join("\n");
+}
+
+/** How hurt someone is, in words the GM can use. */
+export function formatStanding(view: CharacterView): string {
+  const m = view.monitor;
+  const parts = [`${view.name}: Physical ${m.physical}/${m.physicalBoxes}, Stun ${m.stun}/${m.stunBoxes}, Overflow ${m.overflow}/${m.overflowBoxes}.`];
+  if (view.woundModifier > 0) parts.push(`Wound penalty: -${view.woundModifier} dice on everything but damage resistance.`);
+  if (view.status === "dead") parts.push(`${view.name} is DEAD.`);
+  else if (view.status === "unconscious") parts.push(`${view.name} is UNCONSCIOUS and out of the action until healed.`);
+  return parts.join(" ");
+}
+
+const how = { app: "app dice", physical: "dice at the table", system: "the system's dice" } as const;
+
+export interface DamageReport {
+  label: string;
+  damageType: DamageType;
+  damageValue: number;
+  body: number;
+  resistance: RollResult;
+  resistedBy: keyof typeof how;
+  taken: number;
+  after: CharacterView;
+}
+
+/** What the GM is told once damage has been resisted and applied. */
+export function formatDamageForGm(r: DamageReport): string {
+  const got = r.taken === 0 ? "no damage got through" : `${r.taken} ${r.damageType} damage got through`;
+  return [
+    `DAMAGE RESULT. ${r.label}: ${r.damageValue} ${r.damageType} damage to ${r.after.name}.`,
+    `${r.after.name} resisted with Body ${r.body} (${how[r.resistedBy]}): ${showDice(r.resistance)} = ${plural(r.resistance.hits, "hit")}, so ${got}.`,
+    formatStanding(r.after),
+  ].join("\n");
+}
+
+export interface HealReport {
+  reason: string;
+  type: HealType;
+  healed: number;
+  after: CharacterView;
+}
+
+export function formatHealForGm(r: HealReport): string {
+  const did = r.healed === 0 ? `had no ${r.type} damage to heal` : `heals ${r.healed} ${r.type}`;
+  return [`HEAL. ${r.reason}: ${r.after.name} ${did}.`, formatStanding(r.after)].join("\n");
 }

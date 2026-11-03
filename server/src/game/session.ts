@@ -1,5 +1,8 @@
 import {
+  DealDamageInput,
+  HealInput,
   NpcRollInput,
+  type CharacterView,
   type GmEvent,
   type GmStatus,
   type PartyMember,
@@ -13,9 +16,10 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { cryptoD6, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { cryptoD6, damageAfterResistance, damageResistancePool, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { formatRecap } from "./recap.js";
-import { formatCancelledForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { Roster } from "./roster.js";
+import { formatCancelledForGm, formatDamageForGm, formatHealForGm, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
@@ -51,6 +55,7 @@ const SNAPSHOT_ENTRIES = 100;
  */
 export class GameSession {
   private readonly rolls: RollManager;
+  private readonly roster: Roster;
   private readonly d6: D6;
   private readonly rules: Ruleset | undefined;
   private results: Outcome[];
@@ -83,8 +88,15 @@ export class GameSession {
   ) {
     this.d6 = opts.d6 ?? cryptoD6;
     this.rules = opts.rules;
+    this.roster = new Roster(opts.party, saved ?? undefined, this.rules);
     this.rolls = new RollManager(
-      { knownCharacter: (id) => this.member(id) !== undefined, d6: this.d6, rules: this.rules },
+      {
+        knownCharacter: (id) => this.member(id) !== undefined,
+        canAct: (id) => this.roster.canAct(id),
+        woundPenalty: (id) => this.roster.woundPenalty(id),
+        d6: this.d6,
+        rules: this.rules,
+      },
       saved?.pending ?? [],
     );
     this.results = saved?.results ?? [];
@@ -132,6 +144,7 @@ export class GameSession {
       turnCounter: this.turnCounter,
       pending: this.rolls.list(),
       results: this.results,
+      ...this.roster.toSaved(),
       held: this.held,
     };
   }
@@ -158,6 +171,7 @@ export class GameSession {
     return {
       type: "snapshot",
       party: [...this.opts.party],
+      characters: this.roster.views(),
       pendingRolls: this.rolls.list(),
       transcript: [...this.recent],
       gm: this.status,
@@ -196,8 +210,13 @@ export class GameSession {
   async submitRoll(requestId: string, entry: RollEntry): Promise<Ack> {
     const result = this.rolls.resolve(requestId, entry);
     if (!result.ok) return result;
-    this.results.push({ kind: "resolved", resolved: result.resolved });
-    await this.record({ kind: "roll", resolved: result.resolved });
+    const { resolved } = result;
+    // A roll to resist damage is not a result for the GM to interpret: the damage is applied now, in this step,
+    // and the GM is told how the character stands.
+    const soak = resolved.request.soak ? this.applySoak(resolved) : undefined;
+    this.results.push(soak ? { kind: "report", text: soak.report } : { kind: "resolved", resolved });
+    await this.record({ kind: "roll", resolved });
+    if (soak) await this.record(soak.entry);
     this.blocked = false;
     await this.persist();
     this.schedule();
@@ -205,6 +224,9 @@ export class GameSession {
   }
 
   async cancelRoll(requestId: string): Promise<Ack> {
+    if (this.rolls.list().find((r) => r.id === requestId)?.soak) {
+      return { ok: false, error: "That roll resists damage that is already coming, so it cannot be skipped. Roll it with the app or with dice." };
+    }
     const request = this.rolls.cancel(requestId);
     if (!request) return { ok: false, error: "That roll is not waiting for dice." };
     this.results.push({ kind: "cancelled", request });
@@ -258,6 +280,8 @@ export class GameSession {
     return {
       requestRoll: (input) => whileCurrent(() => this.requestRoll(input)),
       rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
+      dealDamage: (input) => whileCurrent(() => this.dealDamage(input)),
+      heal: (input) => whileCurrent(() => this.heal(input)),
     };
   }
 
@@ -278,6 +302,86 @@ export class GameSession {
     const npc = { label, pool, roll, ...(threshold !== undefined && { threshold }), ...(success !== undefined && { success }) };
     await this.record({ kind: "npc", ...npc });
     return { ok: true, text: formatNpcRoll(npc) };
+  }
+
+  private announce(character: CharacterView): void {
+    this.opts.emit({ type: "character.updated", character });
+  }
+
+  /** Applies a resistance roll a player made, and says how the character stands. */
+  private applySoak(resolved: ResolvedRoll): { report: string; entry: NewEntry } {
+    const { request, roll, source } = resolved;
+    const soak = request.soak!;
+    const taken = damageAfterResistance(soak.damageValue, roll.hits);
+    const after = this.roster.damage("pc", request.characterId, soak.damageType, taken);
+    this.announce(after);
+    const damage = { label: soak.source, damageType: soak.damageType, damageValue: soak.damageValue, resistance: roll, resistedBy: source, taken, after };
+    return {
+      report: formatDamageForGm({ ...damage, body: request.pool.total }),
+      entry: { kind: "damage", ...damage },
+    };
+  }
+
+  private async dealDamage(input: unknown): Promise<ToolReply> {
+    const parsed = DealDamageInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The damage was not valid: ${z.prettifyError(parsed.error)}` };
+    const { label, target: ref, damageValue, damageType } = parsed.data;
+    const target = this.roster.resolve(ref);
+    if (!target.ok) return { ok: false, text: target.error };
+    if (this.roster.view(target.kind, target.id)?.status === "dead") return { ok: false, text: `${target.name} is already dead.` };
+
+    if (target.kind === "pc") {
+      // The player rolls their own Body to resist, so the dice are theirs.
+      const request = this.rolls.createInternal({
+        characterId: target.id,
+        label: `Resist ${damageValue}${damageType === "physical" ? "P" : "S"} damage: ${label}`,
+        pool: { total: damageResistancePool(target.body), breakdown: `Body ${target.body}` },
+        threshold: 1,
+        stakes: `${damageValue} ${damageType} damage is coming. Every hit on this roll removes one point of it.`,
+        goodRoll: "As many hits as possible. Each one blocks a point of damage.",
+        badRoll: "Few hits. The rest lands on the condition monitor.",
+        consequences: {
+          success: "Each hit blocks a point of damage, and the rest is taken.",
+          failure: "The full damage is taken.",
+          glitch: "A glitch changes nothing in the numbers; the GM may add a small complication.",
+          criticalGlitch: "A critical glitch changes nothing in the numbers; the GM may add a serious but not fatal complication.",
+        },
+        edgeAdvice: "The system does not apply Edge for you yet, so the table keeps track of its own.",
+        soak: { damageValue, damageType, source: label },
+      });
+      await this.persist();
+      this.opts.emit({ type: "roll.requested", request });
+      return {
+        ok: true,
+        text: `${target.name} must roll Body to resist ${damageValue} ${damageType} damage. The roll card is on the table's screen. End your turn now and wait for the result.`,
+      };
+    }
+
+    // The system rolls an NPC's Body for them.
+    const resistance = rollPool(target.body, this.d6, this.rules);
+    const taken = damageAfterResistance(damageValue, resistance.hits);
+    const after = this.roster.damage("npc", target.id, damageType, taken);
+    this.announce(after);
+    const damage = { label, damageType, damageValue, resistance, resistedBy: "system" as const, taken, after };
+    await this.record({ kind: "damage", ...damage });
+    await this.persist();
+    return { ok: true, text: formatDamageForGm({ ...damage, body: target.body }) };
+  }
+
+  private async heal(input: unknown): Promise<ToolReply> {
+    const parsed = HealInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The healing was not valid: ${z.prettifyError(parsed.error)}` };
+    const { target: ref, type, boxes, reason } = parsed.data;
+    const target = this.roster.resolve(ref, { create: false });
+    if (!target.ok) return { ok: false, text: target.error };
+    if (this.roster.view(target.kind, target.id)?.status === "dead") {
+      return { ok: false, text: `${target.name} is dead, beyond the reach of any healing.` };
+    }
+    const { after, healed } = this.roster.heal(target.kind, target.id, type, boxes);
+    this.announce(after);
+    await this.record({ kind: "heal", reason, type, healed, after });
+    await this.persist();
+    return { ok: true, text: formatHealForGm({ reason, type, healed, after }) };
   }
 
   // ---- the GM's turns ------------------------------------------------------------------------
@@ -325,11 +429,9 @@ export class GameSession {
     const parts: string[] = [];
     if (!this.opened) parts.push("BEGIN SESSION. Open the first scene.");
     for (const outcome of turn.results) {
-      parts.push(
-        outcome.kind === "resolved"
-          ? formatRollForGm(outcome.resolved, this.nameOf(outcome.resolved.request.characterId))
-          : formatCancelledForGm(outcome.request, this.nameOf(outcome.request.characterId)),
-      );
+      if (outcome.kind === "report") parts.push(outcome.text);
+      else if (outcome.kind === "resolved") parts.push(formatRollForGm(outcome.resolved, this.nameOf(outcome.resolved.request.characterId)));
+      else parts.push(formatCancelledForGm(outcome.request, this.nameOf(outcome.request.characterId)));
     }
     if (turn.held.length > 0) parts.push(`The players say:\n${turn.held.map((m) => `- ${m.name}: ${m.text}`).join("\n")}`);
     return { kind: this.opened ? "continue" : "open", text: parts.join("\n\n") };

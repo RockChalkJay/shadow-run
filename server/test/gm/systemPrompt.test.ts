@@ -58,7 +58,22 @@ describe("the GM's system prompt", () => {
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It does not track injuries, Edge or initiative");
+    expect(prompt).toContain("It does not track Edge or initiative");
+    expect(prompt).not.toContain("does not track injuries");
+  });
+
+  it("tells the GM the system owns injuries, and how to hurt and heal", () => {
+    expect(prompt).toContain("You never decide how much damage lands");
+    expect(prompt).toContain("call deal_damage with the Damage Value before they resist");
+    expect(prompt).toContain("the weapon's Damage Value plus the attacker's net hits");
+    expect(prompt).toContain("Use heal only after a roll that earned it");
+    expect(prompt).toContain("Never heal without a roll");
+  });
+
+  it("explains wounds the way the rulebook does: a die per filled row, none on resisting damage", () => {
+    expect(prompt).toContain("Each filled row of three boxes on either track costs one die on every roll except resisting damage");
+    expect(prompt).toContain("unconscious and out of the action");
+    expect(prompt).toContain("overflow is full is dead");
   });
 
   it("uses the session's premise, or a default that opens on a job offer", () => {

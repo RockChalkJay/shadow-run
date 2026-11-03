@@ -6,6 +6,10 @@ export interface ScriptedTurn {
   say?: string[];
   /** Rolls to ask for, in the shape of a `request_roll` call. */
   rolls?: unknown[];
+  /** Damage to deal, in the shape of a `deal_damage` call. */
+  damage?: unknown[];
+  /** Healing to give, in the shape of a `heal` call. */
+  heals?: unknown[];
   /** Fail the turn with this message instead of speaking. */
   fail?: string;
 }
@@ -54,6 +58,13 @@ export class ScriptedGmDriver implements GmDriver {
       const reply = await ctx.tools.requestRoll(roll);
       if (!reply.ok) throw new Error(`The scripted roll was refused: ${reply.text}`);
     }
+    for (const [tool, calls] of [["dealDamage", turn.damage], ["heal", turn.heals]] as const) {
+      for (const call of calls ?? []) {
+        ctx.signal.throwIfAborted();
+        const reply = await ctx.tools[tool](call);
+        if (!reply.ok) throw new Error(`The scripted ${tool} was refused: ${reply.text}`);
+      }
+    }
     ctx.onEvent({ type: "done", sessionId: "scripted", costUsd: 0, stopReason: "end_turn" });
   }
 }
@@ -88,6 +99,13 @@ export function demoScript(party: readonly PartyMember[]): Script {
         ],
       };
     }
+    if (input.text.includes("ROLL RESULT") && input.text.includes("FAILURE") && first) {
+      return {
+        say: ["The guard spins and swings his baton."],
+        damage: [{ label: "The guard's baton", target: { kind: "pc", id: first.id }, damageValue: 5, damageType: "physical" }],
+      };
+    }
+    if (input.text.includes("DAMAGE RESULT")) return { say: ["The guard shouts for backup. What do you do?"] };
     if (input.text.includes("ROLL RESULT")) return { say: ["The demo GM nods and waits to see what you do next."] };
     return { say: [`The demo GM heard you. (${input.text.split("\n").slice(-1)[0]})`] };
   };
