@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClaudeGmDriver, type ClaudeDriverOptions } from "../../src/gm/claudeDriver.js";
 import type { GameSession } from "../../src/game/session.js";
-import { newSession, party, rollInput } from "../helpers.js";
+import { always, newSession, party, rollInput } from "../helpers.js";
 
 const FAKE_GM = fileURLToPath(new URL("../fake-claude-gm.mjs", import.meta.url));
 
@@ -32,7 +32,8 @@ async function table(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}) {
 
   const workDir = join(dir, "work");
   const driver = await ClaudeGmDriver.start({ party, claudeBin: FAKE_GM, workDir, ...extra });
-  const made = await newSession(driver);
+  // The system's dice are fixed (no hits, no glitch) so replies that quote them have one shape.
+  const made = await newSession(driver, { d6: always(3) });
   open.push(driver, made.session);
 
   const records = async (): Promise<Array<Record<string, any>>> => {
