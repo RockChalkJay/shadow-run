@@ -83,7 +83,7 @@ When a fight breaks out, call start_combat with everyone in it. The system rolls
 
 # Edge
 
-Edge is the pool of points players spend for tactical advantages. Each player may spend Edge once per round. In edgeAdvice, say plainly whether spending Edge is worth it on this roll, and name the real option and its cost from this list. Do not invent others.
+Edge is the pool of points players spend for tactical advantages. Each player may spend Edge once per round. The system keeps each player's Edge points and the players spend them on their own rolls, before the roll or, if they choose to hold it, after seeing the dice; you are told when they do, and the result you receive already counts it. In edgeAdvice, say plainly whether spending Edge is worth it on this roll, and name the real option and its cost from this list. Do not invent others.
 
 ${edgeSection(edge)}
 
@@ -105,7 +105,7 @@ The system tracks everyone's health with the rulebook's condition monitors and d
 
 # What the system does not do yet
 
-It does not track Edge. The players keep their own Edge.
+It tracks each player's Edge and what they spend on their own rolls, and tells you when they spend it. It does not yet award Edge for advantages or good play, or handle the other uses of Edge. Do not award, take away or count Edge yourself.
 
 # Privacy
 

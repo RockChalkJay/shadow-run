@@ -64,6 +64,38 @@ export const NpcRollInput = z.object({
 });
 export type NpcRollInput = z.infer<typeof NpcRollInput>;
 
+/** The dice of one roll, in the order rolled, and what they add up to. */
+export interface RollResult {
+  /** The dice pool, in the order rolled. */
+  dice: number[];
+  /** Hits on the pool, plus hits on `explosions`, plus `bonusHits`. */
+  hits: number;
+  /** Dice in the pool showing 1. */
+  ones: number;
+  glitch: boolean;
+  /** A glitch with no hits. */
+  criticalGlitch: boolean;
+  /** Extra dice rolled for exploding 6s. They can hit but never count toward a glitch. */
+  explosions?: number[];
+  /** Hits bought with Edge. */
+  bonusHits?: number;
+  /** Highest face that counts toward a glitch; 2 when a foe spent Edge to widen it. */
+  glitchFaces?: 1 | 2;
+}
+
+const face = z.number().int().min(1).max(6);
+
+export const RollResultSchema = z.object({
+  dice: z.array(face),
+  hits: z.number().int().min(0),
+  ones: z.number().int().min(0),
+  glitch: z.boolean(),
+  criticalGlitch: z.boolean(),
+  explosions: z.array(face).optional(),
+  bonusHits: z.number().int().min(0).optional(),
+  glitchFaces: z.union([z.literal(1), z.literal(2)]).optional(),
+}) satisfies z.ZodType<RollResult>;
+
 /** A weapon as the GM describes it for one attack. */
 export const Weapon = z.object({
   name: z.string().min(1).max(60).describe("The weapon, e.g. 'Ares Predator VI' or 'combat knife'"),
@@ -103,6 +135,17 @@ export const RollRequest = RollRequestInput.extend({
       other: z.object({ kind: z.literal("npc"), id: z.string(), name: z.string() }),
     })
     .optional(),
+  /**
+   * Set when the player has rolled but asked to decide on Edge before the roll counts: the dice as rolled, and
+   * the opposition's, which the player may also spend Edge to reroll. Cleared once the roll counts.
+   */
+  held: z
+    .object({
+      source: z.enum(["app", "physical"]),
+      roll: RollResultSchema,
+      opponent: RollResultSchema.optional(),
+    })
+    .optional(),
   /** Set when this roll is a character resisting damage: each hit removes one point of it. */
   soak: z
     .object({
@@ -115,37 +158,7 @@ export const RollRequest = RollRequestInput.extend({
 });
 export type RollRequest = z.infer<typeof RollRequest>;
 
-/** The dice of one roll, in the order rolled, and what they add up to. */
-export interface RollResult {
-  /** The dice pool, in the order rolled. */
-  dice: number[];
-  /** Hits on the pool, plus hits on `explosions`, plus `bonusHits`. */
-  hits: number;
-  /** Dice in the pool showing 1. */
-  ones: number;
-  glitch: boolean;
-  /** A glitch with no hits. */
-  criticalGlitch: boolean;
-  /** Extra dice rolled for exploding 6s. They can hit but never count toward a glitch. */
-  explosions?: number[];
-  /** Hits bought with Edge. */
-  bonusHits?: number;
-  /** Highest face that counts toward a glitch; 2 when a foe spent Edge to widen it. */
-  glitchFaces?: 1 | 2;
-}
 
-const face = z.number().int().min(1).max(6);
-
-export const RollResultSchema = z.object({
-  dice: z.array(face),
-  hits: z.number().int().min(0),
-  ones: z.number().int().min(0),
-  glitch: z.boolean(),
-  criticalGlitch: z.boolean(),
-  explosions: z.array(face).optional(),
-  bonusHits: z.number().int().min(0).optional(),
-  glitchFaces: z.union([z.literal(1), z.literal(2)]).optional(),
-}) satisfies z.ZodType<RollResult>;
 
 export const RollOutcome = z.object({
   success: z.boolean(),
@@ -174,5 +187,7 @@ export const ResolvedRoll = z.object({
     })
     .optional(),
   outcome: RollOutcome,
+  /** Set when the player spent Edge on this roll: how much, and what it did. */
+  edge: z.object({ spent: z.number().int().min(1), summary: z.string() }).optional(),
 });
 export type ResolvedRoll = z.infer<typeof ResolvedRoll>;

@@ -11,6 +11,7 @@ import {
   type CombatParticipant,
   type CombatState,
   type DamageType,
+  type EdgeView,
   type GmEvent,
   type HealMethod,
   type GmStatus,
@@ -27,13 +28,13 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
-import { afterWounds, attackerRequest, damageCode, defenderRequest } from "./attack.js";
+import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, endConfrontation, findEdgeEntry, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDGE_ADVICE } from "./attack.js";
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
-import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
-import { MAX_PENDING_ROLLS, RollManager, type RollEntry } from "./rollManager.js";
+import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatEdgeNote, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { MAX_PENDING_ROLLS, RollManager, type EdgeBoost, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
 export type Ack = { ok: true } | { ok: false; error: string };
@@ -42,6 +43,28 @@ export type Ack = { ok: true } | { ok: false; error: string };
 const WAIT_FOR_DICE = "The roll card is on the table's screen. End your turn now and wait for the result.";
 
 type Found = Extract<Target, { ok: true }>;
+
+/** What a player hands in with their dice. */
+export type RollAnswer = (
+  | { mode: "app" }
+  | { mode: "physical"; dice: string; /** Extra dice rolled by hand for exploding 6s with Edge dice. */ explosions?: string }
+) & {
+  /** Spend 4 Edge to add the Edge attribute to the pool and make 6s explode. */
+  edge?: "dice";
+  /** Count the roll but wait for the player to decide on Edge before it counts. */
+  hold?: boolean;
+};
+
+/** Edge spent on a held roll. */
+export type EdgeChoice =
+  | { boost: "reroll"; targets: Array<{ side: "mine" | "theirs"; index: number }>; dice?: string }
+  | { boost: "bump"; targets: Array<{ side: "mine" | "theirs"; index: number }> }
+  | { boost: "buy_hit"; times?: number }
+  | { boost: "reroll_failed"; dice?: string };
+
+/** The Edge catalog entry behind each way of spending Edge on a roll, so costs are the book's and in one place. */
+const BOOST_ENTRY = { dice: "edge_dice_explode", reroll: "reroll_one_die", bump: "plus_one_to_die", buy_hit: "buy_hit", reroll_failed: "reroll_failed" } as const;
+const boostCost = (boost: keyof typeof BOOST_ENTRY): number => findEdgeEntry(BOOST_ENTRY[boost])!.cost;
 
 type Held = SavedState["held"][number];
 type Outcome = SavedState["results"][number];
@@ -80,6 +103,8 @@ export class GameSession {
   private readonly flip: Flip;
   /** The fight in progress, if any. */
   private combat: CombatState | null;
+  /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
+  private readonly edge = new Map<string, EdgeState>();
   private readonly rules: Ruleset | undefined;
   private results: Outcome[];
   private held: Held[];
@@ -118,6 +143,7 @@ export class GameSession {
     this.d6 = opts.d6 ?? cryptoD6;
     this.flip = opts.flip ?? cryptoFlip;
     this.combat = saved?.combat ?? null;
+    for (const sheet of opts.party) this.edge.set(sheet.id, startSession(sheet.attributes.edge));
     this.rules = opts.rules;
     this.roster = new Roster(opts.party, saved ?? undefined, this.rules);
     this.rolls = new RollManager(
@@ -207,6 +233,7 @@ export class GameSession {
       party: [...this.opts.party],
       characters: this.roster.views(),
       pendingRolls: this.rolls.list(),
+      edge: this.edgeViews(),
       combat: this.combat,
       transcript: [...this.recent],
       gm: this.status,
@@ -242,14 +269,143 @@ export class GameSession {
     return { ok: true };
   }
 
-  async submitRoll(requestId: string, entry: RollEntry): Promise<Ack> {
+  // ---- Edge ----------------------------------------------------------------------------------
+
+  private edgeView(id: string): EdgeView | undefined {
+    const state = this.edge.get(id);
+    return state && { id, points: state.points, rank: state.rank, spentThisRound: state.spentThisRound };
+  }
+
+  private edgeViews(): EdgeView[] {
+    return [...this.edge.keys()].map((id) => this.edgeView(id)!);
+  }
+
+  private announceEdge(id: string): void {
+    const edge = this.edgeView(id);
+    if (edge) this.opts.emit({ type: "edge.updated", edge });
+  }
+
+  /** Why this character cannot spend this much Edge now, or null if they can. */
+  private edgeProblem(id: string, cost: number): string | null {
+    const state = this.edge.get(id);
+    if (!state) return "That character has no Edge to spend.";
+    const name = this.nameOf(id);
+    if (state.spentThisRound) return `${name} has already spent Edge this round. Only one expenditure of Edge is allowed per round.`;
+    if (cost > state.points) return `${name} has ${state.points} Edge and this costs ${cost}.`;
+    return null;
+  }
+
+  private payEdge(id: string, cost: number): void {
+    this.edge.set(id, spendEdge(this.edge.get(id)!, cost));
+    this.announceEdge(id);
+  }
+
+  /** A new round gives every player character their one expenditure of Edge back. */
+  private startEdgeRound(): void {
+    for (const [id, state] of this.edge) {
+      this.edge.set(id, startRound(state));
+      this.announceEdge(id);
+    }
+  }
+
+  /** Edge above the Edge attribute goes away when the confrontation that earned it ends. */
+  private endEdgeConfrontation(): void {
+    for (const [id, state] of this.edge) {
+      this.edge.set(id, startRound(endConfrontation(state)));
+      this.announceEdge(id);
+    }
+  }
+
+  async submitRoll(requestId: string, answer: RollAnswer): Promise<Ack> {
     // A roll can outlive its character if the party was edited while it waited; it has nobody to apply to.
     const waiting = this.rolls.list().find((r) => r.id === requestId);
     if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
 
-    const result = this.rolls.resolve(requestId, entry);
+    let edgeDice: number | undefined;
+    if (waiting && answer.edge === "dice") {
+      if (answer.hold) return { ok: false, error: "Edge dice are spent before the roll, which uses up this round's Edge, so there is nothing to decide afterwards. Roll with Edge dice, or hold without them." };
+      const problem = this.edgeProblem(waiting.characterId, boostCost("dice"));
+      if (problem) return { ok: false, error: problem };
+      edgeDice = this.edge.get(waiting.characterId)!.rank;
+      if (edgeDice === 0) return { ok: false, error: `${this.nameOf(waiting.characterId)} has no Edge attribute to add to the pool.` };
+    }
+    if (waiting && answer.hold) {
+      const problem = this.edgeProblem(waiting.characterId, 1);
+      if (problem) return { ok: false, error: `${problem} Roll without holding.` };
+    }
+
+    const entry: RollEntry = {
+      ...(answer.mode === "app" ? { mode: "app" as const } : { mode: "physical" as const, dice: answer.dice, ...(answer.explosions !== undefined && { explosions: answer.explosions }) }),
+      ...(edgeDice !== undefined && { edgeDice }),
+    };
+
+    if (answer.hold) {
+      const held = this.rolls.hold(requestId, entry);
+      if (!held.ok) return held;
+      this.opts.emit({ type: "roll.updated", request: held.request });
+      await this.persist();
+      return { ok: true };
+    }
+
+    const edgeInfo = edgeDice !== undefined ? { spent: boostCost("dice"), summary: `added ${edgeDice} Edge ${edgeDice === 1 ? "die" : "dice"} to the pool, and 6s exploded` } : undefined;
+    const result = this.rolls.resolve(requestId, entry, edgeInfo);
     if (!result.ok) return result;
-    const { resolved } = result;
+    if (edgeInfo) this.payEdge(result.resolved.request.characterId, edgeInfo.spent);
+    return this.completeRoll(result.resolved);
+  }
+
+  /** The player has seen a held roll and spends Edge on it; it then counts. */
+  async spendEdge(requestId: string, choice: EdgeChoice): Promise<Ack> {
+    const waiting = this.rolls.list().find((r) => r.id === requestId);
+    if (!waiting) return { ok: false, error: "That roll is not waiting; it may already have counted or been skipped." };
+    if (!this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+    if (!waiting.held) return { ok: false, error: "That roll has not been counted yet, so there is nothing to spend Edge on. Roll it with hold first." };
+
+    let boost: EdgeBoost;
+    let cost: number;
+    switch (choice.boost) {
+      case "reroll":
+        boost = { kind: "reroll", targets: choice.targets, ...(choice.dice !== undefined && { dice: choice.dice }) };
+        cost = boostCost("reroll") * choice.targets.length;
+        break;
+      case "bump":
+        if (choice.targets.some((t) => t.side !== "mine")) return { ok: false, error: "Only your own dice can be raised." };
+        boost = { kind: "bump", targets: choice.targets.map((t) => t.index) };
+        cost = boostCost("bump") * choice.targets.length;
+        break;
+      case "buy_hit":
+        boost = { kind: "buy_hit", times: choice.times ?? 1 };
+        cost = boostCost("buy_hit") * boost.times;
+        break;
+      case "reroll_failed":
+        boost = { kind: "reroll_failed", ...(choice.dice !== undefined && { dice: choice.dice }) };
+        cost = boostCost("reroll_failed");
+        break;
+    }
+    if (cost === 0) return { ok: false, error: "Name the dice to change." };
+    const problem = this.edgeProblem(waiting.characterId, cost);
+    if (problem) return { ok: false, error: problem };
+
+    const changed = this.rolls.boost(requestId, boost);
+    if (!changed.ok) return changed;
+    this.payEdge(waiting.characterId, cost);
+    const finished = this.rolls.finish(requestId, { spent: cost, summary: changed.summary });
+    if (!finished.ok) return finished;
+    return this.completeRoll(finished.resolved);
+  }
+
+  /** The player has seen a held roll and lets it count as it stands. */
+  async keepRoll(requestId: string): Promise<Ack> {
+    const waiting = this.rolls.list().find((r) => r.id === requestId);
+    if (!waiting) return { ok: false, error: "That roll is not waiting; it may already have counted or been skipped." };
+    if (!this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+    const finished = this.rolls.finish(requestId);
+    if (!finished.ok) return finished;
+    return this.completeRoll(finished.resolved);
+  }
+
+  /** A roll has counted: apply what follows from it and tell the GM. */
+  private async completeRoll(resolved: ResolvedRoll): Promise<Ack> {
     const healing = resolved.request.healing;
     // Having the treatment done uses it up for these injuries, whatever it healed.
     if (healing && isTreatment(healing.method)) this.roster.markTreated(healing.patient.kind, healing.patient.id, healing.method);
@@ -262,6 +418,12 @@ export class GameSession {
     await this.record({ kind: "roll", resolved });
     if (soak) await this.record(soak.entry);
     if (attacking) this.results.push({ kind: "report", text: await this.settlePlayerAttack(resolved) });
+    // Outside a fight there are no rounds, so each roll is its own: the one expenditure of Edge does not carry to the next.
+    const id = resolved.request.characterId;
+    if (!this.combat && this.edge.has(id)) {
+      this.edge.set(id, startRound(this.edge.get(id)!));
+      this.announceEdge(id);
+    }
     this.blocked = false;
     await this.persist();
     this.schedule();
@@ -420,7 +582,7 @@ export class GameSession {
     this.announce(after);
     const damage = { label: soak.source, damageType: soak.damageType, damageValue: soak.damageValue, resistance: roll, resistedBy: source, taken, after };
     return {
-      report: formatDamageForGm({ ...damage, body: request.pool.total }),
+      report: formatDamageForGm({ ...damage, body: request.pool.total, edge: resolved.edge && formatEdgeNote(this.nameOf(request.characterId), resolved.edge) }),
       entry: { kind: "damage", ...damage },
     };
   }
@@ -460,7 +622,7 @@ export class GameSession {
           glitch: "A glitch changes nothing in the numbers; the GM may add a small complication.",
           criticalGlitch: "A critical glitch changes nothing in the numbers; the GM may add a serious but not fatal complication.",
         },
-        edgeAdvice: "The system does not apply Edge for you yet, so the table keeps track of its own.",
+        edgeAdvice: FALLBACK_EDGE_ADVICE,
         soak: { damageValue, damageType, source: label },
       });
       await this.persist();
@@ -620,12 +782,13 @@ export class GameSession {
       weapon: attack.weapon,
       attackerName: attacking ? player : attack.other.name,
       groupSize: attack.groupSize ?? 1,
+      edgeNote: resolved.edge && formatEdgeNote(player, resolved.edge),
       defender,
       attackRoll: attacking ? roll : opposed.roll,
-      attackDice: attacking ? request.pool.total : opposed.pool,
+      attackDice: attacking ? roll.dice.length : opposed.pool,
       attackedBy: attacking ? source : "system",
       defenseRoll: attacking ? opposed.roll : roll,
-      defenseDice: attacking ? opposed.pool : request.pool.total,
+      defenseDice: attacking ? opposed.pool : roll.dice.length,
       defendedBy: attacking ? "system" : source,
     });
     return settled.text;
@@ -638,6 +801,8 @@ export class GameSession {
     attackerName: string;
     /** How many grunts attacked together; 1 for a single attacker. */
     groupSize: number;
+    /** What the player spent on Edge on their side of the attack, if anything. */
+    edgeNote?: string | undefined;
     defender: Found;
     attackRoll: RollResult;
     attackDice: number;
@@ -661,6 +826,7 @@ export class GameSession {
       defendedBy: a.defendedBy,
       hit: outcome.hit,
       damageValue: outcome.damageValue,
+      edge: a.edgeNote,
     };
     await this.record({
       kind: "attack",
@@ -768,6 +934,7 @@ export class GameSession {
   private async nextRound(): Promise<ToolReply> {
     if (!this.combat) return { ok: false, text: "There is no fight under way. Call start_combat to begin one." };
     this.combat = { ...this.combat, round: this.combat.round + 1 };
+    this.startEdgeRound();
     await this.announceCombat("round", [], this.combat.round);
     return { ok: true, text: `${formatCombat("NEW ROUND.", this.combat, this.statusOf)}\nInitiative is not rerolled.` };
   }
@@ -776,6 +943,7 @@ export class GameSession {
     if (!this.combat) return { ok: false, text: "There is no fight under way." };
     const { round } = this.combat;
     this.combat = null;
+    this.endEdgeConfrontation();
     await this.announceCombat("end", [], round);
     return { ok: true, text: `COMBAT ENDS after ${round} ${round === 1 ? "round" : "rounds"}.` };
   }

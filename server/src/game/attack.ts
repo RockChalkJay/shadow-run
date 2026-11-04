@@ -25,8 +25,8 @@ interface Shared {
   edgeAdvice?: string | undefined;
 }
 
-/** Used when the GM gave no Edge advice of its own. */
-const fallbackEdgeAdvice = "The system does not apply Edge for you yet, so the players keep track of their own.";
+/** Said on a roll request the system wrote itself, when there is no Edge advice from the GM to give. */
+export const FALLBACK_EDGE_ADVICE = "The system tracks your Edge. Spend it before the roll, or hold the roll and decide once you have seen the dice.";
 
 /** A player character attacks someone the system rolls for: they roll the attack, the system rolls the defense. */
 export function attackerRequest(shared: Shared, mine: Side, defender: Other) {
@@ -46,7 +46,7 @@ export function attackerRequest(shared: Shared, mine: Side, defender: Other) {
         glitch: "A glitch does not change whether the attack hits; the GM may add a small complication, such as a wild shot or a jam.",
         criticalGlitch: "A critical glitch means the attack misses and something serious but not fatal goes wrong.",
       },
-      edgeAdvice: shared.edgeAdvice ?? fallbackEdgeAdvice,
+      edgeAdvice: shared.edgeAdvice ?? FALLBACK_EDGE_ADVICE,
     },
     attack: { role: "attacker" as const, weapon, other: { kind: "npc" as const, id: defender.id, name: defender.name } },
   } satisfies { input: unknown; attack: RollRequest["attack"] };
@@ -70,7 +70,7 @@ export function defenderRequest(shared: Shared, mine: Side, attacker: Other, gro
         glitch: "A glitch does not change whether the attack hits; the GM may add a small complication.",
         criticalGlitch: "A critical glitch means the attack hits and something serious but not fatal goes wrong.",
       },
-      edgeAdvice: shared.edgeAdvice ?? fallbackEdgeAdvice,
+      edgeAdvice: shared.edgeAdvice ?? FALLBACK_EDGE_ADVICE,
     },
     attack: { role: "defender" as const, weapon, ...(groupSize > 1 && { groupSize }), other: { kind: "npc" as const, id: attacker.id, name: attacker.name } },
   } satisfies { input: unknown; attack: RollRequest["attack"] };

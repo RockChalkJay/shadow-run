@@ -172,6 +172,40 @@ describe("playing", () => {
     await client.until((e) => e.type === "gm.status" && e.status.phase === "idle" && client.events.filter((x) => x.type === "gm.turn_done").length === 2);
   });
 
+  it("lets a player hold a roll, spend Edge on it and see the result, over the wire", async () => {
+    // Kira's roll misses; she holds it, rerolls two dice with the app (6 and 5), and the roll counts.
+    const { port } = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }, { say: ["You slip by."] }], [6, 5]);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+
+    client.send({ type: "roll.physical", requestId: asked.request.id, dice: "3 3 3 3", hold: true });
+    const updated = await client.until((e) => e.type === "roll.updated");
+    expect(updated).toMatchObject({ request: { id: asked.request.id, held: { roll: { dice: [3, 3, 3, 3] } } } });
+
+    client.send({ type: "roll.edge", requestId: asked.request.id, boost: "reroll", targets: [{ side: "mine", index: 0 }, { side: "mine", index: 1 }] });
+    const rolled = await client.until((e) => e.type === "entry" && e.entry.kind === "roll");
+    expect(rolled).toMatchObject({ entry: { resolved: { roll: { dice: [6, 5, 3, 3], hits: 2 }, edge: { spent: 2 }, outcome: { success: true } } } });
+    expect(await client.until((e) => e.type === "edge.updated" && e.edge.id === "kira")).toMatchObject({ edge: { points: 1 } });
+    await client.until((e) => e.type === "entry" && e.entry.kind === "gm" && e.entry.text === "You slip by.");
+  });
+
+  it("answers a mistaken Edge message with an error and leaves the roll waiting", async () => {
+    const { port } = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }, { say: ["You slip by."] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+
+    client.send({ type: "roll.edge", requestId: asked.request.id, boost: "buy_hit" });
+    expect(await client.until((e) => e.type === "error" && e.message.includes("not been counted yet"))).toBeDefined();
+    client.send({ type: "roll.keep", requestId: asked.request.id });
+    expect(await client.until((e) => e.type === "error" && e.message.includes("has not been counted"))).toBeDefined();
+    client.send({ type: "roll.edge", requestId: asked.request.id, boost: "reroll", targets: Array.from({ length: 21 }, () => ({ side: "mine", index: 0 })) } as never);
+    expect(await client.until((e) => e.type === "error" && e.message.includes("Message not understood"))).toBeDefined();
+  });
+
   it("reports dice rolled at the table", async () => {
     const { port } = await startTable([{ rolls: [rollInput()] }, { say: ["ok"] }]);
     const client = await connect(port);

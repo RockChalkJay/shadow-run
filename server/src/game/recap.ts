@@ -14,12 +14,13 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
       // A resistance roll has no success or failure; the damage line that follows says what came of it.
-      // The same goes for either side of an attack: the attack line says whether it landed.
-      if (request.soak || request.attack) return null;
+      // The same goes for either side of an attack: the attack line says whether it landed. What the player spent on Edge is still told.
+      const edge = entry.resolved.edge && `${nameOf(request.characterId)} spent ${entry.resolved.edge.spent} Edge and ${entry.resolved.edge.summary}.`;
+      if (request.soak || request.attack) return edge ? `[Edge] ${edge}` : null;
       const against = opposed ? ` against ${opposed.by} (${hits(opposed.roll.hits)})` : "";
       const glitch = roll.criticalGlitch ? ", critical glitch" : roll.glitch ? ", glitch" : "";
       const effect = [outcome.consequence, outcome.glitchConsequence].filter(Boolean).join(" ");
-      return `[Roll] ${nameOf(request.characterId)}, ${request.label}: ${outcome.success ? "success" : "failure"} (${hits(roll.hits)}${against}${glitch}). ${effect}`;
+      return `[Roll] ${nameOf(request.characterId)}, ${request.label}: ${outcome.success ? "success" : "failure"} (${hits(roll.hits)}${against}${glitch}). ${effect}${edge ? ` ${edge}` : ""}`;
     }
     case "roll_cancelled":
       return `[Roll skipped] ${nameOf(entry.characterId)}, ${entry.label}.`;

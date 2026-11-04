@@ -50,7 +50,29 @@ export function evaluate(dice: readonly number[], rules: Ruleset = defaultRulese
   };
 }
 
-function explode(dice: readonly number[], d6: D6): number[] {
+/**
+ * The extra dice a roll with exploding 6s earns, checked against those rolled by hand. Every 6 earns another die,
+ * and so does every 6 on those; the dice are given in the order they were earned.
+ */
+export function explosionsFor(base: readonly number[], rolled: readonly number[]): number[] {
+  let used = 0;
+  for (const first of base) {
+    for (let face = first; face === 6; ) {
+      const next = rolled[used];
+      if (next === undefined) {
+        throw new RangeError(`Every 6 earns another die, and so does a 6 on those. You gave ${rolled.length} extra ${rolled.length === 1 ? "die" : "dice"} and it needs more.`);
+      }
+      used += 1;
+      face = next;
+    }
+  }
+  if (used !== rolled.length) {
+    throw new RangeError(`You gave ${rolled.length} extra ${rolled.length === 1 ? "die" : "dice"} but only ${used} ${used === 1 ? "is" : "are"} earned: every 6 earns another die, and so does a 6 on those.`);
+  }
+  return [...rolled];
+}
+
+export function explode(dice: readonly number[], d6: D6): number[] {
   const extra: number[] = [];
   for (const first of dice) {
     for (let face = first; face === 6; ) {

@@ -94,7 +94,7 @@ async function main() {
   check("a session id was captured", !!firstSession, firstSession);
 
   await turn("a risky action that fits the scene", store, session, () =>
-    session.say("kira", "While Margo is looking at Doc, I try to lift the commlink off the table and check what is on it without her noticing."),
+    session.say("kira", "While Doc keeps the fixer talking, I try to lift the fixer's commlink off the table and check what is on it without being noticed."),
   );
   const asked = session.snapshot().pendingRolls;
   check("the GM asks for a roll instead of deciding", asked.length >= 1, `${asked.length} pending`);
@@ -136,7 +136,7 @@ async function main() {
   // A fight: the GM asks for the dice, and once they decide a hit it hurts people through the tools.
   const faces = (request: { pool: { total: number } }, face: number) => String(face).repeat(request.pool.total).split("").join(" ");
   await turn("a ganger shoots a player character", store, session, () =>
-    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira. He is very fast: his initiative numbers are Reaction 9, Intuition 9 and 1 die, so he acts first."),
+    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira. He is very fast: his initiative numbers are Reaction 9, Intuition 9 and 1 die, so he acts first. That speed is for initiative only; use ordinary numbers (Reaction 3, Intuition 3) for his defense."),
   );
   const lastAttack = async () => (await store.recentEntries(50)).findLast((e) => e.kind === "attack");
   check("the GM starts the fight with start_combat, so the system rolls initiative", !!session.snapshot().combat, session.snapshot().combat ? `round ${session.snapshot().combat!.round}, ${session.snapshot().combat!.order.length} in the order` : "no fight was started");
@@ -144,7 +144,13 @@ async function main() {
   check("the GM asks Kira to defend, through the attack tool", defense?.attack?.role === "defender", defense?.label ?? "no roll appeared");
   if (defense) {
     note(`roll: ${defense.label} (${defense.pool.total} dice${defense.opposed ? `, ${defense.opposed.role} against ${defense.opposed.pool}` : ""})`);
-    await turn("Kira fails to dodge", store, session, () => session.submitRoll(defense.id, { mode: "physical", dice: faces(defense, 2) }));
+    // Kira holds her failed dodge and buys a hit with Edge, so the GM is told of the Edge as well as the dice.
+    await turn("Kira fails to dodge, and spends Edge", store, session, async () => {
+      await session.submitRoll(defense.id, { mode: "physical", dice: faces(defense, 2), hold: true });
+      await session.spendEdge(defense.id, { boost: "buy_hit" });
+    });
+    const victimEdge = session.snapshot().edge.find((e) => e.id === defense.characterId);
+    check("the system took the Edge that was spent", victimEdge?.points === (victimEdge?.rank ?? 0) - 3, `${victimEdge?.points} of ${victimEdge?.rank} left`);
   }
   const shot = await lastAttack();
   check("the system settled the shot", shot?.kind === "attack", shot?.kind === "attack" ? `${shot.hit ? "hit" : "missed"}, Damage Value ${shot.damageValue}` : "no attack entry");

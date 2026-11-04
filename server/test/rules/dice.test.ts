@@ -4,6 +4,7 @@ import {
   buyHit,
   defaultRuleset,
   evaluate,
+  explosionsFor,
   MAX_EXPLOSIONS,
   MAX_POOL,
   nonHitIndexes,
@@ -221,5 +222,36 @@ describe("other Edge boosts on a roll", () => {
     const widened = widenGlitch(foe);
     expect(widened).toMatchObject({ glitch: true, criticalGlitch: false, glitchFaces: 2, ones: 1 });
     expect(widenGlitch(evaluate([1, 2, 2, 3])).criticalGlitch).toBe(true);
+  });
+});
+
+describe("explosionsFor", () => {
+  it("accepts exactly the extra dice that 6s earn, in the order they were earned", () => {
+    expect(explosionsFor([3, 3, 3], [])).toEqual([]);
+    expect(explosionsFor([6, 3, 3], [4])).toEqual([4]);
+    expect(explosionsFor([6, 3, 6], [4, 2])).toEqual([4, 2]);
+  });
+
+  it("follows a 6 on an extra die with another extra die", () => {
+    expect(explosionsFor([6, 3], [6, 6, 2])).toEqual([6, 6, 2]);
+    expect(explosionsFor([6, 6], [6, 1, 2])).toEqual([6, 1, 2]);
+  });
+
+  it("refuses too few extra dice, and says what is missing", () => {
+    expect(() => explosionsFor([6, 3], [])).toThrow(/You gave 0 extra dice and it needs more/);
+    expect(() => explosionsFor([6, 3], [6])).toThrow(/You gave 1 extra die and it needs more/);
+  });
+
+  it("refuses extra dice that no 6 earned", () => {
+    expect(() => explosionsFor([3, 3], [4])).toThrow(/You gave 1 extra die but only 0 are earned/);
+    expect(() => explosionsFor([6, 3], [4, 4])).toThrow(/You gave 2 extra dice but only 1 is earned/);
+  });
+
+  it("agrees with how the app explodes dice, whatever the dice", () => {
+    for (let seed = 1; seed <= 25; seed++) {
+      const d6 = seededD6(seed);
+      const roll = rollPool(12, d6, defaultRuleset, { explode: true });
+      expect(explosionsFor(roll.dice, roll.explosions ?? [])).toEqual(roll.explosions ?? []);
+    }
   });
 });

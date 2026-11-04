@@ -103,6 +103,15 @@ describe("formatRecap", () => {
     expect(formatRecap([attackRoll(), attack(false)], nameOf)).toBe("[Attack] Kira missed Ganger with Ares Predator VI.");
   });
 
+  it("says what a player spent on Edge, on their roll and on the resistance and attack rolls that are otherwise left out", () => {
+    const edge = { spent: 3, summary: "bought 1 hit" };
+    const withEdge = (e: TranscriptEntry): TranscriptEntry => ({ ...e, resolved: { ...(e as { resolved: object }).resolved, edge } }) as never;
+    expect(formatRecap([withEdge(resolvedRoll("6 5 3 1"))], nameOf)).toBe("[Roll] Kira, Sneak past the guard: success (2 hits). Kira slips through. Kira spent 3 Edge and bought 1 hit.");
+    expect(formatRecap([withEdge(resistanceRoll())], nameOf)).toBe("[Edge] Kira spent 3 Edge and bought 1 hit.");
+    expect(formatRecap([withEdge(attackRoll())], nameOf)).toBe("[Edge] Kira spent 3 Edge and bought 1 hit.");
+    expect(formatRecap([resistanceRoll(), attackRoll()], nameOf)).toBe("");
+  });
+
   it("summarizes a roll with its verdict and declared consequence", () => {
     expect(formatRecap([resolvedRoll("6 5 3 1")], nameOf)).toBe("[Roll] Kira, Sneak past the guard: success (2 hits). Kira slips through.");
     expect(formatRecap([resolvedRoll("6 5 3 1", true)], nameOf)).toContain("success (2 hits against Guard (0 hits))");
