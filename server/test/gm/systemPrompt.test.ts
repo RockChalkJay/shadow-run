@@ -66,8 +66,9 @@ describe("the GM's system prompt", () => {
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It does not track Edge. The players keep their own Edge.");
-    expect(prompt).not.toContain("does not track Edge or initiative");
+    expect(prompt).toContain("It tracks each player's Edge and what they spend on their own rolls, and tells you when they spend it.");
+    expect(prompt).toContain("Do not award, take away or count Edge yourself.");
+    expect(prompt).not.toContain("does not track Edge");
     expect(prompt).not.toContain("does not track injuries");
   });
 
@@ -95,6 +96,11 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("semi-trained ones (rating 1 to 4) retreat after losing about a quarter");
     expect(prompt).toContain("elite ones (8 to 10) fight on to the last");
     expect(prompt).toContain("these points are your guide for a whole group");
+  });
+
+  it("tells the GM the system keeps Edge and that results already count what was spent", () => {
+    expect(prompt).toContain("The system keeps each player's Edge points and the players spend them on their own rolls");
+    expect(prompt).toContain("the result you receive already counts it");
   });
 
   it("tells the GM the system owns injuries, and how to hurt and heal", () => {

@@ -47,3 +47,14 @@ export interface CharacterView {
   /** Set for a grunt. Its whole condition track is `monitor.physical` out of `monitor.physicalBoxes`; the stun and overflow tracks are unused. */
   grunt?: GruntInfo;
 }
+
+/** A player character's Edge points as the players see them. */
+export interface EdgeView {
+  id: string;
+  /** Edge points on hand. */
+  points: number;
+  /** The Edge attribute, which a session starts with and which Edge above it falls back to. */
+  rank: number;
+  /** Whether this round's one expenditure of Edge is already used. */
+  spentThisRound: boolean;
+}

@@ -17,12 +17,17 @@ function glitchNote(roll: RollResult): string {
   return "";
 }
 
+/** What a player spent on Edge and what it did, for the GM. */
+export function formatEdgeNote(characterName: string, edge: NonNullable<ResolvedRoll["edge"]>): string {
+  return `EDGE. ${characterName} spent ${edge.spent} Edge and ${edge.summary}.`;
+}
+
 /** What the GM is told once a roll is counted. The consequence is the one the GM declared up front. */
 export function formatRollForGm(resolved: ResolvedRoll, characterName: string): string {
   const { request, roll, opposed, outcome, source } = resolved;
   const lines = [
     `ROLL RESULT. ${characterName}: ${request.label}.`,
-    `${characterName} rolled ${diceCount(request.pool.total)} (${source === "app" ? "app dice" : "dice at the table"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
+    `${characterName} rolled ${diceCount(roll.dice.length)} (${source === "app" ? "app dice" : "dice at the table"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
   ];
   if (opposed) {
     lines.push(
@@ -34,6 +39,7 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
     lines.push(`Threshold ${request.threshold ?? 1}.`);
   }
 
+  if (resolved.edge) lines.push(formatEdgeNote(characterName, resolved.edge));
   const margin = outcome.netHits > 0 ? ` by ${plural(outcome.netHits, "net hit")}` : "";
   lines.push(`${outcome.success ? "SUCCESS" : "FAILURE"}${margin}.`);
   if (opposed) {
@@ -96,6 +102,8 @@ export interface DamageReport {
   resistedBy: keyof typeof how;
   taken: number;
   after: CharacterView;
+  /** What the player spent on Edge for the resistance roll, if anything. */
+  edge?: string | undefined;
   /** Set when a grunt passed their Professional Rating with this damage. */
   composure?: { roll: RollResult; pool: number; threshold: number; held: boolean };
 }
@@ -106,6 +114,7 @@ export function formatDamageForGm(r: DamageReport): string {
   return [
     `DAMAGE RESULT. ${r.label}: ${r.damageValue} ${r.damageType} damage to ${r.after.name}.`,
     `${r.after.name} resisted with Body ${r.body} (${how[r.resistedBy]}): ${showDice(r.resistance)} = ${plural(r.resistance.hits, "hit")}, so ${got}.`,
+    ...(r.edge ? [r.edge] : []),
     formatStanding(r.after),
     ...(r.composure ? [formatComposure(r.after, r.composure)] : []),
   ].join("\n");
@@ -167,6 +176,8 @@ export interface AttackReport {
   defendedBy: keyof typeof how;
   hit: boolean;
   damageValue: number;
+  /** What the player spent on Edge on their side of the attack, if anything. */
+  edge?: string | undefined;
 }
 
 /** What the GM is told once an attack has been rolled on both sides. */
@@ -176,6 +187,7 @@ export function formatAttackForGm(r: AttackReport): string {
     `ATTACK RESULT. ${r.label}.`,
     `${r.attacker} attacked ${(r.groupSize ?? 1) > 1 ? `as a group of ${r.groupSize} ` : ""}with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
     `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
+    ...(r.edge ? [r.edge] : []),
   ];
   if (r.hit) {
     const net = r.damageValue - base;

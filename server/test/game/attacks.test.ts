@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FALLBACK_EDGE_ADVICE } from "../../src/game/attack.js";
 import { MAX_PENDING_ROLLS } from "../../src/game/rollManager.js";
 import type { GmDriver, GmTools } from "../../src/gm/driver.js";
 import { ScriptedGmDriver } from "../../src/gm/scriptedDriver.js";
@@ -165,7 +166,7 @@ describe("what the roll request says about Edge", () => {
     const withAdvice = await fight([kiraShoots({ edgeAdvice: "Worth 2 Edge to add a die: the stairwell is dark and he has the light behind him." })], []);
     expect(withAdvice.session.snapshot().pendingRolls[0]?.edgeAdvice).toBe("Worth 2 Edge to add a die: the stairwell is dark and he has the light behind him.");
     const without = await fight([gangerShoots()], []);
-    expect(without.session.snapshot().pendingRolls[0]?.edgeAdvice).toBe("The system does not apply Edge for you yet, so the players keep track of their own.");
+    expect(without.session.snapshot().pendingRolls[0]?.edgeAdvice).toBe(FALLBACK_EDGE_ADVICE);
   });
 });
 

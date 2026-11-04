@@ -113,7 +113,13 @@ async function main() {
     check("Edge advice names a real Edge option", /reroll|automatic hit|add 1|explode|failed dice|2s count|Edge/i.test(request.edgeAdvice), request.edgeAdvice);
 
     const failed = "2 ".repeat(request.pool.total).trim();
-    const said = await turn("the dice come up empty", store, session, () => session.submitRoll(request.id, { mode: "physical", dice: failed }));
+    // Kira holds her empty roll and buys a hit with Edge, so the GM is told of the Edge as well as the dice.
+    const said = await turn("the dice come up empty, and Kira spends Edge", store, session, async () => {
+      await session.submitRoll(request.id, { mode: "physical", dice: failed, hold: true });
+      await session.spendEdge(request.id, { boost: "buy_hit" });
+    });
+    const kiraEdge = session.snapshot().edge.find((e) => e.id === "kira");
+    check("the system took the Edge Kira spent", kiraEdge?.points === 0, `${kiraEdge?.points} of ${kiraEdge?.rank} left`);
     check("the GM carries on in the same session", session.gmSessionId === firstSession);
     const words = (t: string) => new Set(t.toLowerCase().match(/[a-z]{5,}/g) ?? []);
     const declared = words(request.consequences.failure);

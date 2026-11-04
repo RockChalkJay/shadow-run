@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CombatState } from "./combat.js";
-import type { CharacterView, DamageType, HealType, Status } from "./character.js";
+import type { CharacterView, DamageType, EdgeView, HealType, Status } from "./character.js";
 import type { CharacterSheet } from "./sheet.js";
 import type { ResolvedRoll, RollRequest, RollResult, Weapon } from "./roll.js";
 
@@ -13,10 +13,39 @@ export const MAX_SAY = 2000;
 export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start") }),
   z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
-  /** Roll the pending request for the player with the app's dice. */
-  z.object({ type: z.literal("roll.app"), requestId: z.string() }),
-  /** Report dice rolled at the table, e.g. "6 5 3 1 1 2". */
-  z.object({ type: z.literal("roll.physical"), requestId: z.string(), dice: z.string().max(400) }),
+  /**
+   * Roll the pending request for the player with the app's dice. `edge: "dice"` spends 4 Edge to add the Edge
+   * attribute to the pool and make 6s explode; `hold` counts the roll but waits for the player to decide on Edge.
+   */
+  z.object({ type: z.literal("roll.app"), requestId: z.string(), edge: z.literal("dice").optional(), hold: z.boolean().optional() }),
+  /**
+   * Report dice rolled by hand, e.g. "6 5 3 1 1 2". With Edge dice, `explosions` are the extra dice rolled for 6s
+   * (the app rolls them if they are left out).
+   */
+  z.object({
+    type: z.literal("roll.physical"),
+    requestId: z.string(),
+    dice: z.string().max(400),
+    explosions: z.string().max(400).optional(),
+    edge: z.literal("dice").optional(),
+    hold: z.boolean().optional(),
+  }),
+  /**
+   * Spend Edge on a held roll, which then counts. `reroll` rerolls the dice at `targets` (1 Edge each, yours or the
+   * opponent's), `bump` adds 1 to your dice at `targets` (2 each), `buy_hit` adds `times` hits (3 each), and
+   * `reroll_failed` rerolls every die that is not a hit (4). `dice` are the new values if rolled by hand; the app
+   * rolls them if left out.
+   */
+  z.object({
+    type: z.literal("roll.edge"),
+    requestId: z.string(),
+    boost: z.enum(["reroll", "bump", "buy_hit", "reroll_failed"]),
+    targets: z.array(z.object({ side: z.enum(["mine", "theirs"]), index: z.number().int().min(0).max(999) })).max(20).optional(),
+    times: z.number().int().min(1).max(10).optional(),
+    dice: z.string().max(400).optional(),
+  }),
+  /** Let a held roll count as it stands, spending no Edge. */
+  z.object({ type: z.literal("roll.keep"), requestId: z.string() }),
   /** Skip a pending roll. */
   z.object({ type: z.literal("roll.cancel"), requestId: z.string() }),
   /** Stop the GM mid-turn. */
@@ -95,6 +124,8 @@ export interface Snapshot {
   /** Every player character, and every non-player character the GM has put on the table. */
   characters: CharacterView[];
   pendingRolls: RollRequest[];
+  /** Every player character's Edge points. */
+  edge: EdgeView[];
   /** The fight in progress, if there is one. */
   combat: CombatState | null;
   /** The most recent entries, oldest first. */
@@ -121,6 +152,9 @@ export type ServerEvent =
   | { type: "combat.updated"; combat: CombatState | null }
   | { type: "entry"; entry: TranscriptEntry }
   | { type: "roll.requested"; request: RollRequest }
+  /** A pending roll changed: it was counted and is waiting for the player to decide on Edge. */
+  | { type: "roll.updated"; request: RollRequest }
+  | { type: "edge.updated"; edge: EdgeView }
   | { type: "roll.cancelled"; requestId: string }
   /** Sent to the one client whose message was refused. */
   | { type: "error"; message: string };

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { ClientMessage, type ServerEvent } from "@shadow-run/shared";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
-import type { Ack, GameSession } from "../game/session.js";
+import type { Ack, EdgeChoice, GameSession } from "../game/session.js";
 import { refusalFor } from "./origin.js";
 
 export interface HubOptions {
@@ -15,6 +15,20 @@ export interface HubOptions {
 }
 
 /** The table's connection to browsers and other clients: one WebSocket, plus a health check. */
+/** What a player's Edge message asks for, in the shape the session works with. */
+function edgeChoice(message: Extract<ClientMessage, { type: "roll.edge" }>): EdgeChoice {
+  switch (message.boost) {
+    case "reroll":
+      return { boost: "reroll", targets: message.targets ?? [], ...(message.dice !== undefined && { dice: message.dice }) };
+    case "bump":
+      return { boost: "bump", targets: message.targets ?? [] };
+    case "buy_hit":
+      return { boost: "buy_hit", ...(message.times !== undefined && { times: message.times }) };
+    case "reroll_failed":
+      return { boost: "reroll_failed", ...(message.dice !== undefined && { dice: message.dice }) };
+  }
+}
+
 export class Hub {
   private session: GameSession | undefined;
   private readonly server: Server;
@@ -95,9 +109,19 @@ export class Hub {
       case "player.say":
         return session.say(message.characterId, message.text);
       case "roll.app":
-        return session.submitRoll(message.requestId, { mode: "app" });
+        return session.submitRoll(message.requestId, { mode: "app", ...(message.edge && { edge: message.edge }), ...(message.hold && { hold: true }) });
       case "roll.physical":
-        return session.submitRoll(message.requestId, { mode: "physical", dice: message.dice });
+        return session.submitRoll(message.requestId, {
+          mode: "physical",
+          dice: message.dice,
+          ...(message.explosions !== undefined && { explosions: message.explosions }),
+          ...(message.edge && { edge: message.edge }),
+          ...(message.hold && { hold: true }),
+        });
+      case "roll.edge":
+        return session.spendEdge(message.requestId, edgeChoice(message));
+      case "roll.keep":
+        return session.keepRoll(message.requestId);
       case "roll.cancel":
         return session.cancelRoll(message.requestId);
       case "turn.cancel":
