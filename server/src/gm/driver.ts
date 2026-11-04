@@ -14,6 +14,8 @@ export interface GmTools {
   dealDamage(input: unknown): Promise<ToolReply>;
   /** One attack: the system rolls both sides, adds the net hits to the weapon's Damage Value, and hurts the defender. */
   attack(input: unknown): Promise<ToolReply>;
+  /** Gives a player character a point of Edge for something that earned it in a confrontation. */
+  awardEdge(input: unknown): Promise<ToolReply>;
   /** Begins a fight: the system rolls initiative for everyone named and keeps the order. */
   startCombat(input: unknown): Promise<ToolReply>;
   /** Adds people to a fight already under way. */

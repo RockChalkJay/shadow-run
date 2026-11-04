@@ -56,6 +56,7 @@ export class ClaudeGmDriver implements GmDriver {
       rollNpc: (input) => driver?.current?.tools.rollNpc(input) ?? Promise.resolve(NO_TURN),
       dealDamage: (input) => driver?.current?.tools.dealDamage(input) ?? Promise.resolve(NO_TURN),
       attack: (input) => driver?.current?.tools.attack(input) ?? Promise.resolve(NO_TURN),
+      awardEdge: (input) => driver?.current?.tools.awardEdge(input) ?? Promise.resolve(NO_TURN),
       startCombat: (input) => driver?.current?.tools.startCombat(input) ?? Promise.resolve(NO_TURN),
       joinCombat: (input) => driver?.current?.tools.joinCombat(input) ?? Promise.resolve(NO_TURN),
       nextRound: () => driver?.current?.tools.nextRound() ?? Promise.resolve(NO_TURN),

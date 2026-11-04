@@ -98,6 +98,8 @@ function show(entry: TranscriptEntry) {
       line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
       line(`  ${formatStanding(entry.after)}\n`);
       return;
+    case "edge":
+      return line(entry.gained < 0 ? `  ${entry.name} loses ${-entry.gained} Edge: ${entry.reason}` : `  ${entry.name} gains ${entry.gained} Edge: ${entry.reason}`);
     case "combat":
       return line(
         entry.event === "start" ? `\n  A fight begins: ${entry.names.join(", ")}`

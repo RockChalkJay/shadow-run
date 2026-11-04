@@ -386,7 +386,7 @@ describe("Edge on the rolls that follow from an attack", () => {
     // Ganger defends with 4 dice, none hits; Kira's held roll has 0 hits until she buys one.
     const t = await table([3, 3, 3, 3, 3, 3, 3]);
     await t.gm((tools) =>
-      tools.attack({ label: "Kira shoots", attacker: { kind: "pc", id: "kira" }, defender: ganger, weapon: colt, attackPool: { total: 4, breakdown: "x" }, defensePool: { total: 4, breakdown: "x" }, stakes: "A shot." }),
+      tools.attack({ label: "Kira shoots", attacker: { kind: "pc", id: "kira" }, defender: ganger, weapon: colt, attackPool: { total: 4, breakdown: "x" }, defensePool: { total: 4, breakdown: "x" }, attackRating: 6, defenseRating: 4, stakes: "A shot." }),
     );
     const id = t.pending()[0]!.id;
     await t.session.submitRoll(id, { mode: "physical", dice: "3 3 3 3", hold: true });

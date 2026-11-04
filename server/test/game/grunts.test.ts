@@ -130,6 +130,8 @@ describe("a group attack", () => {
     weapon: colt,
     attackPool: pool(5),
     defensePool: pool(4),
+    attackRating: 6,
+    defenseRating: 4,
     stakes: "Three guards have her in their sights.",
     ...over,
   });
@@ -242,6 +244,8 @@ describe("a player character attacking a grunt", () => {
         weapon: colt,
         attackPool: pool(6),
         defensePool: pool(4),
+        attackRating: 6,
+        defenseRating: 4,
         stakes: "A guard in the doorway.",
       }),
     );
