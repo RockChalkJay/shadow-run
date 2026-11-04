@@ -481,11 +481,12 @@ export class GameSession {
         break;
       }
       case "special_effect": {
-        const what = input.description?.trim() ?? "";
+        // The player typed this, and the GM reads it inside a report it treats as fact: one line, quoted as what they said.
+        const what = (input.description ?? "").replace(/\s+/g, " ").replace(/"/g, "'").trim();
         if (what.length < 5) return { ok: false, error: "Describe the special effect, so the GM knows what the player has in mind." };
         this.payEdge(characterId, cost);
-        detail = `created a special effect: ${what}`;
-        report = `EDGE. ${name} spent ${cost} Edge to create a special effect: ${what}. Something fortuitous happens that tilts the scene slightly in their favor, and it is for you to decide exactly what. Make it happen in what you narrate; it should help, not win the scene.`;
+        detail = `created a special effect: "${what}"`;
+        report = `EDGE. ${name} spent ${cost} Edge to create a special effect. The player describes it as: "${what}". Something fortuitous happens that tilts the scene slightly in their favor, and it is for you to decide exactly what. Make it happen in what you narrate; it should help, not win the scene.`;
         break;
       }
     }
