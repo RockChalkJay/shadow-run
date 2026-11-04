@@ -1,6 +1,7 @@
 import type { GmStatus } from "@shadow-run/shared";
 import { useEffect, useRef, useState } from "react";
 import { useTable } from "./connection";
+import { FightPanel, NpcPanel, PartyPanel } from "./Rail";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
 
@@ -71,8 +72,9 @@ export function App({ url }: { url: string }) {
           <div ref={end} />
         </div>
         <aside className="rail">
-          <div><h4>PARTY</h4><div className="ph">Health and Edge arrive in the next steps</div></div>
-          <div><h4>FIGHT</h4><div className="ph">The initiative order arrives in the next steps</div></div>
+          <PartyPanel party={state.party} characters={state.characters} speaking={who} />
+          <FightPanel combat={state.combat} characters={state.characters} />
+          <NpcPanel characters={state.characters} />
         </aside>
       </div>
       <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
