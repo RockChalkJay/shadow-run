@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host localhost --port 5173 --strictPort",
+    "dev": "vite --host localhost --port ${WEB_PORT:-5173} --strictPort",
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc -p ."
