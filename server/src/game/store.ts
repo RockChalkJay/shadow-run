@@ -1,6 +1,6 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { CharacterSheet, ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { TREATMENTS } from "../rules/index.js";
 
@@ -61,9 +61,14 @@ export const SavedState = z.object({
 });
 export type SavedState = z.infer<typeof SavedState>;
 
+/** The sheet files among a folder's names, in the order the characters are read: by id, whatever order the disk lists them in. */
+export function sheetFiles(names: readonly string[]): string[] {
+  return names.filter((name) => name.endsWith(".json")).sort();
+}
+
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
-/** One campaign's files: the party, the game state and the transcript. Writes are serialized and atomic. */
+/** One campaign's files: the character sheets, the game state and the transcript. Writes are serialized and atomic. */
 export class CampaignStore {
   private chain: Promise<unknown> = Promise.resolve();
   private lastId: number | undefined;
@@ -95,23 +100,55 @@ export class CampaignStore {
 
   private writeJson(name: string, value: unknown): Promise<void> {
     return this.enqueue(async () => {
-      await mkdir(this.dir, { recursive: true });
+      await mkdir(dirname(this.file(name)), { recursive: true });
       const tmp = `${this.file(name)}.${process.pid}.tmp`;
       await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
       await rename(tmp, this.file(name));
     });
   }
 
+  /**
+   * The player characters, one `characters/<id>.json` file each, in order of id. A file must be named after the
+   * character it holds, so there can be no two with one id. Null when there are no sheets at all.
+   */
   async loadParty(): Promise<Party | null> {
-    const raw = await this.readJson("party.json");
-    if (raw === null) return null;
-    const parsed = Party.safeParse(raw);
-    if (!parsed.success) throw new Error(`${this.file("party.json")} is not a valid party: ${z.prettifyError(parsed.error)}`);
-    return parsed.data;
+    let names: string[];
+    try {
+      names = await readdir(this.file("characters"));
+    } catch (err) {
+      if (isMissing(err)) return null;
+      throw err;
+    }
+    const files = sheetFiles(names);
+    if (files.length === 0) return null;
+
+    const sheets: CharacterSheet[] = [];
+    for (const name of files) {
+      const raw = await this.readJson(join("characters", name));
+      const parsed = CharacterSheet.safeParse(raw);
+      const path = this.file(join("characters", name));
+      if (!parsed.success) throw new Error(`${path} is not a valid character sheet: ${z.prettifyError(parsed.error)}`);
+      if (name !== `${parsed.data.id}.json`) {
+        throw new Error(`${path} holds the character "${parsed.data.id}", so the file must be named ${parsed.data.id}.json`);
+      }
+      sheets.push(parsed.data);
+    }
+    return sheets;
   }
 
-  saveParty(party: Party): Promise<void> {
-    return this.writeJson("party.json", party);
+  /**
+   * The campaign's characters, or `fallback` written out as sheets when it has none. Either way they are read back
+   * from disk, so every start sees them in the same order, and `created` says which happened.
+   */
+  async loadOrCreateParty(fallback: Party): Promise<{ party: Party; created: boolean }> {
+    const existing = await this.loadParty();
+    if (existing) return { party: existing, created: false };
+    await this.saveParty(fallback);
+    return { party: (await this.loadParty()) ?? fallback, created: true };
+  }
+
+  async saveParty(party: Party): Promise<void> {
+    await Promise.all(party.map((sheet) => this.writeJson(join("characters", `${sheet.id}.json`), sheet)));
   }
 
   async loadState(): Promise<SavedState | null> {

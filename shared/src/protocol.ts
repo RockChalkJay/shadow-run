@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CharacterView, DamageType, HealType, Status } from "./character.js";
-import type { PartyMember } from "./party.js";
+import type { CharacterSheet } from "./sheet.js";
 import type { ResolvedRoll, RollRequest, RollResult, Weapon } from "./roll.js";
 
 export type { Status };
@@ -89,7 +89,7 @@ export interface Usage {
 
 export interface Snapshot {
   type: "snapshot";
-  party: PartyMember[];
+  party: CharacterSheet[];
   /** Every player character, and every non-player character the GM has put on the table. */
   characters: CharacterView[];
   pendingRolls: RollRequest[];

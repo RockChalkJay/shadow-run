@@ -1,23 +1,31 @@
-import type { PartyMember } from "@shadow-run/shared";
+import type { CharacterSheet } from "@shadow-run/shared";
 
-/** Two made-up characters so the table can be tried before real character sheets exist. */
-export const demoParty: PartyMember[] = [
+/** Two made-up characters so the table can be tried before real ones exist. */
+export const demoParty: CharacterSheet[] = [
   {
+    version: 1,
     id: "kira",
     name: "Kira",
-    body: 5,
-    willpower: 3,
-    edge: 3,
-    sheet:
-      "Demo character. Human street samurai. Body 5, Agility 6, Reaction 5, Strength 4, Willpower 3, Logic 2, Intuition 4, Charisma 2, Edge 3. Firearms 6, Close Combat 4, Athletics 3, Stealth 3.",
+    metatype: "human",
+    attributes: { body: 5, agility: 6, reaction: 5, strength: 4, willpower: 3, logic: 2, intuition: 4, charisma: 2, edge: 3, essence: 6, magic: 0, resonance: 0 },
+    initiativeDice: 1,
+    skills: { firearms: 6, closeCombat: 4, athletics: 3, stealth: 3 },
+    specializations: [],
+    gear: "",
+    qualities: "",
+    notes: "Demo character. Street samurai.",
   },
   {
+    version: 1,
     id: "doc",
     name: "Doc",
-    body: 3,
-    willpower: 5,
-    edge: 4,
-    sheet:
-      "Demo character. Elf street mage. Body 3, Agility 3, Reaction 3, Strength 2, Willpower 5, Logic 5, Intuition 4, Charisma 4, Edge 4, Magic 6. Sorcery 6, Conjuring 4, Biotech 3, Perception 3.",
+    metatype: "elf",
+    attributes: { body: 3, agility: 3, reaction: 3, strength: 2, willpower: 5, logic: 5, intuition: 4, charisma: 4, edge: 4, essence: 6, magic: 6, resonance: 0 },
+    initiativeDice: 1,
+    skills: { sorcery: 6, conjuring: 4, biotech: 3, perception: 3 },
+    specializations: [],
+    gear: "",
+    qualities: "",
+    notes: "Demo character. Street mage.",
   },
 ];

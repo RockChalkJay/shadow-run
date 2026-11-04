@@ -1,4 +1,4 @@
-import type { PartyMember } from "@shadow-run/shared";
+import type { CharacterSheet } from "@shadow-run/shared";
 import type { GmDriver, GmTurnContext, GmTurnInput } from "./driver.js";
 
 export interface ScriptedTurn {
@@ -72,7 +72,7 @@ export class ScriptedGmDriver implements GmDriver {
 }
 
 /** A short demo for trying the table: one opening scene with a roll, then replies that echo what the table did. */
-export function demoScript(party: readonly PartyMember[]): Script {
+export function demoScript(party: readonly CharacterSheet[]): Script {
   const first = party[0];
   return (input) => {
     if (input.kind === "open" && first) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultEdgeCatalog } from "../../src/rules/index.js";
 import { buildSystemPrompt, DEFAULT_PREMISE } from "../../src/gm/systemPrompt.js";
+import { describeCharacter } from "../../src/game/sheetText.js";
 import { party } from "../helpers.js";
 
 const prompt = buildSystemPrompt({ party });
@@ -8,8 +9,15 @@ const prompt = buildSystemPrompt({ party });
 describe("the GM's system prompt", () => {
   it("introduces every character with the id the tools need and the sheet the GM builds pools from", () => {
     for (const member of party) {
-      expect(prompt).toContain(`${member.name} (id: ${member.id}). ${member.sheet}`);
+      expect(prompt).toContain(`${member.name} (id: ${member.id}). ${describeCharacter(member)}`);
     }
+    expect(prompt).toContain(
+      "Kira (id: kira). Human. Body 5, Agility 6, Reaction 5, Strength 4, Willpower 3, Logic 2, Intuition 4, Charisma 2, Edge 3, Essence 6. Initiative: Reaction + Intuition = 9, plus 1D6. Skills: Athletics 3, Close Combat 4, Firearms 6, Stealth 3. Demo character. Street samurai.",
+    );
+  });
+
+  it("tells the GM every number on a sheet is exact, and that a skill left out means no ranks", () => {
+    expect(prompt).toContain("Every number below is exact, and a skill that is not listed means the character has no ranks in it.");
   });
 
   it("makes the dice the system's, the consequences binding, and the GM wait for the result", () => {

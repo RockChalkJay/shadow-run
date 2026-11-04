@@ -49,7 +49,7 @@ export const RollRequestInput = z.object({
         .min(0)
         .max(6)
         .default(6)
-        .describe("The patient's Essence: 6 with no cyberware or bioware, less with it. Sets the difficulty; ignored for natural recovery"),
+        .describe("The patient's Essence: 6 with no cyberware or bioware, less with it. Sets the difficulty; ignored for natural recovery and for a player character, whose sheet gives it"),
     })
     .optional()
     .describe("Set only when this roll is an attempt to heal. The system sets the threshold, so leave it out; after the roll, spend the result with the heal tool"),

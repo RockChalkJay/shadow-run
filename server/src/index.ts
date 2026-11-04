@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
@@ -15,11 +16,10 @@ async function main() {
   const config = loadConfig();
   const store = new CampaignStore(join(config.campaignsDir, config.campaign));
 
-  let party = await store.loadParty();
-  if (!party) {
-    party = demoParty;
-    await store.saveParty(party);
-    console.log(`No party.json in ${store.dir}; wrote a demo party there. Edit it to play your own characters.`);
+  const { party, created } = await store.loadOrCreateParty(demoParty);
+  if (created) {
+    console.log(`No character sheets in ${join(store.dir, "characters")}; wrote two demo characters there. Edit them or add your own, then restart.`);
+    if (existsSync(join(store.dir, "party.json"))) console.log("The party.json in that folder is no longer read.");
   }
 
   let driver: GmDriver;

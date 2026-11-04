@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GmDriver, GmTurnContext } from "../../src/gm/driver.js";
 import { scriptedD6 } from "../../src/rules/index.js";
-import { newSession, rollInput } from "../helpers.js";
+import { newSession, party, rollInput } from "../helpers.js";
 
 // Kira: Body 5, Willpower 3 -> Physical 11, Stun 10, Overflow 10. Doc, her healer, has Body 3 and Willpower 5.
 const kira = { kind: "pc", id: "kira" };
@@ -9,6 +9,9 @@ const ganger = { kind: "npc", id: "ganger-1", name: "Ganger", body: 3, willpower
 const hurt = (target: object, damageValue: number, damageType = "physical") => ({ label: "Test harm", target, damageValue, damageType });
 
 type Job = (ctx: GmTurnContext) => Promise<unknown>;
+
+/** The demo party, with Kira's sheet giving her this much Essence. */
+const kiraWithEssence = (essence: number) => ({ party: party.map((m) => (m.id === "kira" ? { ...m, attributes: { ...m.attributes, essence } } : m)) });
 
 /** A session whose GM does whatever job it is next given, one job per turn, and a few helpers around it. */
 async function clinic(faces: number[] = [], extra: Parameters<typeof newSession>[1] = {}) {
@@ -68,11 +71,23 @@ describe("a healing roll", () => {
     expect(t.pending()[0]).toMatchObject({ healing: { method: "first_aid", threshold: 0, autoHit: true, essence: 6, patient: { kind: "pc", id: "kira", name: "Kira" } } });
   });
 
-  it("sets the threshold from Essence whatever the GM asks for", async () => {
-    const t = await clinic();
+  it("sets the threshold from the patient's Essence whatever the GM asks for", async () => {
+    const t = await clinic([], kiraWithEssence(3));
     await t.hurtKira(6);
-    await t.attempt("first_aid", kira, 3, { threshold: 1 });
-    expect(t.pending()[0]).toMatchObject({ threshold: 2, healing: { threshold: 2, autoHit: false } });
+    await t.attempt("first_aid", kira, 6, { threshold: 1 });
+    expect(t.pending()[0]).toMatchObject({ threshold: 2, healing: { threshold: 2, autoHit: false, essence: 3 } });
+  });
+
+  it("takes a player character's Essence from their sheet, not from the GM, and a non-player character's from the GM", async () => {
+    const t = await clinic([2, 2, 2], kiraWithEssence(4));
+    await t.hurtKira(6);
+    await t.attempt("medkit", kira, 6);
+    expect(t.pending()[0]).toMatchObject({ healing: { essence: 4, threshold: 1, autoHit: false } });
+    await t.answer("3 3 3 3 3 3 3 3 3");
+
+    await t.gm((ctx) => ctx.tools.dealDamage(hurt(ganger, 6)));
+    await t.attempt("first_aid", { kind: "npc", id: "ganger-1" }, 2);
+    expect(t.pending()[0]).toMatchObject({ healing: { essence: 2, threshold: 3 } });
   });
 
   it("is a simple test, not an opposed one", async () => {
@@ -109,7 +124,7 @@ describe("First Aid", () => {
   });
 
   it("follows the book's example: Essence 3, 4 hits against a threshold of 2 heals one overflow box", async () => {
-    const t = await clinic();
+    const t = await clinic([], kiraWithEssence(3));
     await t.hurtKira(13);
     expect(t.character("kira").monitor).toMatchObject({ physical: 11, overflow: 2 });
     await t.attempt("first_aid", kira, 3);
@@ -217,7 +232,7 @@ describe("natural recovery", () => {
 
 describe("treatments that can be received once", () => {
   it("are used up by an attempt even if it heals nothing, until the patient is hurt again", async () => {
-    const t = await clinic();
+    const t = await clinic([], kiraWithEssence(3));
     await t.hurtKira(6);
     await t.attempt("first_aid", kira, 3);
     await t.answer("3 3 3 3 3 3 3 3 3");

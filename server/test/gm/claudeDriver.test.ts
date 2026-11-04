@@ -126,7 +126,12 @@ describe("a turn with the CLI", () => {
 
   it("writes the latest party and premise into the prompt each time it starts", async () => {
     const first = await table([{ steps: [{ say: "Hi." }] }]);
-    const extra = { id: "razor", name: "Razor", body: 4, willpower: 4, edge: 2, sheet: "Demo. Human face." };
+    const extra = {
+      ...party[0]!,
+      id: "razor",
+      name: "Razor",
+      notes: "Demo. Human face.",
+    };
     const second = await ClaudeGmDriver.start({ party: [...party, extra], premise: "A courier vanishes.", claudeBin: FAKE_GM, workDir: first.workDir });
     open.push(second);
     const written = await readFile(join(first.workDir, "system-prompt.md"), "utf8");

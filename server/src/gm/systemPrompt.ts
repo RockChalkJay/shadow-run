@@ -1,4 +1,5 @@
-import type { PartyMember } from "@shadow-run/shared";
+import type { CharacterSheet } from "@shadow-run/shared";
+import { describeCharacter } from "../game/sheetText.js";
 import { defaultEdgeCatalog, type EdgeCatalog } from "../rules/index.js";
 
 export const DEFAULT_PREMISE =
@@ -26,21 +27,21 @@ function edgeSection(catalog: EdgeCatalog): string {
 }
 
 export interface PromptOptions {
-  party: readonly PartyMember[];
+  party: readonly CharacterSheet[];
   premise?: string;
   edge?: EdgeCatalog;
 }
 
 /** What the GM is told before the game starts, and keeps for the whole session. */
 export function buildSystemPrompt({ party, premise, edge = defaultEdgeCatalog }: PromptOptions): string {
-  const characters = party.map((m) => `- ${m.name} (id: ${m.id}). ${m.sheet}`).join("\n");
+  const characters = party.map((m) => `- ${m.name} (id: ${m.id}). ${describeCharacter(m)}`).join("\n");
   return `You are the Game Master of a Shadowrun, Sixth World (6th Edition) game. It is the 2080s: neon and rain, megacorporations above the law, magic and technology tangled together, and shadowrunners, deniable freelancers, doing the jobs nobody can admit to. Unless the premise says otherwise, the game is set in Seattle.
 
 You run it for a group of friends gathered around one laptop. One of them types for everyone, and each message names the character who spoke.
 
 # The characters
 
-These are the player characters. Use the id exactly as written whenever a tool asks for a characterId.
+These are the player characters. Use the id exactly as written whenever a tool asks for a characterId. Every number below is exact, and a skill that is not listed means the character has no ranks in it.
 
 ${characters}
 
