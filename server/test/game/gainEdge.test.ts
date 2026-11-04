@@ -62,6 +62,11 @@ async function fight(extra: Parameters<typeof newSession>[1] = {}, begun = true)
   return { ...made, gm, edgeOf, jobs };
 }
 const text = (r: unknown) => (r as { text: string }).text;
+/** Kira makes the attack that is waiting for her. */
+const makeAttack = async (t: { session: { snapshot(): { pendingRolls: Array<{ id: string }> }; submitRoll(id: string, e: object): Promise<unknown>; whenIdle(): Promise<void> } }) => {
+  await t.session.submitRoll(t.session.snapshot().pendingRolls[0]!.id, { mode: "physical", dice: "3 3 3 3 3 3" });
+  await t.session.whenIdle();
+};
 
 describe("Edge from a gap between Attack Rating and Defense Rating", () => {
   it("goes to a player who attacks with a rating four or more above the target's, before the roll", async () => {
@@ -132,15 +137,60 @@ describe("Edge from a gap between Attack Rating and Defense Rating", () => {
   });
 });
 
+describe("Edge for an attack that is then skipped", () => {
+  it("is taken back, and the GM is told", async () => {
+    const t = await fight();
+    await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
+    expect(t.edgeOf("kira").points).toBe(4);
+    t.jobs.push(async () => undefined);
+    await t.session.cancelRoll(t.session.snapshot().pendingRolls[0]!.id);
+    await t.session.whenIdle();
+    expect(t.edgeOf("kira").points).toBe(3);
+    expect((await t.store.recentEntries(20)).filter((e) => e.kind === "edge").map((e) => (e as { gained: number }).gained)).toEqual([1, -1]);
+    expect(formatRecap((await t.store.recentEntries(20)).filter((e) => e.kind === "edge"), (id) => id)).toBe(
+      "[Edge] Kira gained 1 Edge: Attack Rating 9 against Defense Rating 5.\n[Edge] Kira lost 1 Edge: taken back because the attack was not made.",
+    );
+  });
+
+  it("cannot be used to farm Edge: skipping uses up the round's limit, and nothing is kept", async () => {
+    const t = await fight();
+    for (let i = 0; i < 2; i++) {
+      await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
+      await t.session.cancelRoll(t.session.snapshot().pendingRolls[0]!.id);
+      await t.session.whenIdle();
+    }
+    expect(t.edgeOf("kira").points).toBe(3);
+    const third = await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
+    expect(text(third)).toContain("has already gained the most allowed this round");
+    expect(t.edgeOf("kira").points).toBe(3);
+  });
+
+  it("is kept once the attack is made, even if the player waits on Edge first", async () => {
+    const t = await fight();
+    await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
+    const id = t.session.snapshot().pendingRolls[0]!.id;
+    await t.session.submitRoll(id, { mode: "physical", dice: "3 3 3 3 3 3", hold: true });
+    await t.session.cancelRoll(id);
+    await t.session.whenIdle();
+    expect(t.edgeOf("kira").points).toBe(4);
+  });
+
+  it("is kept by a player who defends, since a defense cannot be skipped", async () => {
+    const t = await fight();
+    await t.gm((tools) => tools.attack(gangerShoots(5, 9)));
+    const id = t.session.snapshot().pendingRolls[0]!.id;
+    expect(await t.session.cancelRoll(id)).toMatchObject({ ok: false });
+    expect(t.edgeOf("kira").points).toBe(4);
+  });
+});
+
 describe("the limits on gaining Edge", () => {
   it("allows two points in a round and says so when a third would go over", async () => {
     const t = await fight();
     await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
-    await t.session.cancelRoll(t.session.snapshot().pendingRolls[0]!.id);
-    await t.session.whenIdle();
+    await makeAttack(t);
     await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
-    await t.session.cancelRoll(t.session.snapshot().pendingRolls[0]!.id);
-    await t.session.whenIdle();
+    await makeAttack(t);
     expect(t.edgeOf("kira").points).toBe(5);
     const third = await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
     expect(text(third)).toContain("EDGE. Kira would gain Edge (Attack Rating 9 against Defense Rating 5) but has already gained the most allowed this round.");
@@ -187,8 +237,7 @@ describe("a GM award of Edge", () => {
   it("shares the round's limit with the Edge that rating gaps give", async () => {
     const t = await fight();
     await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
-    await t.session.cancelRoll(t.session.snapshot().pendingRolls[0]!.id);
-    await t.session.whenIdle();
+    await makeAttack(t);
     expect(text(await t.gm((tools) => tools.awardEdge({ characterId: "kira", reason: "A clever distraction" })))).toContain("Kira gains 1 Edge");
     expect(text(await t.gm((tools) => tools.awardEdge({ characterId: "kira", reason: "Another clever move" })))).toContain("already gained the most allowed this round");
     expect(t.edgeOf("kira").points).toBe(5);

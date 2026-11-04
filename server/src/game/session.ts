@@ -29,7 +29,7 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDGE_ADVICE } from "./attack.js";
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
@@ -106,6 +106,8 @@ export class GameSession {
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
   private readonly edge = new Map<string, EdgeState>();
+  /** Edge given for an attack its player has yet to make, by roll id, which is taken back if they skip it. */
+  private readonly edgeForAttack = new Map<string, { characterId: string; gained: number }>();
   private readonly rules: Ruleset | undefined;
   private results: Outcome[];
   private held: Held[];
@@ -343,6 +345,8 @@ export class GameSession {
     if (answer.hold) {
       const held = this.rolls.hold(requestId, entry);
       if (!held.ok) return held;
+      // Rolling the attack, even to wait on Edge, is making it.
+      this.edgeForAttack.delete(requestId);
       this.opts.emit({ type: "roll.updated", request: held.request });
       await this.persist();
       return { ok: true };
@@ -407,6 +411,7 @@ export class GameSession {
 
   /** A roll has counted: apply what follows from it and tell the GM. */
   private async completeRoll(resolved: ResolvedRoll): Promise<Ack> {
+    this.edgeForAttack.delete(resolved.request.id);
     const healing = resolved.request.healing;
     // Having the treatment done uses it up for these injuries, whatever it healed.
     if (healing && isTreatment(healing.method)) this.roster.markTreated(healing.patient.kind, healing.patient.id, healing.method);
@@ -452,6 +457,8 @@ export class GameSession {
     const request = this.rolls.cancel(requestId);
     if (!request) return { ok: false, error: "That roll is not waiting for dice." };
     this.results.push({ kind: "cancelled", request });
+    const given = this.edgeForAttack.get(requestId);
+    if (given) await this.takeBackAttackEdge(requestId, given);
     this.opts.emit({ type: "roll.cancelled", requestId });
     await this.record({ kind: "roll_cancelled", requestId, characterId: request.characterId, label: request.label });
     this.blocked = false;
@@ -704,7 +711,7 @@ export class GameSession {
         name: theirs.name,
         pool: afterWounds(defensePool.total, defenderView.woundModifier),
       });
-      return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${attacker.name}'s attack`, () => this.edgeFromAttack(attacker, defender, attackRating, defenseRating));
+      return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${attacker.name}'s attack`, (requestId) => this.edgeFromAttack(attacker, defender, attackRating, defenseRating, requestId));
     }
 
     const attackDice = afterWounds(attackPool.total, attackerView.woundModifier) + groupBonusDice(groupSize);
@@ -763,11 +770,11 @@ export class GameSession {
   }
 
   /** Announces a roll the system just made out for a player, or says why it could not. */
-  private async putOnScreen(created: ReturnType<RollManager["create"]>, what: string, afterwards?: () => Promise<string>): Promise<ToolReply> {
+  private async putOnScreen(created: ReturnType<RollManager["create"]>, what: string, afterwards?: (requestId: string) => Promise<string>): Promise<ToolReply> {
     if (!created.ok) return { ok: false, text: created.error };
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
-    const note = afterwards ? await afterwards() : "";
+    const note = afterwards ? await afterwards(created.request.id) : "";
     return { ok: true, text: `${what} is waiting for dice.${note ? ` ${note}` : ""} ${WAIT_FOR_DICE}` };
   }
 
@@ -788,15 +795,30 @@ export class GameSession {
     return { gained: result.gained, atMost };
   }
 
+  /** The attack the Edge was given for was not made, so the Edge goes back. The round's limit on gaining stays used. */
+  private async takeBackAttackEdge(requestId: string, given: { characterId: string; gained: number }): Promise<void> {
+    this.edgeForAttack.delete(requestId);
+    const name = this.nameOf(given.characterId);
+    this.edge.set(given.characterId, loseEdge(this.edge.get(given.characterId)!, given.gained));
+    this.announceEdge(given.characterId);
+    await this.record({ kind: "edge", characterId: given.characterId, name, gained: -given.gained, reason: "taken back because the attack was not made", source: "ratings" });
+    this.results.push({ kind: "report", text: `EDGE. ${name}'s ${given.gained} Edge from this attack is taken back, since the attack was not made.` });
+  }
+
   /** Whether the Attack Rating and Defense Rating are far enough apart to earn a player character Edge; what to tell the GM. */
-  private async edgeFromAttack(attacker: Found, defender: Found, attackRating: number, defenseRating: number): Promise<string> {
+  private async edgeFromAttack(attacker: Found, defender: Found, attackRating: number, defenseRating: number, attackRequestId?: string): Promise<string> {
     // Edge is gained only in a confrontation, and only players use it: an opponent's side of the gap earns nothing.
     if (!this.combat) return "";
     const side = edgeFromRatings(attackRating, defenseRating, this.rules);
     const winner = side === "attacker" ? attacker : side === "defender" ? defender : null;
     if (!winner || winner.kind !== "pc") return "";
     const reason = side === "attacker" ? `Attack Rating ${attackRating} against Defense Rating ${defenseRating}` : `Defense Rating ${defenseRating} against Attack Rating ${attackRating}`;
-    return this.edgeGainNote(winner.name, await this.gainEdgeFor(winner.id, 1, reason, "ratings"), reason);
+    const result = await this.gainEdgeFor(winner.id, 1, reason, "ratings");
+    // A player who is given Edge for an attack and then skips it has not earned it. A defense cannot be skipped.
+    if (result.gained > 0 && attackRequestId !== undefined && winner.kind === "pc" && winner.id === attacker.id) {
+      this.edgeForAttack.set(attackRequestId, { characterId: winner.id, gained: result.gained });
+    }
+    return this.edgeGainNote(winner.name, result, reason);
   }
 
   private edgeGainNote(name: string, result: { gained: number; atMost: "round" | "total" | null }, reason: string): string {

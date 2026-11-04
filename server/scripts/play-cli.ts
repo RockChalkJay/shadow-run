@@ -99,7 +99,7 @@ function show(entry: TranscriptEntry) {
       line(`  ${formatStanding(entry.after)}\n`);
       return;
     case "edge":
-      return line(`  ${entry.name} gains ${entry.gained} Edge: ${entry.reason}`);
+      return line(entry.gained < 0 ? `  ${entry.name} loses ${-entry.gained} Edge: ${entry.reason}` : `  ${entry.name} gains ${entry.gained} Edge: ${entry.reason}`);
     case "combat":
       return line(
         entry.event === "start" ? `\n  A fight begins: ${entry.names.join(", ")}`
