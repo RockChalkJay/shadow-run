@@ -99,7 +99,7 @@ function Top({ state, send }: { state: ReturnType<typeof useTable>["state"]; sen
         {gm.phase === "thinking" && <button onClick={() => send({ type: "turn.cancel" })}>Stop</button>}
         <span className={`pill ${state.connected ? "on" : "bad"}`}>{state.connected ? "● online" : "● offline"}</span>
       </header>
-      {!state.connected && <div className="banner warn" role="status">⚠ Lost the table. Reconnecting… (attempt {Math.max(1, state.attempt)})</div>}
+      {!state.connected && <div className="banner warn" role="status">⚠ Lost the table. Reconnecting… (attempt {Math.max(1, state.attempt)}){state.attempt > 1 && <> Is <code>npm run dev:server</code> running?</>}</div>}
       {gm.phase === "error" && (
         <div className="banner err" role="alert">⚠ The GM hit a problem: {gm.message} <button onClick={() => send({ type: "turn.retry" })}>Retry</button></div>
       )}
