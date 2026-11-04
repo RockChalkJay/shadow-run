@@ -164,9 +164,9 @@ describe("refusing an Edge Action", () => {
     expect(said).not.toContain("smackdown");
   });
 
-  it("says burning Edge is not handled yet", async () => {
+  it("says burning Edge is the player's choice, not an Edge Action to pass", async () => {
     const t = await table();
-    expect(await refused(t, { ...rollInput(), edgeAction: "smackdown" })).toBe("Smackdown is burning Edge, which the system does not handle yet. Narrate around it.");
+    expect(await refused(t, { ...rollInput(), edgeAction: "smackdown" })).toBe("Smackdown is burning Edge, which only the player can choose, on the roll card or the roll they hold. Do not pass it as an Edge Action.");
   });
 
   it("refuses an action the player cannot afford, without putting a roll on the screen", async () => {

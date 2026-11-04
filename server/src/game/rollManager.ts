@@ -8,7 +8,12 @@ export type Fail = { ok: false; error: string };
 /** Most rolls that may wait for dice at once; more than a table can answer is the GM stuck in a loop. */
 export const MAX_PENDING_ROLLS = 10;
 
-export type RollEntry = (
+export type RollEntry =
+  /** Burning Edge for Smackdown: no dice, an automatic success with `netHits` net hits. The session has checked the player may burn. */
+  | { mode: "smackdown"; netHits: number }
+  | DiceEntry;
+
+type DiceEntry = (
   | { mode: "app" }
   | { mode: "physical"; dice: string; /** Extra dice rolled by hand for exploding 6s; the app rolls them if left out. */ explosions?: string }
 ) & {
@@ -114,7 +119,7 @@ export class RollManager {
   }
 
   /** The dice the player rolled, and the opposition's; nothing is changed. */
-  private count(request: RollRequest, entry: RollEntry): { ok: true; source: "app" | "physical"; roll: RollResult; opponent?: RollResult } | Fail {
+  private count(request: RollRequest, entry: DiceEntry): { ok: true; source: "app" | "physical"; roll: RollResult; opponent?: RollResult } | Fail {
     const edgeDice = entry.edgeDice ?? 0;
     const size = request.pool.total + edgeDice;
     let roll: RollResult;
@@ -142,8 +147,18 @@ export class RollManager {
     return { ok: true, source: entry.mode, roll, ...(opponent && { opponent }) };
   }
 
+  /**
+   * Smackdown: the opposition rolls as usual, and the player's side is made to beat it, or the threshold, by the net hits
+   * burning Edge gives.
+   */
+  private countSmackdown(request: RollRequest, entry: { netHits: number }): { source: "smackdown"; roll: RollResult; opponent?: RollResult } {
+    const opponent = request.opposed ? rollPool(request.opposed.pool, this.d6, this.rules) : undefined;
+    const beat = opponent ? opponent.hits : (request.threshold ?? 1);
+    return { source: "smackdown", roll: evaluate([], this.rules, { bonusHits: beat + entry.netHits }), ...(opponent && { opponent }) };
+  }
+
   /** Works out how a counted roll came out. */
-  private settle(request: RollRequest, source: "app" | "physical", roll: RollResult, opponent: RollResult | undefined, edge?: ResolvedRoll["edge"]): ResolvedRoll {
+  private settle(request: RollRequest, source: ResolvedRoll["source"], roll: RollResult, opponent: RollResult | undefined, edge?: ResolvedRoll["edge"]): ResolvedRoll {
     const { consequences } = request;
     let success: boolean;
     let netHits: number;
@@ -202,14 +217,14 @@ export class RollManager {
     if (!request) return { ok: false, error: "That roll is not waiting for dice; it may already have been rolled or skipped." };
     if (request.held) return { ok: false, error: "That roll is already counted. Keep it, or spend Edge on it." };
 
-    const counted = this.count(request, entry);
-    if (!counted.ok) return counted;
+    const counted = entry.mode === "smackdown" ? this.countSmackdown(request, entry) : this.count(request, entry);
+    if ("ok" in counted && !counted.ok) return counted;
     this.pending.delete(requestId);
     return { ok: true, resolved: this.settle(request, counted.source, counted.roll, counted.opponent, edge) };
   }
 
   /** Counts the roll but keeps it pending, so the player can decide on Edge before it counts. */
-  hold(requestId: string, entry: RollEntry): { ok: true; request: RollRequest } | Fail {
+  hold(requestId: string, entry: DiceEntry): { ok: true; request: RollRequest } | Fail {
     const request = this.pending.get(requestId);
     if (!request) return { ok: false, error: "That roll is not waiting for dice; it may already have been rolled or skipped." };
     if (request.held) return { ok: false, error: "That roll is already counted. Keep it, or spend Edge on it." };

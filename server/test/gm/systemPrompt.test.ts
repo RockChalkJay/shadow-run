@@ -65,13 +65,20 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("Fire from Cover, id fire_from_cover (2; with Ranged Attack, in Cover IV)");
   });
 
-  it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally");
-    expect(prompt).toContain("It does not yet handle burning Edge.");
-    expect(prompt).not.toContain("does not yet handle the Edge Actions");
+  it("says the system keeps count of Edge, and nothing is left for it to learn", () => {
+    expect(prompt).toContain("The system does. It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally");
+    expect(prompt).toContain("and the Edge rank they burn");
+    expect(prompt).not.toContain("does not yet handle");
     expect(prompt).toContain("Do not take away or count Edge yourself.");
     expect(prompt).not.toContain("does not track Edge");
     expect(prompt).not.toContain("does not track injuries");
+  });
+
+  it("tells the GM that only the player burns Edge, and what a Smackdown or Not Dead Yet means for the story", () => {
+    expect(prompt).toContain("Only the player chooses it, on the roll card or on a roll they hold; you never offer it, and it is not an Edge Action to pass on a tool.");
+    expect(prompt).toContain("the Edge on a character's sheet above is their rank when the session began");
+    expect(prompt).toContain("A Smackdown replaces the player's roll with an automatic success with four net hits");
+    expect(prompt).toContain("It does not take them out of the danger they are in");
   });
 
   it("tells the GM how to declare an Edge Action: only when its need is met, by id, and which ones the system applies", () => {

@@ -11,6 +11,8 @@ describe("ClientMessage", () => {
     { type: "roll.app", requestId: "r1" },
     { type: "roll.physical", requestId: "r1", dice: "6 5 3 1" },
     { type: "roll.cancel", requestId: "r1" },
+    { type: "roll.smackdown", requestId: "r1" },
+    { type: "roll.edge", requestId: "r1", boost: "not_dead_yet" },
     { type: "turn.cancel" },
     { type: "turn.retry" },
   ])("accepts %j", (message) => {
@@ -29,6 +31,8 @@ describe("ClientMessage", () => {
     [{ type: "player.say", text: "x".repeat(MAX_SAY + 1) }],
     [{ type: "roll.app" }],
     [{ type: "roll.physical", requestId: "r1" }],
+    [{ type: "roll.smackdown" }],
+    [{ type: "roll.edge", requestId: "r1", boost: "smackdown" }],
     [{ type: "roll.physical", requestId: "r1", dice: "x".repeat(401) }],
     ["a string"],
     [null],

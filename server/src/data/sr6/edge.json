@@ -50,9 +50,9 @@
     { "id": "called_shot_vitals", "name": "Called Shot: Vitals", "kind": "action", "cost": 5, "timing": "pre", "effect": "called_shot_vitals", "amount": 3, "requires": "Any attack",
       "summary": "Adds 3 damage if the attack hits, along with net hits as usual.", "page": "pdf 48" },
 
-    { "id": "smackdown", "name": "Smackdown", "kind": "burn", "cost": 0, "timing": "any", "effect": "gm",
+    { "id": "smackdown", "name": "Smackdown", "kind": "burn", "cost": 0, "timing": "any", "effect": "smackdown", "amount": 4,
       "summary": "Burn Edge for an automatic success on a test the character could attempt, with four net hits.", "page": "pdf 49" },
-    { "id": "not_dead_yet", "name": "Not Dead Yet", "kind": "burn", "cost": 0, "timing": "any", "effect": "gm",
+    { "id": "not_dead_yet", "name": "Not Dead Yet", "kind": "burn", "cost": 0, "timing": "any", "effect": "not_dead_yet",
       "summary": "Burn Edge to survive a killing blow. It does not remove the character from the danger.", "page": "pdf 49" }
   ]
 }

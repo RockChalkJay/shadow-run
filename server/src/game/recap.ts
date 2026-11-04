@@ -12,7 +12,7 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
     case "gm":
       return `GM: ${entry.text}`;
     case "roll": {
-      const { request, roll, opposed, outcome } = entry.resolved;
+      const { request, roll, opposed, outcome, source } = entry.resolved;
       // A resistance roll has no success or failure; the damage line that follows says what came of it.
       // The same goes for either side of an attack: the attack line says whether it landed. What the player spent on Edge is still told.
       const edge = entry.resolved.edge && `${nameOf(request.characterId)} spent ${entry.resolved.edge.spent} Edge and ${entry.resolved.edge.summary}.`;
@@ -20,7 +20,9 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       const against = opposed ? ` against ${opposed.by} (${hits(opposed.roll.hits)})` : "";
       const glitch = roll.criticalGlitch ? ", critical glitch" : roll.glitch ? ", glitch" : "";
       const effect = [outcome.consequence, outcome.glitchConsequence].filter(Boolean).join(" ");
-      return `[Roll] ${nameOf(request.characterId)}, ${request.label}: ${outcome.success ? "success" : "failure"} (${hits(roll.hits)}${against}${glitch}). ${effect}${edge ? ` ${edge}` : ""}`;
+      // A Smackdown has no dice: its hits are made up to give four net hits, so they are not told as a roll.
+      const rolled = source === "smackdown" ? "Smackdown, no roll" : hits(roll.hits);
+      return `[Roll] ${nameOf(request.characterId)}, ${request.label}: ${outcome.success ? "success" : "failure"} (${rolled}${against}${glitch}). ${effect}${edge ? ` ${edge}` : ""}`;
     }
     case "roll_cancelled":
       return `[Roll skipped] ${nameOf(entry.characterId)}, ${entry.label}.`;
@@ -30,6 +32,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}${entry.edgeAction ? `, using ${entry.edgeAction}` : ""}.`;
     case "edge":
       return entry.gained < 0 ? `[Edge] ${entry.name} lost ${-entry.gained} Edge: ${entry.reason}.` : `[Edge] ${entry.name} gained ${entry.gained} Edge: ${entry.reason}.`;
+    case "edge_burn":
+      return `[Edge] ${entry.name} burned Edge for ${entry.burn === "smackdown" ? "Smackdown" : "Not Dead Yet"} and lost a point of Edge rank for good (now ${entry.rank}).`;
     case "edge_use":
       return `[Edge] ${entry.name} spent ${entry.cost} Edge and ${entry.detail}.`;
     case "combat": {

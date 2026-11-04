@@ -45,6 +45,11 @@ describe("the Edge catalog", () => {
     expect(findEdgeEntry("called_shot_vitals")?.amount).toBe(3);
   });
 
+  it("gives Smackdown four net hits, and leaves Not Dead Yet to the engine without a number", () => {
+    expect(findEdgeEntry("smackdown")).toMatchObject({ kind: "burn", effect: "smackdown", amount: 4 });
+    expect(findEdgeEntry("not_dead_yet")).toMatchObject({ kind: "burn", effect: "not_dead_yet" });
+  });
+
   it("looks entries up by id", () => {
     expect(findEdgeEntry("buy_hit")?.cost).toBe(3);
     expect(findEdgeEntry("nope")).toBeUndefined();
@@ -52,6 +57,15 @@ describe("the Edge catalog", () => {
 });
 
 describe("loadEdgeCatalog", () => {
+  it("refuses Smackdown with no net hits to give", async () => {
+    const smackdown = { ...findEdgeEntry("smackdown")! };
+    delete (smackdown as { amount?: number }).amount;
+    const dir = await mkdtemp(join(tmpdir(), "sr-edge-"));
+    const file = join(dir, "edge.json");
+    await writeFile(file, JSON.stringify({ entries: [smackdown] }));
+    expect(() => loadEdgeCatalog(pathToFileURL(file))).toThrow(/net hits/);
+  });
+
   it("refuses Called Shot: Vitals with no amount of damage to add", async () => {
     const vitals = { ...findEdgeEntry("called_shot_vitals")! };
     delete (vitals as { amount?: number }).amount;

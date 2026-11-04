@@ -191,6 +191,50 @@ describe("playing", () => {
     await client.until((e) => e.type === "entry" && e.entry.kind === "gm" && e.entry.text === "You slip by.");
   });
 
+  it("lets a player burn Edge for Smackdown instead of rolling, over the wire", async () => {
+    const { port } = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }, { say: ["You slip by."] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+
+    client.send({ type: "roll.smackdown", requestId: asked.request.id });
+    const rolled = await client.until((e) => e.type === "entry" && e.entry.kind === "roll");
+    expect(rolled).toMatchObject({ entry: { resolved: { source: "smackdown", burn: { kind: "smackdown", lost: 3, rank: 2 }, outcome: { success: true, netHits: 4 } } } });
+    expect(await client.until((e) => e.type === "edge.updated" && e.edge.id === "kira")).toMatchObject({ edge: { points: 0, rank: 2 } });
+    await client.until((e) => e.type === "entry" && e.entry.kind === "gm" && e.entry.text === "You slip by.");
+  });
+
+  it("lets a player hold a roll to resist a killing blow and burn Not Dead Yet, over the wire", async () => {
+    const fall = { label: "A fall from the roof", target: { kind: "pc", id: "kira" }, damageValue: 40, damageType: "physical" };
+    const { port } = await startTable([{ say: ["The roof gives way."], damage: [fall] }, { say: ["You live, barely."] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+
+    client.send({ type: "roll.physical", requestId: asked.request.id, dice: "1 1 1 1 1", hold: true });
+    await client.until((e) => e.type === "roll.updated");
+    client.send({ type: "roll.edge", requestId: asked.request.id, boost: "not_dead_yet" });
+    const burned = await client.until((e) => e.type === "entry" && e.entry.kind === "edge_burn");
+    expect(burned).toMatchObject({ entry: { burn: "not_dead_yet", lost: 3, rank: 2 } });
+    expect(await client.until((e) => e.type === "character.updated" && e.character.id === "kira")).toMatchObject({ character: { status: "unconscious", monitor: { overflow: 9 } } });
+    await client.until((e) => e.type === "entry" && e.entry.kind === "gm" && e.entry.text === "You live, barely.");
+  });
+
+  it("refuses a Smackdown that is mistaken, and a Not Dead Yet with no held roll, with an error", async () => {
+    const { port } = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+
+    client.send({ type: "roll.smackdown", requestId: "nope" });
+    expect(await client.until((e) => e.type === "error" && e.message.includes("not waiting for dice"))).toBeDefined();
+    client.send({ type: "roll.edge", requestId: asked.request.id, boost: "not_dead_yet" });
+    expect(await client.until((e) => e.type === "error" && e.message.includes("not been counted yet"))).toBeDefined();
+  });
+
   it("answers a mistaken Edge message with an error and leaves the roll waiting", async () => {
     const { port } = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }, { say: ["You slip by."] }], []);
     const client = await connect(port);

@@ -37,12 +37,12 @@ export const ClientMessage = z.discriminatedUnion("type", [
    * Spend Edge on a held roll, which then counts. `reroll` rerolls the dice at `targets` (1 Edge each, yours or the
    * opponent's), `bump` adds 1 to your dice at `targets` (2 each), `buy_hit` adds `times` hits (3 each), and
    * `reroll_failed` rerolls every die that is not a hit (4). `dice` are the new values if rolled by hand; the app
-   * rolls them if left out.
+   * rolls them if left out. `not_dead_yet` burns Edge, for good, to survive a held roll to resist damage that would kill.
    */
   z.object({
     type: z.literal("roll.edge"),
     requestId: z.string(),
-    boost: z.enum(["reroll", "bump", "buy_hit", "reroll_failed"]),
+    boost: z.enum(["reroll", "bump", "buy_hit", "reroll_failed", "not_dead_yet"]),
     targets: z.array(z.object({ side: z.enum(["mine", "theirs"]), index: z.number().int().min(0).max(999) })).max(20).optional(),
     times: z.number().int().min(1).max(10).optional(),
     dice: z.string().max(400).optional(),
@@ -59,6 +59,11 @@ export const ClientMessage = z.discriminatedUnion("type", [
     allyId: z.string().optional(),
     description: z.string().max(300).optional(),
   }),
+  /**
+   * Burn Edge for Smackdown instead of rolling: an automatic success with four net hits. It permanently costs a point
+   * of Edge rank and every Edge point on hand.
+   */
+  z.object({ type: z.literal("roll.smackdown"), requestId: z.string() }),
   /** Let a held roll count as it stands, spending no Edge. */
   z.object({ type: z.literal("roll.keep"), requestId: z.string() }),
   /** Skip a pending roll. */
@@ -115,9 +120,9 @@ export type TranscriptEntry =
       groupSize?: number;
       attackRoll: RollResult;
       defenseRoll: RollResult;
-      /** Who rolled each side: the app or physical dice for a player, the system for a non-player character. */
-      attackedBy: "app" | "physical" | "system";
-      defendedBy: "app" | "physical" | "system";
+      /** Who rolled each side: the app or physical dice for a player, the system for a non-player character, or Smackdown when a player burned Edge instead of rolling. */
+      attackedBy: "app" | "physical" | "system" | "smackdown";
+      defendedBy: "app" | "physical" | "system" | "smackdown";
       hit: boolean;
       /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
       damageValue: number;
@@ -127,6 +132,8 @@ export type TranscriptEntry =
   | (EntryBase & { kind: "edge"; characterId: string; name: string; gained: number; reason: string; source: "ratings" | "gm" | "ally" })
   /** A player spent Edge on something other than a roll. */
   | (EntryBase & { kind: "edge_use"; characterId: string; name: string; cost: number; detail: string })
+  /** A player burned Edge: they lost a point of Edge rank for good and every Edge point they held. */
+  | (EntryBase & { kind: "edge_burn"; characterId: string; name: string; burn: "smackdown" | "not_dead_yet"; lost: number; rank: number })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });

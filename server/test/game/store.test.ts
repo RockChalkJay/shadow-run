@@ -6,7 +6,7 @@ import { CampaignStore, sheetFiles, type SavedState } from "../../src/game/store
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
-const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, held: [] };
+const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, burned: {}, held: [] };
 
 describe("character sheets", () => {
   const sheetsIn = (d: string) => readdir(join(d, "characters"));
@@ -71,6 +71,18 @@ describe("character sheets", () => {
     expect(second.created).toBe(false);
     expect(first.party.map((m) => m.id)).toEqual(second.party.map((m) => m.id));
     expect(first.party.map((m) => m.id)).toEqual(["doc", "kira"]);
+  });
+
+  it("takes the Edge rank a character has burned off their sheet when the campaign is loaded, and leaves the file as it was", async () => {
+    const d = await dir();
+    const store = new CampaignStore(d);
+    await store.loadOrCreateParty(demoParty);
+    await store.saveState({ ...emptyState, burned: { kira: 2 } });
+    const { party } = await store.loadOrCreateParty(demoParty);
+    const edge = (id: string) => party.find((m) => m.id === id)!.attributes.edge;
+    expect(edge("kira")).toBe(demoParty.find((m) => m.id === "kira")!.attributes.edge - 2);
+    expect(edge("doc")).toBe(demoParty.find((m) => m.id === "doc")!.attributes.edge);
+    expect((await store.loadParty())!.find((m) => m.id === "kira")!.attributes.edge).toBe(demoParty.find((m) => m.id === "kira")!.attributes.edge);
   });
 
   it("no longer reads an old party.json", async () => {

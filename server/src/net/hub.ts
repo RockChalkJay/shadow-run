@@ -26,6 +26,8 @@ function edgeChoice(message: Extract<ClientMessage, { type: "roll.edge" }>): Edg
       return { boost: "buy_hit", ...(message.times !== undefined && { times: message.times }) };
     case "reroll_failed":
       return { boost: "reroll_failed", ...(message.dice !== undefined && { dice: message.dice }) };
+    case "not_dead_yet":
+      return { boost: "not_dead_yet" };
   }
 }
 
@@ -118,6 +120,8 @@ export class Hub {
           ...(message.edge && { edge: message.edge }),
           ...(message.hold && { hold: true }),
         });
+      case "roll.smackdown":
+        return session.submitRoll(message.requestId, { mode: "smackdown" });
       case "roll.edge":
         return session.spendEdge(message.requestId, edgeChoice(message));
       case "roll.keep":
