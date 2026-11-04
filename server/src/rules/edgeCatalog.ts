@@ -14,6 +14,8 @@ export const EdgeEffect = z.enum([
   "edge_dice_explode",
   "reroll_failed",
   "widen_glitch",
+  "called_shot_vitals",
+  "called_shot_disarm",
   "gm",
 ]);
 export type EdgeEffect = z.infer<typeof EdgeEffect>;
@@ -29,6 +31,8 @@ export const EdgeEntry = z.object({
   effect: EdgeEffect,
   /** The action an Edge Action must accompany. */
   requires: z.string().optional(),
+  /** The fixed number an effect the engine applies uses: the extra Damage Value of Called Shot: Vitals. */
+  amount: z.number().int().min(1).optional(),
   summary: z.string().min(1),
   /** Where it is in the core rulebook PDF. */
   page: z.string().min(1),
@@ -37,7 +41,8 @@ export type EdgeEntry = z.infer<typeof EdgeEntry>;
 
 export const EdgeCatalog = z
   .object({ entries: z.array(EdgeEntry).min(1) })
-  .refine((c) => new Set(c.entries.map((e) => e.id)).size === c.entries.length, "Edge entry ids must be unique");
+  .refine((c) => new Set(c.entries.map((e) => e.id)).size === c.entries.length, "Edge entry ids must be unique")
+  .refine((c) => c.entries.every((e) => e.effect !== "called_shot_vitals" || e.amount !== undefined), "Called Shot: Vitals needs the amount of damage it adds");
 export type EdgeCatalog = z.infer<typeof EdgeCatalog>;
 
 export function loadEdgeCatalog(file = new URL("../data/sr6/edge.json", import.meta.url)): EdgeCatalog {

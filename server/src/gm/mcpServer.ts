@@ -45,7 +45,9 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "After calling it, stop and wait. The players roll and the result comes back as your next message, " +
         "so never describe the outcome yourself. To heal someone, set `healing` (First Aid, a medkit, a healing " +
         "spell, or the patient's own natural recovery): the system sets the threshold from the patient's Essence, " +
-        "so leave `threshold` out, and the result tells you how to spend the hits with the heal tool.",
+        "so leave `threshold` out, and the result tells you how to spend the hits with the heal tool. When a player " +
+        "declares an Edge Action that needs a roll other than an attack (Big Speech, Bring the Drama and the like), " +
+        "set `edgeAction` to its id; the system charges the Edge when the roll counts, and carrying the action out is up to you.",
       inputSchema: RollRequestInput.shape,
     },
     async (input) => asResult(await handlers.requestRoll(input)),
@@ -81,8 +83,9 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "of Edge before the dice are rolled. Grunts attacking together " +
         "attack as a group: name one as the attacker, give the highest pool among them, and list the rest in alongside. " +
         "When a player character " +
-        "rolls, also give edgeAdvice, as you would for request_roll. Do not narrate the result " +
-        "until you have the report.",
+        "rolls, also give edgeAdvice, as you would for request_roll. When that player declares an Edge Action, set " +
+        "`edgeAction` to its id: the system charges the Edge when their roll counts and applies Called Shot to the " +
+        "damage itself. Do not narrate the result until you have the report.",
       inputSchema: AttackInput.shape,
     },
     async (input) => asResult(await handlers.attack(input)),

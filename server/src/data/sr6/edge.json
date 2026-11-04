@@ -45,9 +45,9 @@
       "summary": "Fire at a spot, not a person: roll your full dice pool for each target.", "page": "pdf 48" },
     { "id": "big_speech", "name": "Big Speech", "kind": "action", "cost": 4, "timing": "pre", "effect": "gm", "requires": "Use Skill (Influence)",
       "summary": "Roll Influence + Charisma twice; the first roll counts as a teamwork test whose hits add to the pool for the second, and the second gives your hits.", "page": "pdf 48" },
-    { "id": "called_shot_disarm", "name": "Called Shot: Disarm", "kind": "action", "cost": 5, "timing": "pre", "effect": "gm", "requires": "Any attack",
+    { "id": "called_shot_disarm", "name": "Called Shot: Disarm", "kind": "action", "cost": 5, "timing": "pre", "effect": "called_shot_disarm", "requires": "Any attack",
       "summary": "A successful hit does no damage, but the target's weapon is knocked from their hands.", "page": "pdf 48" },
-    { "id": "called_shot_vitals", "name": "Called Shot: Vitals", "kind": "action", "cost": 5, "timing": "pre", "effect": "gm", "requires": "Any attack",
+    { "id": "called_shot_vitals", "name": "Called Shot: Vitals", "kind": "action", "cost": 5, "timing": "pre", "effect": "called_shot_vitals", "amount": 3, "requires": "Any attack",
       "summary": "Adds 3 damage if the attack hits, along with net hits as usual.", "page": "pdf 48" },
 
     { "id": "smackdown", "name": "Smackdown", "kind": "burn", "cost": 0, "timing": "any", "effect": "gm",

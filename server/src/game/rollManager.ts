@@ -62,10 +62,10 @@ export class RollManager {
   }
 
   /**
-   * `extra` is what only the session can know: the other side of an attack, or the patient and difficulty of a healing roll
-   * (whose threshold the rules set, not the GM).
+   * `extra` is what only the session can know: the other side of an attack, the patient and difficulty of a healing roll
+   * (whose threshold the rules set, not the GM), or the Edge Action the GM named, read from the catalog.
    */
-  create(input: unknown, extra: Partial<Pick<RollRequest, "attack" | "healing">> & { threshold?: number } = {}): { ok: true; request: RollRequest } | Fail {
+  create(input: unknown, extra: Partial<Pick<RollRequest, "attack" | "healing" | "edgeAction">> & { threshold?: number } = {}): { ok: true; request: RollRequest } | Fail {
     const parsed = RollRequestInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: `The roll request was not valid: ${describeIssues(parsed.error)}` };
     const data = parsed.data;
@@ -92,7 +92,7 @@ export class RollManager {
     }
     const pool = penalty > 0 ? { total: dice, breakdown: `${data.pool.breakdown}, minus ${penalty} for wounds` } : data.pool;
 
-    const { healing: _asked, ...rest } = data;
+    const { healing: _asked, edgeAction: _named, ...rest } = data;
     const { threshold: setByRules, ...stored } = extra;
     const request: RollRequest = {
       ...rest,
