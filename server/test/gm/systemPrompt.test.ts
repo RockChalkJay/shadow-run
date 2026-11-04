@@ -62,15 +62,23 @@ describe("the GM's system prompt", () => {
     }
     expect(prompt).toContain("Buy one automatic hit (3 Edge, any time)");
     expect(prompt).toContain("Reroll failed dice (4 Edge, after the roll)");
-    expect(prompt).toContain("Fire from Cover (2; with Ranged Attack, in Cover IV)");
+    expect(prompt).toContain("Fire from Cover, id fire_from_cover (2; with Ranged Attack, in Cover IV)");
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
     expect(prompt).toContain("It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally");
-    expect(prompt).toContain("It does not yet handle the Edge Actions or burning Edge.");
+    expect(prompt).toContain("It does not yet handle burning Edge.");
+    expect(prompt).not.toContain("does not yet handle the Edge Actions");
     expect(prompt).toContain("Do not take away or count Edge yourself.");
     expect(prompt).not.toContain("does not track Edge");
     expect(prompt).not.toContain("does not track injuries");
+  });
+
+  it("tells the GM how to declare an Edge Action: only when its need is met, by id, and which ones the system applies", () => {
+    expect(prompt).toContain("pass its id as edgeAction on the request_roll or attack tool");
+    expect(prompt).toContain("If what it needs is not true, tell the player instead of passing it.");
+    expect(prompt).toContain("the player cannot also spend Edge on that roll");
+    expect(prompt).toContain("The system applies Called Shot: Vitals and Called Shot: Disarm to an attack's damage itself");
   });
 
   it("tells the GM to start a fight with the tool, never to make up an order, and how the round runs", () => {

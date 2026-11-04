@@ -72,6 +72,13 @@ export const AttackInput = z.object({
     .min(1)
     .optional()
     .describe("When a player character rolls: whether spending Edge is worth it here, and the real option and its cost, as for request_roll"),
+  edgeAction: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "The id of an Edge Action (such as 'called_shot_vitals') the player character in this attack has declared and whose requirement is met. The system charges the Edge when their roll counts and refuses if they cannot pay. Leave it out unless the player asked for one",
+    ),
 });
 export type AttackInput = z.infer<typeof AttackInput>;
 

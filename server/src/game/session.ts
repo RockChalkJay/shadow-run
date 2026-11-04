@@ -17,6 +17,7 @@ import {
   type HealMethod,
   type GmStatus,
   type CharacterSheet,
+  type EdgeActionOnRoll,
   type ResolvedRoll,
   type RollRequest,
   type RollResult,
@@ -29,8 +30,9 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDGE_ADVICE } from "./attack.js";
+import { calledShotOf, edgeActionSummary, type CalledShot } from "./edgeAction.js";
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
@@ -322,6 +324,26 @@ export class GameSession {
     this.announceEdge(id);
   }
 
+  /**
+   * An Edge Action the GM named for a player character's roll, read from the catalog, or why it cannot be used.
+   * Nothing is charged here: the Edge is paid when the roll counts. Called Shot works on an attack's damage, so it
+   * goes only with the player's own attack.
+   */
+  private edgeActionFor(characterId: string, id: string, goesWith: "roll" | "attack" | "defense"): { ok: true; action: EdgeActionOnRoll } | { ok: false; error: string } {
+    const entry = findEdgeEntry(id);
+    if (entry?.kind === "burn") return { ok: false, error: `${entry.name} is burning Edge, which the system does not handle yet. Narrate around it.` };
+    if (!entry || entry.kind !== "action") {
+      const ids = defaultEdgeCatalog.entries.filter((e) => e.kind === "action").map((e) => e.id).join(", ");
+      return { ok: false, error: `"${id}" is not an Edge Action. They are: ${ids}.` };
+    }
+    if (calledShotOf(id) && goesWith !== "attack") {
+      return { ok: false, error: `${entry.name} changes the damage of the player's own attack, so it goes only on the attack tool, with the player character as the attacker.` };
+    }
+    const problem = this.edgeProblem(characterId, entry.cost);
+    if (problem) return { ok: false, error: `${problem} ${entry.name} cannot be used now: ask for the roll without it, or tell the players it is not possible yet.` };
+    return { ok: true, action: { id: entry.id, name: entry.name, cost: entry.cost, summary: entry.summary, ...(entry.requires !== undefined && { requires: entry.requires }) } };
+  }
+
   /** A new round gives every player character their one expenditure of Edge back. */
   private startEdgeRound(): void {
     for (const [id, state] of this.edge) {
@@ -342,6 +364,14 @@ export class GameSession {
     // A roll can outlive its character if the party was edited while it waited; it has nobody to apply to.
     const waiting = this.rolls.list().find((r) => r.id === requestId);
     if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+
+    // An Edge Action the GM declared is the one expenditure of Edge this roll gets, paid when it counts. A player who
+    // can no longer pay for it, because Edge went elsewhere meanwhile, rolls without it.
+    const declared = waiting?.edgeAction;
+    const action = waiting && declared && !this.edgeProblem(waiting.characterId, declared.cost) ? declared : undefined;
+    if (waiting && action && (answer.edge || answer.hold)) {
+      return { ok: false, error: `${this.nameOf(waiting.characterId)} declared ${action.name}, which is this round's one expenditure of Edge, so no other Edge can be spent on this roll. Roll without it.` };
+    }
 
     let edgeDice: number | undefined;
     let widenGlitch = false;
@@ -383,7 +413,9 @@ export class GameSession {
         ? { spent: boostCost("dice"), summary: `added ${edgeDice} Edge ${edgeDice === 1 ? "die" : "dice"} to the pool, and 6s exploded` }
         : widenGlitch
           ? { spent: boostCost("widen_glitch"), summary: "made 2s count toward a glitch on the opposing roll, as well as 1s" }
-          : undefined;
+          : action
+            ? { spent: action.cost, summary: edgeActionSummary(action), action: action.id }
+            : undefined;
     const result = this.rolls.resolve(requestId, entry, edgeInfo);
     if (!result.ok) return result;
     if (edgeInfo) this.payEdge(result.resolved.request.characterId, edgeInfo.spent);
@@ -528,6 +560,10 @@ export class GameSession {
     const soak = resolved.request.soak ? this.applySoak(resolved) : undefined;
     // One side of an attack is not a result for the GM to interpret either: the attack is settled now and the GM is told how it went.
     const attacking = resolved.request.attack !== undefined;
+    const unpaid = resolved.request.edgeAction;
+    if (unpaid && resolved.edge?.action !== unpaid.id) {
+      this.results.push({ kind: "report", text: `EDGE. ${this.nameOf(resolved.request.characterId)} could not pay ${unpaid.cost} Edge for ${unpaid.name} when the roll was made, so it did not happen and nothing was spent. Do not narrate it.` });
+    }
     if (!attacking) this.results.push(soak ? { kind: "report", text: soak.report } : { kind: "resolved", resolved });
     await this.record({ kind: "roll", resolved });
     if (soak) await this.record(soak.entry);
@@ -663,16 +699,31 @@ export class GameSession {
   private async requestRoll(input: unknown): Promise<ToolReply> {
     const parsed = RollRequestInput.safeParse(input);
     let extra: NonNullable<Parameters<RollManager["create"]>[1]> | undefined;
+    let named: EdgeActionOnRoll | undefined;
+    if (parsed.success && parsed.data.edgeAction !== undefined && this.member(parsed.data.characterId)) {
+      if (parsed.data.healing) return { ok: false, text: "A healing roll cannot carry an Edge Action." };
+      const read = this.edgeActionFor(parsed.data.characterId, parsed.data.edgeAction, "roll");
+      if (!read.ok) return { ok: false, text: read.error };
+      named = read.action;
+    }
     if (parsed.success && parsed.data.healing) {
       const prepared = this.healingFor(parsed.data);
       if (!prepared.ok) return { ok: false, text: prepared.error };
       extra = prepared.extra;
     }
+    if (named) extra = { ...extra, edgeAction: named };
     const created = this.rolls.create(input, extra);
     if (!created.ok) return { ok: false, text: created.error };
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
-    return { ok: true, text: WAIT_FOR_DICE };
+    const action = this.actionNote(created.request);
+    return { ok: true, text: `${action ? `${action} ` : ""}${WAIT_FOR_DICE}` };
+  }
+
+  /** Tells the GM what an Edge Action on a new roll will cost and when, or nothing if there is none. */
+  private actionNote(request: RollRequest): string {
+    const action = request.edgeAction;
+    return action ? `${this.nameOf(request.characterId)} will pay ${action.cost} Edge for ${action.name} when the roll counts.` : "";
   }
 
   private async rollNpc(input: unknown): Promise<ToolReply> {
@@ -790,7 +841,7 @@ export class GameSession {
   private async attack(input: unknown): Promise<ToolReply> {
     const parsed = AttackInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: `The attack was not valid: ${z.prettifyError(parsed.error)}` };
-    const { label, stakes, weapon, attackPool, defensePool, edgeAdvice, attackRating, defenseRating } = parsed.data;
+    const { label, stakes, weapon, attackPool, defensePool, edgeAdvice, attackRating, defenseRating, edgeAction } = parsed.data;
     const attacker = this.roster.resolve(parsed.data.attacker);
     if (!attacker.ok) return { ok: false, text: attacker.error };
     const defender = this.roster.resolve(parsed.data.defender);
@@ -813,13 +864,15 @@ export class GameSession {
     const defenderView = this.roster.view(defender.kind, defender.id)!;
 
     if (attacker.kind === "pc") {
+      const named = edgeAction === undefined ? undefined : this.edgeActionFor(attacker.id, edgeAction, "attack");
+      if (named && !named.ok) return { ok: false, text: named.error };
       const theirs = defender;
       const request = attackerRequest(shared, { characterId: attacker.id, pool: attackPool }, {
         id: theirs.id,
         name: theirs.name,
         pool: afterWounds(defensePool.total, defenderView.woundModifier),
       });
-      return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${attacker.name}'s attack`, (requestId) => this.edgeFromAttack(attacker, defender, attackRating, defenseRating, requestId));
+      return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack, ...(named && { edgeAction: named.action }) }), `${attacker.name}'s attack`, (requestId) => this.edgeFromAttack(attacker, defender, attackRating, defenseRating, requestId));
     }
 
     const attackDice = afterWounds(attackPool.total, attackerView.woundModifier) + groupBonusDice(groupSize);
@@ -827,10 +880,13 @@ export class GameSession {
       // A defender who is down, or whose wounds leave them no dice, cannot defend at all.
       const dice = defensePool.total - this.roster.woundPenalty(defender.id);
       if (defenderView.status === "active" && dice >= 1) {
+        const named = edgeAction === undefined ? undefined : this.edgeActionFor(defender.id, edgeAction, "defense");
+        if (named && !named.ok) return { ok: false, text: named.error };
         const request = defenderRequest(shared, { characterId: defender.id, pool: defensePool }, { id: attacker.id, name: attackerName, pool: attackDice }, groupSize);
-        return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack }), `${defender.name}'s defense`, () => this.edgeFromAttack(attacker, defender, attackRating + groupSize - 1, defenseRating));
+        return this.putOnScreen(this.rolls.create(request.input, { attack: request.attack, ...(named && { edgeAction: named.action }) }), `${defender.name}'s defense`, () => this.edgeFromAttack(attacker, defender, attackRating + groupSize - 1, defenseRating));
       }
     }
+    if (edgeAction !== undefined) return { ok: false, text: "No player character has dice to roll in this attack, so there is no Edge Action to use: non-player characters do not use Edge." };
 
     // Nobody here has dice to roll, so the system rolls both sides. A player character who got this far cannot defend at all.
     const defenseDice = defender.kind === "pc" ? 0 : afterWounds(defensePool.total, defenderView.woundModifier);
@@ -883,7 +939,8 @@ export class GameSession {
     await this.persist();
     this.opts.emit({ type: "roll.requested", request: created.request });
     const note = afterwards ? await afterwards(created.request.id) : "";
-    return { ok: true, text: `${what} is waiting for dice.${note ? ` ${note}` : ""} ${WAIT_FOR_DICE}` };
+    const action = this.actionNote(created.request);
+    return { ok: true, text: `${what} is waiting for dice.${action ? ` ${action}` : ""}${note ? ` ${note}` : ""} ${WAIT_FOR_DICE}` };
   }
 
   // ---- gaining Edge --------------------------------------------------------------------------
@@ -964,6 +1021,8 @@ export class GameSession {
       attackerName: attacking ? player : attack.other.name,
       groupSize: attack.groupSize ?? 1,
       edgeNote: resolved.edge && formatEdgeNote(player, resolved.edge),
+      // Called Shot reshapes the damage of the player's own attack; the system applies it here.
+      ...(attacking && { calledShot: calledShotOf(resolved.edge?.action) }),
       defender,
       attackRoll: attacking ? roll : opposed.roll,
       attackDice: attacking ? roll.dice.length : opposed.pool,
@@ -984,6 +1043,8 @@ export class GameSession {
     groupSize: number;
     /** What the player spent on Edge on their side of the attack, if anything. */
     edgeNote?: string | undefined;
+    /** The Called Shot the attacker paid Edge for, which changes the damage if the attack lands. */
+    calledShot?: CalledShot | undefined;
     defender: Found;
     attackRoll: RollResult;
     attackDice: number;
@@ -992,7 +1053,11 @@ export class GameSession {
     defenseDice: number;
     defendedBy: "app" | "physical" | "system";
   }): Promise<{ text: string; resist?: string }> {
-    const outcome = attackDamage(a.attackRoll, a.defenseRoll, a.weapon.damageValue);
+    const landed = attackDamage(a.attackRoll, a.defenseRoll, a.weapon.damageValue);
+    const shot = a.calledShot;
+    const bonus = landed.hit && shot?.effect === "called_shot_vitals" ? { name: shot.name, amount: shot.amount } : undefined;
+    const disarmed = landed.hit && shot?.effect === "called_shot_disarm" ? shot.name : undefined;
+    const outcome = disarmed ? { hit: true, damageValue: 0 } : { hit: landed.hit, damageValue: landed.damageValue + (bonus?.amount ?? 0) };
     const report = {
       label: a.label,
       attacker: a.attackerName,
@@ -1008,6 +1073,8 @@ export class GameSession {
       hit: outcome.hit,
       damageValue: outcome.damageValue,
       edge: a.edgeNote,
+      ...(bonus && { bonus }),
+      ...(disarmed && { disarmed }),
     };
     await this.record({
       kind: "attack",
@@ -1022,9 +1089,11 @@ export class GameSession {
       defendedBy: a.defendedBy,
       hit: outcome.hit,
       damageValue: outcome.damageValue,
+      ...(shot && { edgeAction: shot.name }),
     });
     const text = formatAttackForGm(report);
-    if (!outcome.hit) return { text };
+    // A disarming hit does no damage, so there is nothing for the defender to resist.
+    if (!outcome.hit || disarmed) return { text };
 
     const gone = this.alreadyDead(a.defender);
     if (gone) return { text: `${text}\n${gone.text}` };

@@ -38,6 +38,13 @@ export const RollRequestInput = z.object({
     criticalGlitch: z.string(),
   }),
   edgeAdvice: z.string().describe("Whether and how to spend Edge on this roll"),
+  edgeAction: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "The id of an Edge Action (such as 'big_speech') the player has declared for this roll and whose requirement is met. The system charges the Edge when the roll counts and refuses if the player cannot pay. Leave it out unless the player asked for one",
+    ),
   healing: z
     .object({
       method: HealMethod.describe(
@@ -104,8 +111,20 @@ export const Weapon = z.object({
 });
 export type Weapon = z.infer<typeof Weapon>;
 
+/** An Edge Action the GM declared for a roll, as the system read it from the Edge catalog. */
+export const EdgeActionOnRoll = z.object({
+  id: z.string(),
+  name: z.string(),
+  cost: z.number().int().min(1),
+  summary: z.string(),
+  requires: z.string().optional(),
+});
+export type EdgeActionOnRoll = z.infer<typeof EdgeActionOnRoll>;
+
 export const RollRequest = RollRequestInput.extend({
   id: z.string(),
+  /** The Edge Action the player pays for when this roll counts. It uses the round's one expenditure of Edge. */
+  edgeAction: EdgeActionOnRoll.optional(),
   /** Set when the pool was cut by this many dice for wounds. */
   woundPenalty: z.number().int().min(1).optional(),
   /** Set when this roll is an attempt to heal; the system worked out the difficulty from the patient's Essence. */
@@ -188,6 +207,6 @@ export const ResolvedRoll = z.object({
     .optional(),
   outcome: RollOutcome,
   /** Set when the player spent Edge on this roll: how much, and what it did. */
-  edge: z.object({ spent: z.number().int().min(1), summary: z.string() }).optional(),
+  edge: z.object({ spent: z.number().int().min(1), summary: z.string(), /** The id of the Edge Action, when that is what was spent. */ action: z.string().optional() }).optional(),
 });
 export type ResolvedRoll = z.infer<typeof ResolvedRoll>;

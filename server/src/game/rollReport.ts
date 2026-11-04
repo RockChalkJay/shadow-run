@@ -1,6 +1,7 @@
 import type { CharacterView, CombatEntry, CombatState, DamageType, HealMethod, HealType, Status, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
 import { METHOD_NAMES } from "../rules/index.js";
 import { damageCode } from "./attack.js";
+import { calledShotOf } from "./edgeAction.js";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const diceCount = (n: number) => `${n} ${n === 1 ? "die" : "dice"}`;
@@ -19,7 +20,9 @@ function glitchNote(roll: RollResult): string {
 
 /** What a player spent on Edge and what it did, for the GM. */
 export function formatEdgeNote(characterName: string, edge: NonNullable<ResolvedRoll["edge"]>): string {
-  return `EDGE. ${characterName} spent ${edge.spent} Edge and ${edge.summary}.`;
+  // The system applies Called Shot to the damage; every other Edge Action is left for the GM to carry out.
+  const yours = edge.action !== undefined && !calledShotOf(edge.action) ? " The system does not apply this one: it is for you to carry out as the book describes, in what you narrate." : "";
+  return `EDGE. ${characterName} spent ${edge.spent} Edge and ${edge.summary}.${yours}`;
 }
 
 /** What the GM is told once a roll is counted. The consequence is the one the GM declared up front. */
@@ -182,6 +185,10 @@ export interface AttackReport {
   damageValue: number;
   /** What the player spent on Edge on their side of the attack, if anything. */
   edge?: string | undefined;
+  /** Extra Damage Value from an Edge Action the attacker paid for, which `damageValue` already includes. */
+  bonus?: { name: string; amount: number };
+  /** The Edge Action that turned this hit into a disarm: it did no damage. */
+  disarmed?: string;
 }
 
 /** What the GM is told once an attack has been rolled on both sides. */
@@ -193,11 +200,16 @@ export function formatAttackForGm(r: AttackReport): string {
     `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
     ...(r.edge ? [r.edge] : []),
   ];
-  if (r.hit) {
-    const net = r.damageValue - base;
+  if (r.disarmed) {
+    lines.push(`HIT, and it is a disarm (${r.disarmed}). It does no damage, and ${r.defender}'s weapon is knocked from their hands.`);
+  } else if (r.hit) {
+    const extra = r.bonus?.amount ?? 0;
+    const net = r.damageValue - base - extra;
+    const margin = net > 0 ? `by ${plural(net, "net hit")}` : "on a tie";
+    const sum = [`${base}`, ...(net > 0 ? [`${net}`] : []), ...(r.bonus ? [`${r.bonus.amount} (${r.bonus.name})`] : [])];
     lines.push(
-      net > 0
-        ? `HIT by ${plural(net, "net hit")}. Damage Value ${base} + ${net} = ${r.damageValue} ${r.weapon.damageType}, before ${r.defender} resists.`
+      net > 0 || r.bonus
+        ? `HIT ${margin}. Damage Value ${sum.join(" + ")} = ${r.damageValue} ${r.weapon.damageType}, before ${r.defender} resists.`
         : `HIT on a tie. Damage Value ${r.damageValue} ${r.weapon.damageType}, before ${r.defender} resists.`,
     );
   } else if (r.attackRoll.hits === 0) {

@@ -49,6 +49,7 @@ function card(request: RollRequest) {
   line(`    glitch:  ${request.consequences.glitch}`);
   line(`    critical glitch: ${request.consequences.criticalGlitch}`);
   line(`    Edge: ${request.edgeAdvice}`);
+  if (request.edgeAction) line(`    Edge Action: ${request.edgeAction.name} for ${request.edgeAction.cost} Edge, paid when the roll counts. It is this round's one expenditure, so no other Edge can go on the roll`);
   line("    /app to roll with the app's dice, or /dice 6 5 3 1 ... for dice you rolled");
 }
 
@@ -90,7 +91,7 @@ function show(entry: TranscriptEntry) {
     case "npc":
       return line(`  NPC roll, ${entry.label}: ${entry.pool} dice ${showDice(entry.roll)} = ${entry.roll.hits} hits`);
     case "attack": {
-      const result = entry.hit ? `HIT for Damage Value ${entry.damageValue} ${entry.weapon.damageType}` : "MISS";
+      const result = entry.hit ? (entry.damageValue === 0 ? "HIT, but no damage: the weapon is knocked away" : `HIT for Damage Value ${entry.damageValue} ${entry.weapon.damageType}${entry.edgeAction ? ` (${entry.edgeAction})` : ""}`) : "MISS";
       line(`  ${entry.attacker} attacks ${entry.defender} with ${entry.weapon.name}: ${entry.attackRoll.hits} hit(s) against ${entry.defenseRoll.hits}. ${result}`);
       return;
     }

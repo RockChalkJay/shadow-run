@@ -36,7 +36,13 @@ describe("the Edge catalog", () => {
 
   it("names what each Edge Action must accompany", () => {
     expect(findEdgeEntry("fire_from_cover")?.requires).toMatch(/Cover IV/);
-    expect(byKind("action").every((e) => e.requires && e.effect === "gm")).toBe(true);
+    expect(byKind("action").every((e) => e.requires)).toBe(true);
+  });
+
+  it("leaves every Edge Action to the GM except the two Called Shots, which the engine applies", () => {
+    const coded = byKind("action").filter((e) => e.effect !== "gm").map((e) => e.id).sort();
+    expect(coded).toEqual(["called_shot_disarm", "called_shot_vitals"]);
+    expect(findEdgeEntry("called_shot_vitals")?.amount).toBe(3);
   });
 
   it("looks entries up by id", () => {
@@ -46,6 +52,15 @@ describe("the Edge catalog", () => {
 });
 
 describe("loadEdgeCatalog", () => {
+  it("refuses Called Shot: Vitals with no amount of damage to add", async () => {
+    const vitals = { ...findEdgeEntry("called_shot_vitals")! };
+    delete (vitals as { amount?: number }).amount;
+    const dir = await mkdtemp(join(tmpdir(), "sr-edge-"));
+    const file = join(dir, "edge.json");
+    await writeFile(file, JSON.stringify({ entries: [vitals] }));
+    expect(() => loadEdgeCatalog(pathToFileURL(file))).toThrow(/amount/);
+  });
+
   it("refuses a catalog with a repeated id", async () => {
     const entry = { ...defaultEdgeCatalog.entries[0]! };
     const dir = await mkdtemp(join(tmpdir(), "sr-edge-"));

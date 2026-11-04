@@ -32,6 +32,9 @@
     "grunts of one group share an initiative roll, and a grunt's Professional Rating stands in for their Edge when breaking a tie": "108",
     "when an attack's Attack Rating and the target's Defense Rating differ by 4 or more, the side with the higher one gains a point of Edge, compared before the dice are rolled": "46, 106",
     "a group of grunts adds 1 to its Attack Rating for each member beyond the first": "115",
+    "an Edge Action goes with the action it names, costs no minor or major action, and must be declared before the test it goes with; it cannot be used once the dice are rolled": "48",
+    "an expenditure of Edge cannot combine boosts and actions, or several actions, so a roll with an Edge Action takes no other Edge": "45, 46",
+    "Called Shot: Vitals costs 5 Edge and adds 3 to the Damage Value of an attack that hits, along with its net hits; Called Shot: Disarm costs 5 Edge and a hit does no damage but knocks the target's weapon from their hands": "48",
     "a character has one expenditure of Edge per round, which may repeat one boost but not mix boosts, and which applies to a single roll": "45, 46",
     "a session starts with Edge points equal to the Edge attribute, and Edge above it goes away when a confrontation ends": "46",
     "other Edge boosts: give an ally 1 Edge for 2, heal a box of stun for 3 or physical for 4, add 3 to your initiative score for 1, create a special effect for 5, and make 2s count as glitches on a foe's roll for 5": "47, 48",
@@ -79,7 +82,12 @@
     "a player decides on Edge after seeing their dice only by asking to hold the roll when they answer it; a roll that is not held counts at once",
     "dice rerolled with Edge, and the extra dice for exploding 6s, may be rolled by hand and reported on the same trust as the first roll, or rolled by the app",
     "the boost that adds 1 to a die raises only the player's own dice, each at most once, while a reroll may name an opponent's dice, which the player rolls or has the app roll",
-    "Edge may be spent on a roll to resist damage and on either side of an attack, but not yet on initiative, on other characters, or on the book's Edge Actions",
+    "Edge may be spent on a roll to resist damage and on either side of an attack",
+    "the GM names an Edge Action on the roll or attack it goes with, and the system takes the Edge when that roll counts, so a roll that is skipped costs nothing",
+    "a player who can no longer pay for a declared Edge Action when its roll counts rolls without it, is not charged, and the GM is told it did not happen",
+    "the system checks an Edge Action for its cost and the round's one expenditure; whether the action's stated requirement is met is the GM's to judge, who is told to pass it only when it is",
+    "Called Shot is applied by the system only to a player character's own attack, since it changes the damage of the attack it goes with; a disarming hit does no damage, so the defender does not resist, and the weapon knocked away is narrated and not tracked",
+    "every Edge Action other than Called Shot is carried out by the GM, who is told what the book says it does; the system does not track which actions a character has taken, so conditions such as Knockout Blow's earlier Edge expenditure are the GM's to keep",
     "the book says initiative scores change for injury and special effects but gives no number, so wounds do not change anyone's score",
     "a character who joins a fight already under way rolls initiative and takes their place by score, without moving anyone already in the order",
     "the book leaves a grunt's Composure threshold to the GM; the system uses a fixed threshold of 2 and tests once, when the grunt first passes their Professional Rating while still standing",
@@ -87,6 +95,6 @@
     "a grunt knocked out by stun damage who is then hit by physical damage is dead, since the last damage decides",
     "damage past a grunt's last box is not tracked; a grunt hit by physical damage last is treated as dead",
     "grunts cannot be healed, since the book gives no healing for a single combined track",
-    "a group attack takes the named attacker's wounds off their pool before adding the group's bonus dice, and the Attack Rating bonus for extra members waits for Edge"
+    "a group attack takes the named attacker's wounds off their pool before adding the group's bonus dice"
   ]
 }

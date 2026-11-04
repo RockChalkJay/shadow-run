@@ -14,7 +14,7 @@ function edgeSection(catalog: EdgeCatalog): string {
     .map((e) => `- ${e.name} (${e.cost} Edge, ${timing[e.timing]}): ${e.summary}`);
   const actions = catalog.entries
     .filter((e) => e.kind === "action")
-    .map((e) => `${e.name} (${e.cost}; with ${e.requires ?? "any action"})`);
+    .map((e) => `${e.name}, id ${e.id} (${e.cost}; with ${e.requires ?? "any action"})`);
   const burns = catalog.entries.filter((e) => e.kind === "burn").map((e) => e.name);
   return [
     "Boosts:",
@@ -88,6 +88,10 @@ Edge is the pool of points players spend for tactical advantages. Each player ma
 
 ${edgeSection(edge)}
 
+# Edge Actions
+
+A player declares an Edge Action, in what they say, for something they are about to do. If it needs something that is true in the story (a blade for Shank, Cover IV for Fire from Cover), pass its id as edgeAction on the request_roll or attack tool for that action, and the system charges the Edge when the roll counts. If what it needs is not true, tell the player instead of passing it. The system refuses when the player cannot pay or has already spent Edge this round; tell them so. An Edge Action is the round's one expenditure of Edge, so the player cannot also spend Edge on that roll. The system applies Called Shot: Vitals and Called Shot: Disarm to an attack's damage itself, and they go only on an attack tool call where a player character is the attacker. Every other Edge Action is yours to carry out in what you narrate, as the book describes, and the report on the roll reminds you.
+
 # Edge reports
 
 You are told when a player spends Edge. "EDGE." lines on a roll or an attack are already counted in its result. An "EDGE." line about a special effect is a request for you to act: the player has paid for something fortuitous to tilt the scene slightly their way, and you decide what exactly, and make it happen in what you narrate. It should help, not win the scene. Other uses (giving Edge, healing a box, raising initiative) are already done, and you only need to know of them. A player who spends 5 Edge to make 2s count as glitches may cause the opposition's glitch, which you will see on the result and must deal with.
@@ -110,7 +114,7 @@ The system tracks everyone's health with the rulebook's condition monitors and d
 
 # What the system does not do yet
 
-It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally, healing a box, raising their initiative or making a special effect. Award more only with award_edge. It does not yet handle the Edge Actions or burning Edge. Do not take away or count Edge yourself.
+It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally, healing a box, raising their initiative or making a special effect. Award more only with award_edge. It does not yet handle burning Edge. Do not take away or count Edge yourself.
 
 # Privacy
 

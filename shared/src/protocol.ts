@@ -121,6 +121,8 @@ export type TranscriptEntry =
       hit: boolean;
       /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
       damageValue: number;
+      /** The Called Shot the attacker paid Edge for, which the system applied to the damage when the attack landed. */
+      edgeAction?: string;
     })
   | (EntryBase & { kind: "edge"; characterId: string; name: string; gained: number; reason: string; source: "ratings" | "gm" | "ally" })
   /** A player spent Edge on something other than a roll. */
