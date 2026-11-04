@@ -59,6 +59,13 @@ export const AttackInput = z.object({
     .describe(
       "Other grunts attacking the same target in the same way as part of one group attack, besides the attacker. Give the highest pool in the group as attackPool; the system adds the group's bonus dice. Only grunts, and by the rulebook no more than 5 in a group including the attacker",
     ),
+  attackRating: z
+    .number()
+    .int()
+    .min(0)
+    .max(40)
+    .describe("The attacker's Attack Rating with this weapon at this range. For a group, the highest among them; the system adds 1 for each member beyond the first"),
+  defenseRating: z.number().int().min(0).max(40).describe("The defender's Defense Rating: their Body plus any armor and other bonuses"),
   stakes: z.string().min(1).describe("What this attack means in the scene, for the players to read"),
   edgeAdvice: z
     .string()
@@ -128,3 +135,10 @@ export const CombatState = z.object({
   order: z.array(CombatEntry),
 });
 export type CombatState = z.infer<typeof CombatState>;
+
+/** The GM awards a player character one point of Edge for something that earned it in a confrontation. */
+export const AwardEdgeInput = z.object({
+  characterId: z.string().describe("The id of the player character who earned the Edge"),
+  reason: z.string().min(5).max(300).describe("What earned it: a brilliant, funny or decisive move, or a clear advantage in the confrontation. The players read this"),
+});
+export type AwardEdgeInput = z.infer<typeof AwardEdgeInput>;

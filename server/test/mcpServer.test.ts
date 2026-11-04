@@ -18,6 +18,7 @@ describe("GM MCP server", () => {
       requestRoll: async (input) => (calls.push({ tool: "request_roll", input }), reply),
       rollNpc: async (input) => (calls.push({ tool: "roll_npc", input }), reply),
       attack: async (input) => (calls.push({ tool: "attack", input }), reply),
+      awardEdge: async (input) => (calls.push({ tool: "award_edge", input }), reply),
       startCombat: async (input) => (calls.push({ tool: "start_combat", input }), reply),
       joinCombat: async (input) => (calls.push({ tool: "join_combat", input }), reply),
       nextRound: async () => (calls.push({ tool: "next_round", input: {} }), reply),
@@ -104,6 +105,8 @@ describe("GM MCP server", () => {
       weapon: { name: "Ares Predator VI", damageValue: 3, damageType: "physical" },
       attackPool: { total: 6, breakdown: "Agility 5 + Firearms 1" },
       defensePool: { total: 4, breakdown: "Reaction 2 + Intuition 2" },
+      attackRating: 8,
+      defenseRating: 5,
       stakes: "A ganger on the stairs has a gun on her.",
     };
     await client.callTool({ name: "attack", arguments: attack });
@@ -120,6 +123,8 @@ describe("GM MCP server", () => {
       weapon: { name: "Fist", damageValue: 1, damageType: "stun" },
       attackPool: { total: 0, breakdown: "nothing" },
       defensePool: { total: 3, breakdown: "x" },
+      attackRating: 5,
+      defenseRating: 5,
       stakes: "x",
     };
     const outcome = await client.callTool({ name: "attack", arguments: bad }).catch((e) => e);

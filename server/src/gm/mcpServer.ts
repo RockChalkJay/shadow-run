@@ -3,19 +3,20 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { AttackInput, DealDamageInput, HealInput, JoinCombatInput, NpcRollInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
+import { AttackInput, AwardEdgeInput, DealDamageInput, HealInput, JoinCombatInput, NpcRollInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "start_combat", "join_combat", "next_round", "end_combat"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "award_edge", "start_combat", "join_combat", "next_round", "end_combat"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
   rollNpc(input: unknown): Promise<ToolReply>;
   attack(input: unknown): Promise<ToolReply>;
+  awardEdge(input: unknown): Promise<ToolReply>;
   startCombat(input: unknown): Promise<ToolReply>;
   joinCombat(input: unknown): Promise<ToolReply>;
   nextRound(): Promise<ToolReply>;
@@ -75,7 +76,9 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "with no hits misses. A player character's dice are rolled on the players' screen, so when the reply says a " +
         "roll is waiting, end your turn and wait; the full result comes back as your next message. When only " +
         "non-player characters are involved you get the result straight away. At least one side must be a non-player " +
-        "character. The first time you name an NPC give their name, body and willpower. Grunts attacking together " +
+        "character. The first time you name an NPC give their name, body and willpower. Give the attacker's Attack Rating " +
+        "and the defender's Defense Rating too: when they are four or more apart the system gives a player on the stronger side a point " +
+        "of Edge before the dice are rolled. Grunts attacking together " +
         "attack as a group: name one as the attacker, give the highest pool among them, and list the rest in alongside. " +
         "When a player character " +
         "rolls, also give edgeAdvice, as you would for request_roll. Do not narrate the result " +
@@ -98,6 +101,21 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: DealDamageInput.shape,
     },
     async (input) => asResult(await handlers.dealDamage(input)),
+  );
+
+  server.registerTool(
+    "award_edge",
+    {
+      description:
+        "Award a player character one point of Edge during a confrontation, for a brilliant, funny or decisive move, " +
+        "or a clear advantage they have earned, and say why. The players read the reason. Use start_combat for any " +
+        "confrontation (a fight, but also a hack or a social contest) so there is one to award it in. Never award Edge " +
+        "for an action taken only to earn it, or outside a confrontation. The system enforces the book's limits: at most two " +
+        "gained a round and seven in all. Edge from a gap between Attack Rating and Defense Rating is given by the " +
+        "system on its own, so do not award that.",
+      inputSchema: AwardEdgeInput.shape,
+    },
+    async (input) => asResult(await handlers.awardEdge(input)),
   );
 
   server.registerTool(

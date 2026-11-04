@@ -28,6 +28,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[NPC roll] ${entry.label}: ${hits(entry.roll.hits)}${entry.success === undefined ? "" : entry.success ? ", success" : ", failure"}.`;
     case "attack":
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}.`;
+    case "edge":
+      return `[Edge] ${entry.name} gained ${entry.gained} Edge: ${entry.reason}.`;
     case "combat": {
       const who = entry.names.join(", ");
       if (entry.event === "start") return `[Combat] A fight begins: ${who}.`;

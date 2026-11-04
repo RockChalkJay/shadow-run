@@ -107,6 +107,7 @@ export type TranscriptEntry =
       /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
       damageValue: number;
     })
+  | (EntryBase & { kind: "edge"; characterId: string; name: string; gained: number; reason: string; source: "ratings" | "gm" })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });

@@ -25,6 +25,8 @@ const kiraShoots = (over: object = {}) => ({
   weapon: predator,
   attackPool: pool(6, "Agility 5 + Firearms 1"),
   defensePool: pool(4, "Reaction 2 + Intuition 2"),
+  attackRating: 6,
+  defenseRating: 4,
   stakes: "A ganger on the stairs has a gun on her.",
   ...over,
 });
@@ -37,6 +39,8 @@ const gangerShoots = (over: object = {}) => ({
   weapon: colt,
   attackPool: pool(5, "Agility 3 + Firearms 2"),
   defensePool: pool(4, "Reaction 2 + Intuition 2"),
+  attackRating: 6,
+  defenseRating: 4,
   stakes: "The ganger has the drop on her.",
   ...over,
 });
@@ -281,7 +285,7 @@ describe("attacks between non-player characters", () => {
     const t = await newSession(runner.driver, { d6: scriptedD6([6, 6, 5, 3, 3, 3, 3, 3, 3, 3]) });
     const chain = { name: "Bike chain", damageValue: 4, damageType: "physical" };
     const reply = await runner.run(t.session, (ctx) =>
-      ctx.tools.attack({ label: "Ganger clubs the thug", attacker: ganger, defender: thug, weapon: chain, attackPool: pool(5), defensePool: pool(3), stakes: "A brawl." }),
+      ctx.tools.attack({ label: "Ganger clubs the thug", attacker: ganger, defender: thug, weapon: chain, attackPool: pool(5), defensePool: pool(3), attackRating: 6, defenseRating: 4, stakes: "A brawl." }),
     );
     expect(reply).toEqual({
       ok: true,

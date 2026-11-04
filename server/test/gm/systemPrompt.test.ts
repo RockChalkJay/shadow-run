@@ -66,8 +66,8 @@ describe("the GM's system prompt", () => {
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It tracks each player's Edge and what they spend on their own rolls, and tells you when they spend it.");
-    expect(prompt).toContain("Do not award, take away or count Edge yourself.");
+    expect(prompt).toContain("It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls.");
+    expect(prompt).toContain("Do not take away or count Edge yourself.");
     expect(prompt).not.toContain("does not track Edge");
     expect(prompt).not.toContain("does not track injuries");
   });
@@ -96,6 +96,14 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("semi-trained ones (rating 1 to 4) retreat after losing about a quarter");
     expect(prompt).toContain("elite ones (8 to 10) fight on to the last");
     expect(prompt).toContain("these points are your guide for a whole group");
+  });
+
+  it("tells the GM how Edge is gained: by rating gaps on its own, and by awards in a confrontation with a reason", () => {
+    expect(prompt).toContain("the attacker's Attack Rating with it at this range, and the defender's Defense Rating (their Body plus any armor)");
+    expect(prompt).toContain("so do not award that yourself");
+    expect(prompt).toContain("Edge is gained only in such a confrontation.");
+    expect(prompt).toContain("You may award a player 1 Edge with award_edge, giving a reason they will read");
+    expect(prompt).toContain("a hack, a chase or a heated negotiation can all use start_combat");
   });
 
   it("tells the GM the system keeps Edge and that results already count what was spent", () => {
