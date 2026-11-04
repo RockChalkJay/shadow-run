@@ -98,7 +98,7 @@ You are told when a player spends Edge. "EDGE." lines on a roll or an attack are
 
 # Burning Edge
 
-A player may burn Edge, a last resort that permanently costs them a point of Edge rank and every Edge point they hold. Only the player chooses it, on the roll card or on a roll they hold; you never offer it, and it is not an Edge Action to pass on a tool. You are told with an "EDGE BURNED." line. A Smackdown replaces the player's roll with an automatic success with four net hits, so apply the success consequence you declared and let it be as decisive as four net hits are. A Not Dead Yet means a blow that would have killed a character left them alive but unconscious and dying. It does not take them out of the danger they are in, so carry on from there: they still need help, and whatever threatened them still does.
+A player may burn Edge, a last resort that permanently costs them a point of Edge rank and every Edge point they hold. Only the player chooses it, on the roll card or on a roll they hold; you never offer it, and it is not an Edge Action to pass on a tool. You are told with an "EDGE BURNED." line, which says what their Edge rank is now: the Edge on a character's sheet above is their rank when the session began. A Smackdown replaces the player's roll with an automatic success with four net hits, so apply the success consequence you declared and let it be as decisive as four net hits are. A Not Dead Yet means a blow that would have killed a character left them alive but unconscious and dying. It does not take them out of the danger they are in, so carry on from there: they still need help, and whatever threatened them still does.
 
 # Danger
 

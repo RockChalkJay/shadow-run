@@ -79,7 +79,7 @@ function show(entry: TranscriptEntry) {
       return line(`\nGM: ${entry.text}\n`);
     case "roll": {
       const { request, roll, opposed, outcome } = entry.resolved;
-      line(`\n  ${name(request.characterId)} rolled: ${showDice(roll)} = ${roll.hits} hit(s)`);
+      line(entry.resolved.source === "smackdown" ? `\n  ${name(request.characterId)} burned Edge for Smackdown instead of rolling` : `\n  ${name(request.characterId)} rolled: ${showDice(roll)} = ${roll.hits} hit(s)`);
       // Resisting damage and either side of an attack have no success or failure of their own; the entry that follows says what came of it.
       if (request.soak) return line();
       if (request.attack) return line(opposed ? `  ${opposed.by} rolled: ${showDice(opposed.roll)} = ${opposed.roll.hits} hit(s)` : undefined);

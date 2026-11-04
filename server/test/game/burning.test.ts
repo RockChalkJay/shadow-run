@@ -82,7 +82,10 @@ describe("Smackdown on a roll", () => {
     const entries = await t.store.recentEntries(30);
     expect(entries.find((e) => e.kind === "roll")).toMatchObject({ resolved: { source: "smackdown", roll: { dice: [], hits: 6 }, burn: { kind: "smackdown", lost: 3, rank: 2 }, outcome: { success: true, netHits: 4 } } });
     expect(entries.find((e) => e.kind === "edge_burn")).toMatchObject({ characterId: "kira", burn: "smackdown", lost: 3, rank: 2 });
-    expect(formatRecap(entries, (id) => id)).toContain("[Edge] Kira burned Edge for Smackdown and lost a point of Edge rank for good (now 2).");
+    const recap = formatRecap(entries, (id) => id);
+    expect(recap).toContain("[Edge] Kira burned Edge for Smackdown and lost a point of Edge rank for good (now 2).");
+    expect(recap).toContain("[Roll] kira, Sneak past the guard: success (Smackdown, no roll). Kira slips through.");
+    expect(recap).not.toContain("6 hits");
     expect(t.events).toContainEqual({ type: "edge.updated", edge: expect.objectContaining({ id: "kira", points: 0, rank: 2 }) });
   });
 

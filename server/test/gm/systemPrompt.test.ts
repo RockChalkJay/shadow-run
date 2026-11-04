@@ -76,6 +76,7 @@ describe("the GM's system prompt", () => {
 
   it("tells the GM that only the player burns Edge, and what a Smackdown or Not Dead Yet means for the story", () => {
     expect(prompt).toContain("Only the player chooses it, on the roll card or on a roll they hold; you never offer it, and it is not an Edge Action to pass on a tool.");
+    expect(prompt).toContain("the Edge on a character's sheet above is their rank when the session began");
     expect(prompt).toContain("A Smackdown replaces the player's roll with an automatic success with four net hits");
     expect(prompt).toContain("It does not take them out of the danger they are in");
   });
