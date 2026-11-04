@@ -9,6 +9,9 @@ export type { Status };
 /** Longest message one player can say to the GM. */
 export const MAX_SAY = 2000;
 
+/** Edge spent before a roll: 4 for Edge dice (the Edge attribute added to the pool, 6s exploding), 5 to make 2s count as glitches on the opposing roll. */
+const RollEdge = z.enum(["dice", "widen_glitch"]);
+
 /** What the browser (or any client) may send. Everything is validated on the server. */
 export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start") }),
@@ -17,7 +20,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
    * Roll the pending request for the player with the app's dice. `edge: "dice"` spends 4 Edge to add the Edge
    * attribute to the pool and make 6s explode; `hold` counts the roll but waits for the player to decide on Edge.
    */
-  z.object({ type: z.literal("roll.app"), requestId: z.string(), edge: z.literal("dice").optional(), hold: z.boolean().optional() }),
+  z.object({ type: z.literal("roll.app"), requestId: z.string(), edge: RollEdge.optional(), hold: z.boolean().optional() }),
   /**
    * Report dice rolled by hand, e.g. "6 5 3 1 1 2". With Edge dice, `explosions` are the extra dice rolled for 6s
    * (the app rolls them if they are left out).
@@ -27,7 +30,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
     requestId: z.string(),
     dice: z.string().max(400),
     explosions: z.string().max(400).optional(),
-    edge: z.literal("dice").optional(),
+    edge: RollEdge.optional(),
     hold: z.boolean().optional(),
   }),
   /**
@@ -43,6 +46,18 @@ export const ClientMessage = z.discriminatedUnion("type", [
     targets: z.array(z.object({ side: z.enum(["mine", "theirs"]), index: z.number().int().min(0).max(999) })).max(20).optional(),
     times: z.number().int().min(1).max(10).optional(),
     dice: z.string().max(400).optional(),
+  }),
+  /**
+   * Spend Edge on something other than a roll. `give_ally` pays 2 to give `allyId` 1; `heal_stun` and `heal_physical`
+   * clear a box on the character's own monitor (3 and 4); `initiative` adds 3 to their score from the next round (1);
+   * `special_effect` creates something fortuitous that the GM decides, described by `description` (5).
+   */
+  z.object({
+    type: z.literal("edge.use"),
+    characterId: z.string(),
+    use: z.enum(["give_ally", "heal_stun", "heal_physical", "initiative", "special_effect"]),
+    allyId: z.string().optional(),
+    description: z.string().max(300).optional(),
   }),
   /** Let a held roll count as it stands, spending no Edge. */
   z.object({ type: z.literal("roll.keep"), requestId: z.string() }),
@@ -107,7 +122,9 @@ export type TranscriptEntry =
       /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
       damageValue: number;
     })
-  | (EntryBase & { kind: "edge"; characterId: string; name: string; gained: number; reason: string; source: "ratings" | "gm" })
+  | (EntryBase & { kind: "edge"; characterId: string; name: string; gained: number; reason: string; source: "ratings" | "gm" | "ally" })
+  /** A player spent Edge on something other than a roll. */
+  | (EntryBase & { kind: "edge_use"; characterId: string; name: string; cost: number; detail: string })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });

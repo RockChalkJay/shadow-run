@@ -122,6 +122,8 @@ export class Hub {
         return session.spendEdge(message.requestId, edgeChoice(message));
       case "roll.keep":
         return session.keepRoll(message.requestId);
+      case "edge.use":
+        return session.useEdge(message.characterId, { use: message.use, allyId: message.allyId, description: message.description });
       case "roll.cancel":
         return session.cancelRoll(message.requestId);
       case "turn.cancel":

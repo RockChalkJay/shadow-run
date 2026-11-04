@@ -34,7 +34,7 @@ import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDG
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
-import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatEdgeNote, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatEdgeNote, formatStanding, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { MAX_PENDING_ROLLS, RollManager, type EdgeBoost, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
@@ -50,11 +50,18 @@ export type RollAnswer = (
   | { mode: "app" }
   | { mode: "physical"; dice: string; /** Extra dice rolled by hand for exploding 6s with Edge dice. */ explosions?: string }
 ) & {
-  /** Spend 4 Edge to add the Edge attribute to the pool and make 6s explode. */
-  edge?: "dice";
+  /** Spend Edge before the roll: 4 to add the Edge attribute to the pool and make 6s explode, or 5 to make 2s count as glitches on the opposing roll. */
+  edge?: "dice" | "widen_glitch";
   /** Count the roll but wait for the player to decide on Edge before it counts. */
   hold?: boolean;
 };
+
+/** Edge spent on something other than a roll. */
+export interface EdgeUse {
+  use: "give_ally" | "heal_stun" | "heal_physical" | "initiative" | "special_effect";
+  allyId?: string | undefined;
+  description?: string | undefined;
+}
 
 /** Edge spent on a held roll. */
 export type EdgeChoice =
@@ -64,7 +71,19 @@ export type EdgeChoice =
   | { boost: "reroll_failed"; dice?: string };
 
 /** The Edge catalog entry behind each way of spending Edge on a roll, so costs are the book's and in one place. */
-const BOOST_ENTRY = { dice: "edge_dice_explode", reroll: "reroll_one_die", bump: "plus_one_to_die", buy_hit: "buy_hit", reroll_failed: "reroll_failed" } as const;
+const BOOST_ENTRY = {
+  dice: "edge_dice_explode",
+  widen_glitch: "widen_glitch",
+  reroll: "reroll_one_die",
+  bump: "plus_one_to_die",
+  buy_hit: "buy_hit",
+  reroll_failed: "reroll_failed",
+  give_ally: "give_ally_edge",
+  heal_stun: "heal_stun_box",
+  heal_physical: "heal_physical_box",
+  initiative: "initiative_plus_3",
+  special_effect: "special_effect",
+} as const;
 const boostCost = (boost: keyof typeof BOOST_ENTRY): number => findEdgeEntry(BOOST_ENTRY[boost])!.cost;
 
 type Held = SavedState["held"][number];
@@ -325,12 +344,18 @@ export class GameSession {
     if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
 
     let edgeDice: number | undefined;
-    if (waiting && answer.edge === "dice") {
-      if (answer.hold) return { ok: false, error: "Edge dice are spent before the roll, which uses up this round's Edge, so there is nothing to decide afterwards. Roll with Edge dice, or hold without them." };
-      const problem = this.edgeProblem(waiting.characterId, boostCost("dice"));
+    let widenGlitch = false;
+    if (waiting && answer.edge) {
+      if (answer.hold) return { ok: false, error: "Edge for the roll itself is spent before it, which uses up this round's Edge, so there is nothing to decide afterwards. Roll with it, or hold without it." };
+      if (answer.edge === "widen_glitch" && !waiting.opposed) return { ok: false, error: "There is no opposing roll, so there are no glitches to widen." };
+      const problem = this.edgeProblem(waiting.characterId, boostCost(answer.edge));
       if (problem) return { ok: false, error: problem };
-      edgeDice = this.edge.get(waiting.characterId)!.rank;
-      if (edgeDice === 0) return { ok: false, error: `${this.nameOf(waiting.characterId)} has no Edge attribute to add to the pool.` };
+      if (answer.edge === "dice") {
+        edgeDice = this.edge.get(waiting.characterId)!.rank;
+        if (edgeDice === 0) return { ok: false, error: `${this.nameOf(waiting.characterId)} has no Edge attribute to add to the pool.` };
+      } else {
+        widenGlitch = true;
+      }
     }
     if (waiting && answer.hold) {
       const problem = this.edgeProblem(waiting.characterId, 1);
@@ -340,6 +365,7 @@ export class GameSession {
     const entry: RollEntry = {
       ...(answer.mode === "app" ? { mode: "app" as const } : { mode: "physical" as const, dice: answer.dice, ...(answer.explosions !== undefined && { explosions: answer.explosions }) }),
       ...(edgeDice !== undefined && { edgeDice }),
+      ...(widenGlitch && { widenGlitch }),
     };
 
     if (answer.hold) {
@@ -352,7 +378,12 @@ export class GameSession {
       return { ok: true };
     }
 
-    const edgeInfo = edgeDice !== undefined ? { spent: boostCost("dice"), summary: `added ${edgeDice} Edge ${edgeDice === 1 ? "die" : "dice"} to the pool, and 6s exploded` } : undefined;
+    const edgeInfo =
+      edgeDice !== undefined
+        ? { spent: boostCost("dice"), summary: `added ${edgeDice} Edge ${edgeDice === 1 ? "die" : "dice"} to the pool, and 6s exploded` }
+        : widenGlitch
+          ? { spent: boostCost("widen_glitch"), summary: "made 2s count toward a glitch on the opposing roll, as well as 1s" }
+          : undefined;
     const result = this.rolls.resolve(requestId, entry, edgeInfo);
     if (!result.ok) return result;
     if (edgeInfo) this.payEdge(result.resolved.request.characterId, edgeInfo.spent);
@@ -397,6 +428,82 @@ export class GameSession {
     const finished = this.rolls.finish(requestId, { spent: cost, summary: changed.summary });
     if (!finished.ok) return finished;
     return this.completeRoll(finished.resolved);
+  }
+
+  /** Spends Edge on something other than a roll, and tells the GM. */
+  async useEdge(characterId: string, input: EdgeUse): Promise<Ack> {
+    const sheet = this.member(characterId);
+    if (!sheet) return { ok: false, error: `There is no character "${characterId}" at the table.` };
+    const name = sheet.name;
+    if (this.roster.view("pc", characterId)?.status === "dead") return { ok: false, error: `${name} is dead and cannot spend Edge.` };
+    const cost = boostCost(input.use);
+    const problem = this.edgeProblem(characterId, cost);
+    if (problem) return { ok: false, error: problem };
+
+    let detail: string;
+    let report: string;
+    switch (input.use) {
+      case "give_ally": {
+        if (!this.combat) return { ok: false, error: "Edge is gained only in a confrontation, so it can be given only in one." };
+        const ally = input.allyId ? this.member(input.allyId) : undefined;
+        if (!ally || !this.edge.has(ally.id)) return { ok: false, error: "Say which player character to give the Edge to." };
+        if (ally.id === characterId) return { ok: false, error: `${name} cannot give Edge to themselves.` };
+        if (this.roster.view("pc", ally.id)?.status !== "active") return { ok: false, error: `${ally.name} is not on their feet and cannot gain Edge.` };
+        if (gainEdge(this.edge.get(ally.id)!, 1, this.rules).gained === 0) {
+          return { ok: false, error: `${ally.name} cannot gain any more Edge now: at most two a round and seven in all.` };
+        }
+        this.payEdge(characterId, cost);
+        await this.gainEdgeFor(ally.id, 1, `given by ${name}`, "ally");
+        detail = `gave ${ally.name} 1 Edge`;
+        report = `EDGE. ${name} spent ${cost} Edge to give ${ally.name} 1 Edge.`;
+        break;
+      }
+      case "heal_stun":
+      case "heal_physical": {
+        const track = input.use === "heal_stun" ? "stun" : "physical";
+        if (this.roster.view("pc", characterId)!.monitor[track] === 0) return { ok: false, error: `${name} has no ${track} damage to heal.` };
+        this.payEdge(characterId, cost);
+        const { after, healed } = this.roster.heal("pc", characterId, track, 1);
+        this.announce(after);
+        await this.record({ kind: "heal", reason: `${name}'s Edge`, type: track, healed, after });
+        detail = `healed a box of ${track} damage`;
+        report = `EDGE. ${name} spent ${cost} Edge to heal a box of ${track} damage.\n${formatStanding(after)}`;
+        break;
+      }
+      case "initiative": {
+        const at = this.combat?.order.findIndex((e) => e.members.some((m) => m.kind === "pc" && m.id === characterId));
+        if (!this.combat || at === undefined || at < 0) return { ok: false, error: `${name} is not in a fight, so there is no initiative to raise.` };
+        this.payEdge(characterId, cost);
+        this.combat = { ...this.combat, order: this.combat.order.map((e, i) => (i === at ? { ...e, bonus: 3 } : e)) };
+        this.opts.emit({ type: "combat.updated", combat: this.combat });
+        detail = "added 3 to their Initiative Score from the next round";
+        report = `EDGE. ${name} spent ${cost} Edge to add 3 to their Initiative Score from the next round.`;
+        break;
+      }
+      case "special_effect": {
+        const what = input.description?.trim() ?? "";
+        if (what.length < 5) return { ok: false, error: "Describe the special effect, so the GM knows what the player has in mind." };
+        this.payEdge(characterId, cost);
+        detail = `created a special effect: ${what}`;
+        report = `EDGE. ${name} spent ${cost} Edge to create a special effect: ${what}. Something fortuitous happens that tilts the scene slightly in their favor, and it is for you to decide exactly what. Make it happen in what you narrate; it should help, not win the scene.`;
+        break;
+      }
+    }
+
+    await this.record({ kind: "edge_use", characterId, name, cost, detail });
+    this.results.push({ kind: "report", text: report });
+    // Outside a fight there are no rounds, so each use of Edge is its own.
+    if (!this.combat) {
+      this.edge.set(characterId, startRound(this.edge.get(characterId)!));
+      this.announceEdge(characterId);
+    }
+    await this.persist();
+    // Only a special effect needs the GM to act at once; the rest it hears about with its next turn.
+    if (input.use === "special_effect") {
+      this.blocked = false;
+      this.schedule();
+    }
+    return { ok: true };
   }
 
   /** The player has seen a held roll and lets it count as it stands. */
@@ -784,7 +891,7 @@ export class GameSession {
    * Gives a player character Edge, within the limits the book sets: at most two gained in a round, and no more than
    * seven in all. Says how much they actually got, which is none when a limit was already reached.
    */
-  private async gainEdgeFor(id: string, amount: number, reason: string, source: "ratings" | "gm"): Promise<{ gained: number; atMost: "round" | "total" | null }> {
+  private async gainEdgeFor(id: string, amount: number, reason: string, source: "ratings" | "gm" | "ally"): Promise<{ gained: number; atMost: "round" | "total" | null }> {
     const before = this.edge.get(id)!;
     const result = gainEdge(before, amount, this.rules);
     this.edge.set(id, result.state);
@@ -1006,7 +1113,12 @@ export class GameSession {
 
   private async nextRound(): Promise<ToolReply> {
     if (!this.combat) return { ok: false, text: "There is no fight under way. Call start_combat to begin one." };
-    this.combat = { ...this.combat, round: this.combat.round + 1 };
+    // Initiative bought with Edge takes effect now, and the order is settled again with each entry's own coin.
+    const raised = this.combat.order.map((entry) => {
+      const { bonus, ...plain } = entry;
+      return bonus ? { ...plain, score: plain.score + bonus } : entry;
+    });
+    this.combat = { round: this.combat.round + 1, order: inInitiativeOrder(raised) };
     this.startEdgeRound();
     await this.announceCombat("round", [], this.combat.round);
     return { ok: true, text: `${formatCombat("NEW ROUND.", this.combat, this.statusOf)}\nInitiative is not rerolled.` };

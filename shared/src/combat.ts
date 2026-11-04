@@ -125,6 +125,8 @@ export const CombatEntry = z.object({
   coin: z.number().min(0).max(1),
   major: z.number().int().min(1),
   minor: z.number().int().min(1),
+  /** Initiative paid for with Edge, which is added to the score when the next round begins. */
+  bonus: z.number().int().min(0).optional(),
 });
 export type CombatEntry = z.infer<typeof CombatEntry>;
 
