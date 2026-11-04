@@ -55,6 +55,13 @@ export function PartyPanel({ party, characters, speaking }: { party: CharacterSh
   );
 }
 
+/** How hurt someone is in a few words: the track that is further along, since the first to fill puts them out. */
+export function fuller(c: CharacterView): string {
+  const { monitor: m } = c;
+  if (c.grunt) return `${m.physical}/${m.physicalBoxes}`;
+  return m.stun / m.stunBoxes > m.physical / m.physicalBoxes ? `stun ${m.stun}/${m.stunBoxes}` : `physical ${m.physical}/${m.physicalBoxes}`;
+}
+
 /** The non-player characters the GM has put on the table: one line each, opening to their boxes. */
 export function NpcPanel({ characters }: { characters: CharacterView[] }) {
   const npcs = characters.filter((c) => c.kind === "npc");
@@ -70,7 +77,7 @@ export function NpcPanel({ characters }: { characters: CharacterView[] }) {
           <div key={c.id} className={`npc ${c.status}`}>
             <button className="tog inline" aria-expanded={shown} onClick={() => setOpen((o) => (shown ? o.filter((x) => x !== c.id) : [...o, c.id]))}>
               {shown ? "▾" : "▸"} <b>{c.name}</b> {tag && <span className="dim">{tag}</span>}
-              <span className="status">{c.status === "active" ? `${c.monitor.physical + (c.grunt ? 0 : c.monitor.stun)} hurt` : c.status.toUpperCase()}</span>
+              <span className="status">{c.status === "active" ? fuller(c) : c.status.toUpperCase()}</span>
             </button>
             {shown && <Health character={c} />}
           </div>

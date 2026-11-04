@@ -53,6 +53,13 @@ describe("non-player characters", () => {
     expect(screen.queryByLabelText("Stun 0 of 10")).toBeNull();
   });
 
+  it("summarizes how hurt each is by the track that is further along", () => {
+    render(<NpcPanel characters={[ganger, { ...ganger, id: "g3", name: "Thug", monitor: { ...monitor, physical: 1, stun: 8 } }, grunt]} />);
+    expect(screen.getByRole("button", { name: /Ganger/ }).textContent).toContain("physical 3/11");
+    expect(screen.getByRole("button", { name: /Thug/ }).textContent).toContain("stun 8/10");
+    expect(screen.getByRole("button", { name: /Guard/ }).textContent).toContain("4/9");
+  });
+
   it("says when one is out of it", () => {
     render(<NpcPanel characters={[{ ...ganger, status: "dead" }]} />);
     expect(screen.getByText("DEAD")).toBeTruthy();
