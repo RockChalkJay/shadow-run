@@ -334,6 +334,29 @@ describe("other Edge Actions on an attack", () => {
   });
 });
 
+describe("a Called Shot on a defense", () => {
+  it("adds nothing to the damage coming at the player, even if a hand-edited saved game put one there", async () => {
+    const t = await table({ party: withEdge("kira", 5) });
+    await t.startFight();
+    await t.gm((tools) => tools.attack(gangerShoots({ edgeAction: "wrest" })));
+    const saved = (await t.store.loadState())!;
+    const vitals = { id: "called_shot_vitals", name: "Called Shot: Vitals", cost: 5, summary: "Adds 3 damage if the attack hits, along with net hits as usual.", requires: "Any attack" };
+    await t.store.saveState({ ...saved, pending: saved.pending.map((r) => ({ ...r, edgeAction: vitals })) });
+
+    const inputs: string[] = [];
+    const driver: GmDriver = { async takeTurn(input) { inputs.push(input.text); } };
+    const again = await GameSession.create({ store: t.store, driver, party: withEdge("kira", 5), emit: () => {}, d6: scriptedD6([5, 5, 5, 5, 5, ...Array(20).fill(3)]) });
+    const waiting = again.snapshot().pendingRolls[0]!;
+    expect(await again.submitRoll(waiting.id, { mode: "physical", dice: "3 3 3 3" })).toEqual({ ok: true });
+    // The hit lands, so Kira must resist it before the GM hears anything.
+    expect(await again.submitRoll(again.snapshot().pendingRolls[0]!.id, { mode: "physical", dice: "1 1 1 1 1" })).toEqual({ ok: true });
+    await again.whenIdle();
+    expect(inputs.at(-1)).toContain("HIT by 5 net hits. Damage Value 3 + 5 = 8 physical, before Kira resists.");
+    expect(inputs.at(-1)).not.toContain("(Called Shot");
+    await again.close();
+  });
+});
+
 describe("an Edge Action that waits for dice", () => {
   it("survives a restart, and is paid for when the roll is answered afterwards", async () => {
     const t = await table();
