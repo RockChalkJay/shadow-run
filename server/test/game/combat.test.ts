@@ -177,6 +177,16 @@ describe("rounds, joining and ending", () => {
     expect(session.snapshot().combat!.order.map((e: { members: Array<{ id: string }> }) => e.members[0]!.id)).toEqual(["doc", "ganger-1", "kira"]);
   });
 
+  it("gives grunts who join under an existing group's label an entry of their own", async () => {
+    // Kira 13, the patrol (4 + 3 = 7), then two more guards under the same label roll 4 + 5 = 9 on their own.
+    const { session } = await turn([4, 3, 5], async (tools) => {
+      await tools.startCombat({ participants: [kira, guard(1)] });
+      return tools.joinCombat({ participants: [guard(2), guard(3)] });
+    });
+    const order = session.snapshot().combat!.order.map((e: { members: Array<{ id: string }>; score: number }) => `${e.members.map((m) => m.id).join("+")}:${e.score}`);
+    expect(order).toEqual(["kira:13", "guard-2+guard-3:9", "guard-1:7"]);
+  });
+
   it("refuses to join with no fight, or someone who is already in it", async () => {
     const none = await turn([], (tools) => tools.joinCombat({ participants: [doc] }));
     expect(none.result).toEqual({ ok: false, text: "There is no fight under way. Call start_combat to begin one." });

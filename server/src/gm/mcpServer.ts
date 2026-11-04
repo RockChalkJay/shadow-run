@@ -119,7 +119,8 @@ function buildServer(handlers: GmToolHandlers): McpServer {
     {
       description:
         "Add people to a fight already under way, such as reinforcements. They roll initiative and take their place " +
-        "by score; no one already in the order moves. Same participants as start_combat.",
+        "by score; no one already in the order moves. Same participants as start_combat; grunts who join together " +
+        "form a group of their own and never merge into one already in the order.",
       inputSchema: JoinCombatInput.shape,
     },
     async (input) => asResult(await handlers.joinCombat(input)),

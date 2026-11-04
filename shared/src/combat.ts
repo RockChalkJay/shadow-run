@@ -87,7 +87,7 @@ export const CombatParticipant = z.object({
     .min(1)
     .max(60)
     .optional()
-    .describe("Grunts with the same group label roll initiative once and act together, with the numbers of the first one listed"),
+    .describe("Grunts listed in the same call with the same group label roll initiative once and act together, with the numbers of the first one listed. Grunts who join later form a group of their own"),
 });
 export type CombatParticipant = z.infer<typeof CombatParticipant>;
 
