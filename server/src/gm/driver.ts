@@ -14,6 +14,13 @@ export interface GmTools {
   dealDamage(input: unknown): Promise<ToolReply>;
   /** One attack: the system rolls both sides, adds the net hits to the weapon's Damage Value, and hurts the defender. */
   attack(input: unknown): Promise<ToolReply>;
+  /** Begins a fight: the system rolls initiative for everyone named and keeps the order. */
+  startCombat(input: unknown): Promise<ToolReply>;
+  /** Adds people to a fight already under way. */
+  joinCombat(input: unknown): Promise<ToolReply>;
+  /** Moves the fight on to the next round; the order stands. */
+  nextRound(): Promise<ToolReply>;
+  endCombat(): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
 }
 

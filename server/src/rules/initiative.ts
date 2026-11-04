@@ -24,7 +24,7 @@ export function rollInitiative(
 /** Major actions, and minor actions: a base amount plus one for each initiative die. */
 export function actionsFor(dice: number, rules: Ruleset = defaultRuleset): { major: number; minor: number } {
   const { majorActions, baseMinorActions, minorActionsPerDie } = rules.initiative;
-  return { major: majorActions, minor: baseMinorActions + minorActionsPerDie * dice };
+  return { major: majorActions, minor: Math.min(rules.initiative.maxMinorActions, baseMinorActions + minorActionsPerDie * dice) };
 }
 
 export interface TurnEntry {
@@ -33,6 +33,8 @@ export interface TurnEntry {
   edge: number;
   reaction: number;
   intuition: number;
+  /** A number in [0, 1) that breaks a tie nothing else settles, fixed when the entry is made so that later entries cannot reshuffle it. */
+  coin?: number;
 }
 
 /** A number in [0, 1) used to break a tie that no attribute settles. */
@@ -42,11 +44,11 @@ export const cryptoFlip: Flip = () => randomInt(0, 2 ** 30) / 2 ** 30;
 
 /**
  * Highest score first. Equal scores go to the higher Edge, then Reaction, then Intuition;
- * entries still equal after that are put in a random order.
+ * entries still equal after that are put in a random order, or by the entry's own `coin` when it has one.
  */
 export function turnOrder<T extends TurnEntry>(entries: readonly T[], flip: Flip = cryptoFlip): T[] {
   return entries
-    .map((entry) => ({ entry, coin: flip() }))
+    .map((entry) => ({ entry, coin: entry.coin ?? flip() }))
     .sort(
       (a, b) =>
         b.entry.score - a.entry.score ||

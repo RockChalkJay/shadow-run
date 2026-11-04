@@ -55,8 +55,8 @@ export const CharacterSheet = z.strictObject({
   name: z.string().min(1).max(60),
   metatype: Metatype,
   attributes: Attributes,
-  /** Initiative dice, 1 unless augmentations or magic add more. */
-  initiativeDice: z.number().int().min(1).max(10).default(1),
+  /** Initiative dice, 1 unless augmentations or magic add more; the book allows at most 5. */
+  initiativeDice: z.number().int().min(1).max(5).default(1),
   /** Ranks in each skill the character has; a skill that is left out means no ranks. */
   skills: z.partialRecord(Skill, z.number().int().min(1).max(12)).default({}),
   /** A specialization adds 2 dice to the skill in its area; an expertise adds 3. */

@@ -69,6 +69,7 @@ describe("CharacterSheet", () => {
     ["a skill rating of zero", { ...kira, skills: { firearms: 0 } }],
     ["a metatype that does not exist", { ...kira, metatype: "dragon" }],
     ["no initiative dice", { ...kira, initiativeDice: 0 }],
+    ["more initiative dice than the book allows", { ...kira, initiativeDice: 6 }],
     ["a specialization in a skill that does not exist", { ...kira, specializations: [{ skill: "flying", name: "Gliding" }] }],
   ])("rejects %s", (_name, sheet) => {
     expect(CharacterSheet.safeParse(sheet).success).toBe(false);

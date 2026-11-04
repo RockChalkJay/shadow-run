@@ -6,7 +6,7 @@ import { CampaignStore, sheetFiles, type SavedState } from "../../src/game/store
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
-const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], held: [] };
+const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, held: [] };
 
 describe("character sheets", () => {
   const sheetsIn = (d: string) => readdir(join(d, "characters"));

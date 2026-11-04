@@ -18,6 +18,10 @@ describe("GM MCP server", () => {
       requestRoll: async (input) => (calls.push({ tool: "request_roll", input }), reply),
       rollNpc: async (input) => (calls.push({ tool: "roll_npc", input }), reply),
       attack: async (input) => (calls.push({ tool: "attack", input }), reply),
+      startCombat: async (input) => (calls.push({ tool: "start_combat", input }), reply),
+      joinCombat: async (input) => (calls.push({ tool: "join_combat", input }), reply),
+      nextRound: async () => (calls.push({ tool: "next_round", input: {} }), reply),
+      endCombat: async () => (calls.push({ tool: "end_combat", input: {} }), reply),
       dealDamage: async (input) => (calls.push({ tool: "deal_damage", input }), reply),
       heal: async (input) => (calls.push({ tool: "heal", input }), reply),
     });

@@ -1,4 +1,4 @@
-import type { CharacterView, DamageType, HealMethod, HealType, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
+import type { CharacterView, CombatEntry, CombatState, DamageType, HealMethod, HealType, Status, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
 import { METHOD_NAMES } from "../rules/index.js";
 import { damageCode } from "./attack.js";
 
@@ -194,4 +194,39 @@ export function formatAttackForGm(r: AttackReport): string {
     if (note) lines.push(`${who}: ${note}. The GM decides what goes wrong, keeping it ${roll.criticalGlitch ? "serious but not fatal" : "inconvenient, not disastrous"}.`);
   }
   return lines.join("\n");
+}
+
+const names = (entry: CombatEntry) => {
+  const list = entry.members.map((m) => m.name);
+  return list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list.at(-1)}` : list[0]!;
+};
+
+/** Who is out of the fight, so the order can say so. */
+export type StatusOf = (member: { kind: "pc" | "npc"; id: string }) => Status | undefined;
+
+const downNote = (entry: CombatEntry, statusOf: StatusOf) => {
+  const down = entry.members.filter((m) => {
+    const status = statusOf(m);
+    return status !== undefined && status !== "active";
+  });
+  if (down.length === 0) return "";
+  if (down.length === entry.members.length) return ` [${statusOf(down[0]!)!.toUpperCase()}]`;
+  return ` [${down.map((m) => `${m.name} ${statusOf(m)!.toUpperCase()}`).join(", ")}]`;
+};
+
+/** The whole initiative order, for the GM when a fight begins, gains people, or moves on a round. */
+export function formatCombat(heading: string, combat: CombatState, statusOf: StatusOf): string {
+  const lines = combat.order.map((entry, i) => {
+    const total = entry.rolls.reduce((a, b) => a + b, 0);
+    const together = entry.group !== undefined ? " (acting together)" : "";
+    const actions = `${entry.major} major and ${entry.minor} minor ${entry.minor === 1 ? "action" : "actions"}`;
+    return `${i + 1}. ${names(entry)}${together}: ${entry.score} (Reaction ${entry.reaction} + Intuition ${entry.intuition} = ${entry.reaction + entry.intuition}, plus ${total} on ${entry.dice}D6). ${actions}.${downNote(entry, statusOf)}`;
+  });
+  return [`${heading} Round ${combat.round}. Initiative is rolled by the system and stands from round to round. Highest goes first:`, ...lines].join("\n");
+}
+
+/** One line for the GM at the top of every turn while a fight is on. */
+export function formatCombatStatus(combat: CombatState, statusOf: StatusOf): string {
+  const order = combat.order.map((entry) => `${names(entry)} ${entry.score}${downNote(entry, statusOf)}`).join("; ");
+  return `COMBAT. Round ${combat.round}. Order: ${order}.`;
 }
