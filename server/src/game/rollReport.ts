@@ -40,6 +40,10 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
   }
 
   if (resolved.edge) lines.push(formatEdgeNote(characterName, resolved.edge));
+  if (opposed) {
+    const note = glitchNote(opposed.roll);
+    if (note) lines.push(`${opposed.by}: ${note}. The GM decides what goes wrong, keeping it ${opposed.roll.criticalGlitch ? "serious but not fatal" : "inconvenient, not disastrous"}.`);
+  }
   const margin = outcome.netHits > 0 ? ` by ${plural(outcome.netHits, "net hit")}` : "";
   lines.push(`${outcome.success ? "SUCCESS" : "FAILURE"}${margin}.`);
   if (opposed) {
@@ -232,7 +236,7 @@ export function formatCombat(heading: string, combat: CombatState, statusOf: Sta
     const total = entry.rolls.reduce((a, b) => a + b, 0);
     const together = entry.group !== undefined ? " (acting together)" : "";
     const actions = `${entry.major} major and ${entry.minor} minor ${entry.minor === 1 ? "action" : "actions"}`;
-    return `${i + 1}. ${names(entry)}${together}: ${entry.score} (Reaction ${entry.reaction} + Intuition ${entry.intuition} = ${entry.reaction + entry.intuition}, plus ${total} on ${entry.dice}D6). ${actions}.${downNote(entry, statusOf)}`;
+    return `${i + 1}. ${names(entry)}${together}: ${entry.score} (Reaction ${entry.reaction} + Intuition ${entry.intuition} = ${entry.reaction + entry.intuition}, plus ${total} on ${entry.dice}D6). ${actions}.${entry.bonus ? ` +${entry.bonus} from the next round, bought with Edge.` : ""}${downNote(entry, statusOf)}`;
   });
   return [`${heading} Round ${combat.round}. Initiative is rolled by the system and stands from round to round. Highest goes first:`, ...lines].join("\n");
 }

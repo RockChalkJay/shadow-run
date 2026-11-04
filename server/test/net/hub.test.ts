@@ -206,6 +206,28 @@ describe("playing", () => {
     expect(await client.until((e) => e.type === "error" && e.message.includes("Message not understood"))).toBeDefined();
   });
 
+  it("routes each way of spending Edge off the roll, and refuses a mistake with an error, over the wire", async () => {
+    const { port } = await startTable([{ say: ["The guard turns."] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    const refused = (message: string) => client.until((e) => e.type === "error" && e.message.includes(message));
+
+    client.send({ type: "edge.use", characterId: "kira", use: "heal_stun" });
+    await refused("Kira has no stun damage to heal.");
+    client.send({ type: "edge.use", characterId: "kira", use: "heal_physical" });
+    await refused("Kira has 3 Edge and this costs 4.");
+    client.send({ type: "edge.use", characterId: "doc", use: "give_ally", allyId: "kira" });
+    await refused("only in a confrontation");
+    client.send({ type: "edge.use", characterId: "kira", use: "initiative" });
+    await refused("Kira is not in a fight");
+    client.send({ type: "edge.use", characterId: "kira", use: "special_effect", description: "A fire alarm goes off" });
+    await refused("Kira has 3 Edge and this costs 5.");
+    client.send({ type: "edge.use", characterId: "nobody", use: "heal_stun" });
+    await refused('There is no character "nobody"');
+    client.send({ type: "edge.use", characterId: "kira", use: "burn_it_all" } as never);
+    await refused("Message not understood");
+  });
+
   it("reports dice rolled at the table", async () => {
     const { port } = await startTable([{ rolls: [rollInput()] }, { say: ["ok"] }]);
     const client = await connect(port);

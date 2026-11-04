@@ -14,6 +14,8 @@ export type RollEntry = (
 ) & {
   /** Dice added to the pool by the 4-Edge boost, which also makes 6s explode. Set once the session has checked the Edge. */
   edgeDice?: number;
+  /** The 5-Edge boost: 2s count toward a glitch on the opposing roll as well as 1s. Set once the session has checked the Edge. */
+  widenGlitch?: boolean;
 };
 
 /** A change to a counted roll, bought with Edge. */
@@ -136,7 +138,7 @@ export class RollManager {
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
-    const opponent = request.opposed ? rollPool(request.opposed.pool, this.d6, this.rules) : undefined;
+    const opponent = request.opposed ? rollPool(request.opposed.pool, this.d6, this.rules, entry.widenGlitch ? { glitchFaces: 2 } : {}) : undefined;
     return { ok: true, source: entry.mode, roll, ...(opponent && { opponent }) };
   }
 

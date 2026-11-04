@@ -30,6 +30,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}.`;
     case "edge":
       return entry.gained < 0 ? `[Edge] ${entry.name} lost ${-entry.gained} Edge: ${entry.reason}.` : `[Edge] ${entry.name} gained ${entry.gained} Edge: ${entry.reason}.`;
+    case "edge_use":
+      return `[Edge] ${entry.name} spent ${entry.cost} Edge and ${entry.detail}.`;
     case "combat": {
       const who = entry.names.join(", ");
       if (entry.event === "start") return `[Combat] A fight begins: ${who}.`;

@@ -98,6 +98,8 @@ function show(entry: TranscriptEntry) {
       line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
       line(`  ${formatStanding(entry.after)}\n`);
       return;
+    case "edge_use":
+      return line(`  ${entry.name} spends ${entry.cost} Edge and ${entry.detail}`);
     case "edge":
       return line(entry.gained < 0 ? `  ${entry.name} loses ${-entry.gained} Edge: ${entry.reason}` : `  ${entry.name} gains ${entry.gained} Edge: ${entry.reason}`);
     case "combat":
@@ -200,6 +202,8 @@ const help = [
   "  /app [n] [edge] [hold]   roll pending roll n (default 1) with the app's dice; edge = spend 4 Edge on Edge dice, hold = decide on Edge after",
   "  /dice [n:] f f f [x f f] [edge] [hold]   report dice rolled by hand, e.g. /dice 6 5 3 1 or /dice 2: 4 4 1; after x, the extra dice for 6s with edge",
   "  /edge <reroll|bump|buy|failed> ...   spend Edge on a held roll (see the roll for the forms)",
+  "  /edge give <id> | heal stun|physical | init | effect <text>   spend Edge as the active character: give 1 to an ally (2), heal a box (3 or 4), +3 initiative next round (1), a special effect (5)",
+  "  (add widen to /app or /dice to spend 5 Edge making 2s count as glitches on the opposing roll)",
   "  /keep [n]         let a held roll count as it stands",
   "  /skip [n]         skip a pending roll",
   "  /status           show how hurt everyone is, the fight, and Edge",
@@ -207,6 +211,9 @@ const help = [
   "  /retry            try the GM's turn again",
   "  /quit",
 ].join("\n");
+
+/** The Edge a player spends before a roll, from the words typed after the command. */
+const edgeFlag = (flags: string[]) => (flags.includes("edge") ? { edge: "dice" as const } : flags.includes("widen") ? { edge: "widen_glitch" as const } : {});
 
 createInterface({ input: process.stdin }).on("line", (input) => {
   const text = input.trim();
@@ -237,10 +244,10 @@ createInterface({ input: process.stdin }).on("line", (input) => {
       return console.log(`  Speaking as ${member.name}.`);
     }
     case "app": {
-      const flags = args.filter((a) => a === "edge" || a === "hold");
+      const flags = args.filter((a) => a === "edge" || a === "widen" || a === "hold");
       const request = pick(args.find((a) => /^\d+$/.test(a)));
       return request
-        ? send({ type: "roll.app", requestId: request.id, ...(flags.includes("edge") && { edge: "dice" as const }), ...(flags.includes("hold") && { hold: true }) })
+        ? send({ type: "roll.app", requestId: request.id, ...edgeFlag(flags), ...(flags.includes("hold") && { hold: true }) })
         : console.log("  No such pending roll.");
     }
     case "keep": {
@@ -248,6 +255,15 @@ createInterface({ input: process.stdin }).on("line", (input) => {
       return request ? send({ type: "roll.keep", requestId: request.id }) : console.log("  No such pending roll.");
     }
     case "edge": {
+      const who = active?.id;
+      const first = args[0] ?? "";
+      if (["give", "heal", "init", "effect"].includes(first)) {
+        if (!who) return console.log("  Speak as a character first (/as <id>).");
+        if (first === "give") return send({ type: "edge.use", characterId: who, use: "give_ally", ...(args[1] && { allyId: args[1] }) });
+        if (first === "heal") return send({ type: "edge.use", characterId: who, use: args[1] === "physical" ? "heal_physical" : "heal_stun" });
+        if (first === "init") return send({ type: "edge.use", characterId: who, use: "initiative" });
+        return send({ type: "edge.use", characterId: who, use: "special_effect", description: args.slice(1).join(" ") });
+      }
       const held = pending.find((r) => r.held);
       if (!held) return console.log("  No roll is waiting on an Edge decision. Roll with hold first.");
       const [boost = "", ...rest] = args;
@@ -270,8 +286,8 @@ createInterface({ input: process.stdin }).on("line", (input) => {
       const which = first.match(/^(\d+):$/);
       const request = pick(which?.[1]);
       const words = which ? args.slice(1) : args;
-      const flags = words.filter((w) => w === "edge" || w === "hold");
-      const rest = words.filter((w) => w !== "edge" && w !== "hold");
+      const flags = words.filter((w) => w === "edge" || w === "widen" || w === "hold");
+      const rest = words.filter((w) => w !== "edge" && w !== "widen" && w !== "hold");
       const split = rest.findIndex((w) => w === "x" || w === "x:");
       const dice = (split === -1 ? rest : rest.slice(0, split)).join(" ");
       const explosions = split === -1 ? undefined : rest.slice(split + 1).join(" ");
@@ -281,7 +297,7 @@ createInterface({ input: process.stdin }).on("line", (input) => {
             requestId: request.id,
             dice,
             ...(explosions !== undefined && { explosions }),
-            ...(flags.includes("edge") && { edge: "dice" as const }),
+            ...edgeFlag(flags),
             ...(flags.includes("hold") && { hold: true }),
           })
         : console.log("  No such pending roll.");

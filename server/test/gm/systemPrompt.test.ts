@@ -66,7 +66,8 @@ describe("the GM's system prompt", () => {
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls.");
+    expect(prompt).toContain("It tracks each player's Edge, gives it when a rating gap earns it, and counts what they spend on their own rolls or on giving it to an ally");
+    expect(prompt).toContain("It does not yet handle the Edge Actions or burning Edge.");
     expect(prompt).toContain("Do not take away or count Edge yourself.");
     expect(prompt).not.toContain("does not track Edge");
     expect(prompt).not.toContain("does not track injuries");
@@ -96,6 +97,13 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("semi-trained ones (rating 1 to 4) retreat after losing about a quarter");
     expect(prompt).toContain("elite ones (8 to 10) fight on to the last");
     expect(prompt).toContain("these points are your guide for a whole group");
+  });
+
+  it("tells the GM what to do with an Edge report, in particular a special effect", () => {
+    expect(prompt).toContain("You are told when a player spends Edge.");
+    expect(prompt).toContain("a request for you to act");
+    expect(prompt).toContain("It should help, not win the scene.");
+    expect(prompt).toContain("may cause the opposition's glitch, which you will see on the result and must deal with");
   });
 
   it("tells the GM how Edge is gained: by rating gaps on its own, and by awards in a confrontation with a reason", () => {
