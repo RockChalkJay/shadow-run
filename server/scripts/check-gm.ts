@@ -65,13 +65,19 @@ async function turn(label: string, store: CampaignStore, session: GameSession, a
   return said;
 }
 
-/** Skips any roll still waiting, since the GM takes no turn while one is, so the next step starts clean. */
+/**
+ * Clears any roll still waiting, since the GM takes no turn while one is. A roll that can be skipped is skipped;
+ * one that cannot (a defense, or resisting damage) is answered with dice that fail.
+ */
 async function clearRolls(store: CampaignStore, session: GameSession) {
-  for (let round = 0; round < 3; round++) {
-    const waiting = session.snapshot().pendingRolls.filter((r) => !r.soak && r.attack?.role !== "defender");
+  for (let round = 0; round < 4; round++) {
+    const waiting = session.snapshot().pendingRolls;
     if (waiting.length === 0) return;
-    await turn(`skipping ${waiting.length} roll(s) left over from the last scene`, store, session, async () => {
-      for (const r of waiting) await session.cancelRoll(r.id);
+    await turn(`clearing ${waiting.length} roll(s) left over from the last scene`, store, session, async () => {
+      for (const r of waiting) {
+        if (r.soak || r.attack?.role === "defender") await session.submitRoll(r.id, { mode: "physical", dice: "2 ".repeat(r.pool.total).trim() });
+        else await session.cancelRoll(r.id);
+      }
     });
   }
 }
@@ -130,7 +136,7 @@ async function main() {
   // A fight: the GM asks for the dice, and once they decide a hit it hurts people through the tools.
   const faces = (request: { pool: { total: number } }, face: number) => String(face).repeat(request.pool.total).split("").join(" ");
   await turn("a ganger shoots a player character", store, session, () =>
-    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
+    session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira. He is very fast: his initiative numbers are Reaction 9, Intuition 9 and 1 die, so he acts first."),
   );
   const lastAttack = async () => (await store.recentEntries(50)).findLast((e) => e.kind === "attack");
   check("the GM starts the fight with start_combat, so the system rolls initiative", !!session.snapshot().combat, session.snapshot().combat ? `round ${session.snapshot().combat!.round}, ${session.snapshot().combat!.order.length} in the order` : "no fight was started");
@@ -187,7 +193,7 @@ async function main() {
   await turn("three patrolmen rush Doc", store, session, () =>
     session.say(
       undefined,
-      "Out of character: please run this now. Three nameless Lone Star patrolmen (Professional Rating 3, Body 3, Willpower 3, Charisma 2 each) rush Doc together with clubs.",
+      "Out of character: please run this now. Three nameless Lone Star patrolmen (Professional Rating 3, Body 3, Willpower 3, Charisma 2 each) rush Doc together with clubs. They are ambushing her: their initiative numbers are Reaction 9 and Intuition 9, 1 die each, so they act first.",
     ),
   );
   const rush = session.snapshot().pendingRolls.find((r) => r.attack?.role === "defender");
