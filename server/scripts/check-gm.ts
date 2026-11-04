@@ -133,6 +133,7 @@ async function main() {
     session.say(undefined, "Out of character: please start a fight right now. A ganger named Spike (Body 3, Willpower 3) kicks the door in and fires a heavy pistol at Kira."),
   );
   const lastAttack = async () => (await store.recentEntries(50)).findLast((e) => e.kind === "attack");
+  check("the GM starts the fight with start_combat, so the system rolls initiative", !!session.snapshot().combat, session.snapshot().combat ? `round ${session.snapshot().combat!.round}, ${session.snapshot().combat!.order.length} in the order` : "no fight was started");
   const defense = session.snapshot().pendingRolls.find((r) => r.characterId === "kira");
   check("the GM asks Kira to defend, through the attack tool", defense?.attack?.role === "defender", defense?.label ?? "no roll appeared");
   if (defense) {

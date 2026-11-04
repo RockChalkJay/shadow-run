@@ -2,10 +2,14 @@ import {
   AttackInput,
   DealDamageInput,
   HealInput,
+  JoinCombatInput,
   NpcRollInput,
+  StartCombatInput,
   RollRequestInput,
   type CharacterRef,
   type CharacterView,
+  type CombatParticipant,
+  type CombatState,
   type DamageType,
   type GmEvent,
   type HealMethod,
@@ -23,11 +27,12 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, type Flip, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest } from "./attack.js";
+import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
-import { formatAttackForGm, formatCancelledForGm, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { MAX_PENDING_ROLLS, RollManager, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
@@ -53,6 +58,8 @@ export interface SessionOptions {
   party: CharacterSheet[];
   emit: (event: ServerEvent) => void;
   d6?: D6;
+  /** Settles a tie in the initiative order that nothing else does; a number in [0, 1). */
+  flip?: Flip;
   rules?: Ruleset;
   /** Longest a GM turn may take before it is stopped. */
   turnTimeoutMs?: number;
@@ -70,6 +77,9 @@ export class GameSession {
   private readonly rolls: RollManager;
   private readonly roster: Roster;
   private readonly d6: D6;
+  private readonly flip: Flip;
+  /** The fight in progress, if any. */
+  private combat: CombatState | null;
   private readonly rules: Ruleset | undefined;
   private results: Outcome[];
   private held: Held[];
@@ -106,6 +116,8 @@ export class GameSession {
     private readonly recent: TranscriptEntry[],
   ) {
     this.d6 = opts.d6 ?? cryptoD6;
+    this.flip = opts.flip ?? cryptoFlip;
+    this.combat = saved?.combat ?? null;
     this.rules = opts.rules;
     this.roster = new Roster(opts.party, saved ?? undefined, this.rules);
     this.rolls = new RollManager(
@@ -165,6 +177,7 @@ export class GameSession {
       pending: this.rolls.list(),
       results: this.results,
       ...this.roster.toSaved(),
+      combat: this.combat,
       healBudgets: [...this.healBudgets].map(([rollId, b]) => ({ rollId, patient: b.patient, method: b.method, remaining: b.remaining })),
       held: this.held,
     };
@@ -194,6 +207,7 @@ export class GameSession {
       party: [...this.opts.party],
       characters: this.roster.views(),
       pendingRolls: this.rolls.list(),
+      combat: this.combat,
       transcript: [...this.recent],
       gm: this.status,
       usage: this.usage,
@@ -327,6 +341,10 @@ export class GameSession {
       rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
       dealDamage: (input) => whileCurrent(() => this.dealDamage(input)),
       attack: (input) => whileCurrent(() => this.attack(input)),
+      startCombat: (input) => whileCurrent(() => this.startCombat(input)),
+      joinCombat: (input) => whileCurrent(() => this.joinCombat(input)),
+      nextRound: () => whileCurrent(() => this.nextRound()),
+      endCombat: () => whileCurrent(() => this.endCombat()),
       heal: (input) => whileCurrent(() => this.heal(input)),
     };
   }
@@ -669,6 +687,99 @@ export class GameSession {
     return done.waiting ? { text, resist: done.text } : { text: `${text}\n${done.text}` };
   }
 
+  // ---- fights ----------------------------------------------------------------------------------
+
+  private statusOf = (member: { kind: "pc" | "npc"; id: string }) => this.roster.view(member.kind, member.id)?.status;
+
+  /**
+   * The numbers each participant's initiative is rolled from, or why the fight cannot have them. A player
+   * character's come from their sheet and nobody else's word; a non-player character's come from the GM.
+   */
+  private combatCandidates(participants: readonly CombatParticipant[], already: ReadonlySet<string>): { ok: true; list: Candidate[] } | { ok: false; error: string } {
+    const list: Candidate[] = [];
+    const seen = new Set(already);
+    for (const p of participants) {
+      const who = this.roster.resolve(p.who);
+      if (!who.ok) return { ok: false, error: who.error };
+      const key = `${who.kind}:${who.id}`;
+      if (seen.has(key)) return { ok: false, error: `${who.name} is already in this fight.` };
+      seen.add(key);
+      const view = this.roster.view(who.kind, who.id)!;
+      if (view.status !== "active") return { ok: false, error: `${who.name} is ${view.status} and cannot take part in the fight.` };
+
+      if (who.kind === "pc") {
+        if (p.initiative) return { ok: false, error: `${who.name}'s initiative comes from their sheet. Leave initiative out for a player character.` };
+        const sheet = this.member(who.id)!;
+        const a = sheet.attributes;
+        list.push({ member: { kind: "pc", id: who.id, name: who.name }, reaction: a.reaction, intuition: a.intuition, dice: sheet.initiativeDice, edge: a.edge });
+        continue;
+      }
+
+      if (!p.initiative) return { ok: false, error: `Give initiative (reaction, intuition and dice) for ${who.name}, a non-player character.` };
+      if (p.group !== undefined && !view.grunt) return { ok: false, error: `${who.name} is not a grunt. Only grunts roll initiative together as a group.` };
+      list.push({
+        member: { kind: "npc", id: who.id, name: who.name },
+        reaction: p.initiative.reaction,
+        intuition: p.initiative.intuition,
+        dice: p.initiative.dice,
+        // A grunt's Professional Rating stands in for their Edge when a tie is broken.
+        edge: view.grunt ? view.grunt.professionalRating : (p.edge ?? 0),
+        group: p.group,
+      });
+    }
+    return { ok: true, list };
+  }
+
+  /** Tells clients and the transcript that the fight changed, and saves it. */
+  private async announceCombat(event: "start" | "join" | "round" | "end", names: string[], round: number): Promise<void> {
+    this.opts.emit({ type: "combat.updated", combat: this.combat });
+    await this.record({ kind: "combat", event, round, names });
+    await this.persist();
+  }
+
+  private async startCombat(input: unknown): Promise<ToolReply> {
+    const parsed = StartCombatInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The fight was not valid: ${z.prettifyError(parsed.error)}` };
+    if (this.combat) {
+      return { ok: false, text: `A fight is already under way (round ${this.combat.round}). Use join_combat to add people, or end_combat first.` };
+    }
+    const prepared = this.combatCandidates(parsed.data.participants, new Set());
+    if (!prepared.ok) return { ok: false, text: prepared.error };
+
+    this.combat = { round: 1, order: inInitiativeOrder(rollEntries(prepared.list, this.d6, this.flip, this.rules)) };
+    await this.announceCombat("start", prepared.list.map((c) => c.member.name), 1);
+    return { ok: true, text: `${formatCombat("COMBAT BEGINS.", this.combat, this.statusOf)}\nEach turn, everyone acts once in this order. Call next_round when they all have, and end_combat when the fight is over.` };
+  }
+
+  private async joinCombat(input: unknown): Promise<ToolReply> {
+    const parsed = JoinCombatInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: `The fighters were not valid: ${z.prettifyError(parsed.error)}` };
+    if (!this.combat) return { ok: false, text: "There is no fight under way. Call start_combat to begin one." };
+    const inFight = new Set(this.combat.order.flatMap((entry) => entry.members.map((m) => `${m.kind}:${m.id}`)));
+    const prepared = this.combatCandidates(parsed.data.participants, inFight);
+    if (!prepared.ok) return { ok: false, text: prepared.error };
+
+    // Those already in the order keep their places and their coins; the newcomers slot in by score.
+    this.combat = { ...this.combat, order: inInitiativeOrder([...this.combat.order, ...rollEntries(prepared.list, this.d6, this.flip, this.rules)]) };
+    await this.announceCombat("join", prepared.list.map((c) => c.member.name), this.combat.round);
+    return { ok: true, text: formatCombat("JOINED THE FIGHT.", this.combat, this.statusOf) };
+  }
+
+  private async nextRound(): Promise<ToolReply> {
+    if (!this.combat) return { ok: false, text: "There is no fight under way. Call start_combat to begin one." };
+    this.combat = { ...this.combat, round: this.combat.round + 1 };
+    await this.announceCombat("round", [], this.combat.round);
+    return { ok: true, text: `${formatCombat("NEW ROUND.", this.combat, this.statusOf)}\nInitiative is not rerolled.` };
+  }
+
+  private async endCombat(): Promise<ToolReply> {
+    if (!this.combat) return { ok: false, text: "There is no fight under way." };
+    const { round } = this.combat;
+    this.combat = null;
+    await this.announceCombat("end", [], round);
+    return { ok: true, text: `COMBAT ENDS after ${round} ${round === 1 ? "round" : "rounds"}.` };
+  }
+
   private async heal(input: unknown): Promise<ToolReply> {
     const parsed = HealInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: `The healing was not valid: ${z.prettifyError(parsed.error)}` };
@@ -749,6 +860,7 @@ export class GameSession {
   private turnInput(turn: Turn): GmTurnInput {
     const parts: string[] = [];
     if (!this.opened) parts.push("BEGIN SESSION. Open the first scene.");
+    if (this.combat) parts.push(formatCombatStatus(this.combat, this.statusOf));
     for (const outcome of turn.results) {
       if (outcome.kind === "report") parts.push(outcome.text);
       else if (outcome.kind === "resolved") {

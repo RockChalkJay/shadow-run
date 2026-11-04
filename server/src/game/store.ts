@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { CharacterSheet, ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
+import { CharacterSheet, CombatState, ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { TREATMENTS } from "../rules/index.js";
 
@@ -45,6 +45,8 @@ export const SavedState = z.object({
   npcs: z
     .array(z.object({ id: z.string(), name: z.string(), body: z.number().int(), willpower: z.number().int(), monitor: ConditionMonitor, treated: z.array(Treatment).default([]), grunt: Grunt.optional() }))
     .default([]),
+  /** The fight in progress, if any. */
+  combat: CombatState.nullable().default(null),
   /** Hits still unspent on healing rolls the GM has been told about, so a restart does not grant them again. */
   healBudgets: z
     .array(

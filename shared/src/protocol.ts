@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CombatState } from "./combat.js";
 import type { CharacterView, DamageType, HealType, Status } from "./character.js";
 import type { CharacterSheet } from "./sheet.js";
 import type { ResolvedRoll, RollRequest, RollResult, Weapon } from "./roll.js";
@@ -77,6 +78,7 @@ export type TranscriptEntry =
       /** The weapon's Damage Value plus the attacker's net hits, before the defender resists; 0 on a miss. */
       damageValue: number;
     })
+  | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
   | (EntryBase & { kind: "system"; text: string });
 
@@ -93,6 +95,8 @@ export interface Snapshot {
   /** Every player character, and every non-player character the GM has put on the table. */
   characters: CharacterView[];
   pendingRolls: RollRequest[];
+  /** The fight in progress, if there is one. */
+  combat: CombatState | null;
   /** The most recent entries, oldest first. */
   transcript: TranscriptEntry[];
   gm: GmStatus;
@@ -113,6 +117,8 @@ export type ServerEvent =
   | { type: "gm.turn_done"; turnId: number }
   | { type: "usage"; usage: Usage }
   | { type: "character.updated"; character: CharacterView }
+  /** A fight began, gained people, moved to a new round, or ended (null). */
+  | { type: "combat.updated"; combat: CombatState | null }
   | { type: "entry"; entry: TranscriptEntry }
   | { type: "roll.requested"; request: RollRequest }
   | { type: "roll.cancelled"; requestId: string }

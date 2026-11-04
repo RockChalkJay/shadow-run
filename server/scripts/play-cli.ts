@@ -4,15 +4,16 @@
 //   npm run play           in another
 
 import { createInterface } from "node:readline";
-import type { CharacterView, ClientMessage, CharacterSheet, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, CombatState, CharacterSheet, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
 import { WebSocket } from "ws";
-import { formatStanding, showDice } from "../src/game/rollReport.js";
+import { formatCombatStatus, formatStanding, showDice } from "../src/game/rollReport.js";
 
 const url = process.env.TABLE_URL ?? `ws://127.0.0.1:${process.env.PORT ?? 8787}/ws`;
 const ws = new WebSocket(url);
 
 let party: CharacterSheet[] = [];
 let characters: CharacterView[] = [];
+let combat: CombatState | null = null;
 let active: CharacterSheet | undefined;
 let pending: RollRequest[] = [];
 let streaming = false;
@@ -81,6 +82,13 @@ function show(entry: TranscriptEntry) {
       line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
       line(`  ${formatStanding(entry.after)}\n`);
       return;
+    case "combat":
+      return line(
+        entry.event === "start" ? `\n  A fight begins: ${entry.names.join(", ")}`
+        : entry.event === "join" ? `  Joined the fight: ${entry.names.join(", ")}`
+        : entry.event === "round" ? `  -- round ${entry.round} --`
+        : `  The fight ends after ${entry.round} round(s)\n`,
+      );
     case "heal":
       line(`\n  ${entry.reason}: ${entry.after.name} heals ${entry.healed} ${entry.type}`);
       line(`  ${formatStanding(entry.after)}\n`);
@@ -95,6 +103,7 @@ function handle(event: ServerEvent) {
     case "snapshot":
       party = event.party;
       characters = event.characters;
+      combat = event.combat;
       active ??= party[0];
       pending = event.pendingRolls;
       line(`Connected. Party: ${party.map((m) => `${m.name} (${m.id})`).join(", ")}. Speaking as ${active?.name}. Type /help for commands.`);
@@ -134,6 +143,9 @@ function handle(event: ServerEvent) {
       if (entry.kind !== "gm") show(entry);
       break;
     }
+    case "combat.updated":
+      combat = event.combat;
+      break;
     case "character.updated":
       characters = [...characters.filter((c) => !(c.kind === event.character.kind && c.id === event.character.id)), event.character];
       break;
@@ -183,6 +195,7 @@ createInterface({ input: process.stdin }).on("line", (input) => {
     case "start":
       return send({ type: "session.start" });
     case "status":
+      if (combat) console.log(`  ${formatCombatStatus(combat, (m) => characters.find((c) => c.kind === m.kind && c.id === m.id)?.status)}`);
       return console.log(characters.map((c) => `  ${c.kind === "npc" ? "(NPC) " : ""}${formatStanding(c)}`).join("\n") || "  Nobody is on the table yet.");
     case "stop":
       return send({ type: "turn.cancel" });

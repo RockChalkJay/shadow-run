@@ -66,8 +66,19 @@ describe("the GM's system prompt", () => {
   });
 
   it("says what the system does not do yet, so this can be updated when it does", () => {
-    expect(prompt).toContain("It does not track Edge or initiative");
+    expect(prompt).toContain("It does not track Edge. The players keep their own Edge.");
+    expect(prompt).not.toContain("does not track Edge or initiative");
     expect(prompt).not.toContain("does not track injuries");
+  });
+
+  it("tells the GM to start a fight with the tool, never to make up an order, and how the round runs", () => {
+    expect(prompt).toContain("call start_combat with everyone in it");
+    expect(prompt).toContain("Never make up an order yourself.");
+    expect(prompt).toContain("initiative is not rerolled between rounds");
+    expect(prompt).toContain("When everyone has acted, call next_round.");
+    expect(prompt).toContain("call join_combat");
+    expect(prompt).toContain("call end_combat");
+    expect(prompt).toContain("a player character's come from their sheet, so give none");
   });
 
   it("gives the GM the rulebook's numbers for opposition, not rules of thumb", () => {

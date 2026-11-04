@@ -27,6 +27,13 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[NPC roll] ${entry.label}: ${hits(entry.roll.hits)}${entry.success === undefined ? "" : entry.success ? ", success" : ", failure"}.`;
     case "attack":
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}.`;
+    case "combat": {
+      const who = entry.names.join(", ");
+      if (entry.event === "start") return `[Combat] A fight begins: ${who}.`;
+      if (entry.event === "join") return `[Combat] Joined the fight: ${who}.`;
+      if (entry.event === "round") return `[Combat] Round ${entry.round} begins.`;
+      return `[Combat] The fight ends after ${entry.round} ${entry.round === 1 ? "round" : "rounds"}.`;
+    }
     case "damage":
       return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}${entry.composure && !entry.composure.held ? ` ${entry.after.name} bolted.` : ""}`;
     case "heal":

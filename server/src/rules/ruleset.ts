@@ -29,6 +29,8 @@ export const Ruleset = z.object({
     majorActions: z.number().int().min(1),
     baseMinorActions: z.number().int().min(0),
     minorActionsPerDie: z.number().int().min(0),
+    /** Most minor actions anyone may start a turn with. */
+    maxMinorActions: z.number().int().min(1),
   }),
   /** Where each setting is in the core rulebook PDF, keyed by the setting's path, so any value can be checked. */
   pages: z.record(z.string(), z.string()),

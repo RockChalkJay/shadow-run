@@ -67,3 +67,64 @@ export const AttackInput = z.object({
     .describe("When a player character rolls: whether spending Edge is worth it here, and the real option and its cost, as for request_roll"),
 });
 export type AttackInput = z.infer<typeof AttackInput>;
+
+const initiativeNumber = z.number().int().min(1).max(20);
+
+/** Someone in a fight, for starting it or joining it. */
+export const CombatParticipant = z.object({
+  who: CharacterRef.describe("A player character by id, or a non-player character by id (with name, body and willpower the first time)"),
+  initiative: z
+    .object({
+      reaction: initiativeNumber,
+      intuition: initiativeNumber,
+      dice: z.number().int().min(1).max(5).default(1).describe("Initiative dice, usually 1; at most 5"),
+    })
+    .optional()
+    .describe("Required for a non-player character. Leave it out for a player character: their sheet gives it"),
+  edge: z.number().int().min(0).max(7).optional().describe("A named non-player character's Edge, which breaks ties in the order. A grunt's Professional Rating is used instead"),
+  group: z
+    .string()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe("Grunts with the same group label roll initiative once and act together, with the numbers of the first one listed"),
+});
+export type CombatParticipant = z.infer<typeof CombatParticipant>;
+
+export const StartCombatInput = z.object({
+  participants: z.array(CombatParticipant).min(2).max(30).describe("Everyone taking part in the fight"),
+});
+export type StartCombatInput = z.infer<typeof StartCombatInput>;
+
+export const JoinCombatInput = z.object({
+  participants: z.array(CombatParticipant).min(1).max(10).describe("Those joining a fight already under way"),
+});
+export type JoinCombatInput = z.infer<typeof JoinCombatInput>;
+
+/** One place in the initiative order: a character, or a group of grunts who act together. */
+export const CombatEntry = z.object({
+  members: z.array(z.object({ kind: z.enum(["pc", "npc"]), id: z.string(), name: z.string() })).min(1),
+  /** Set for a group of grunts. */
+  group: z.string().optional(),
+  score: z.number().int(),
+  reaction: z.number().int(),
+  intuition: z.number().int(),
+  dice: z.number().int().min(1),
+  /** The initiative dice as rolled. */
+  rolls: z.array(z.number().int().min(1).max(6)),
+  /** Breaks ties: a character's Edge, or a grunt's Professional Rating. */
+  edge: z.number().int().min(0),
+  /** The coin that settles a tie nothing else does, fixed when the entry was made. */
+  coin: z.number().min(0).max(1),
+  major: z.number().int().min(1),
+  minor: z.number().int().min(1),
+});
+export type CombatEntry = z.infer<typeof CombatEntry>;
+
+/** A fight in progress. The order is rolled once and stands from round to round. */
+export const CombatState = z.object({
+  round: z.number().int().min(1),
+  /** Highest initiative first. */
+  order: z.array(CombatEntry),
+});
+export type CombatState = z.infer<typeof CombatState>;

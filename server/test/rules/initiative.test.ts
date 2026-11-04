@@ -21,6 +21,11 @@ describe("actionsFor", () => {
     expect(actionsFor(1)).toEqual({ major: 1, minor: 2 });
     expect(actionsFor(3)).toEqual({ major: 1, minor: 4 });
   });
+
+  it("never gives more than 5 minor actions, however many dice", () => {
+    expect(actionsFor(4)).toEqual({ major: 1, minor: 5 });
+    expect(actionsFor(5)).toEqual({ major: 1, minor: 5 });
+  });
 });
 
 describe("turnOrder", () => {
@@ -52,6 +57,16 @@ describe("turnOrder", () => {
     const coins = [0.9, 0.1];
     const flip = () => coins.shift() ?? 0;
     expect(names(turnOrder([entry("a", 10), entry("b", 10)], flip))).toEqual(["b", "a"]);
+  });
+
+  it("uses an entry's own coin, so adding someone later never reshuffles a tie", () => {
+    const a = { ...entry("a", 10), coin: 0.9 };
+    const b = { ...entry("b", 10), coin: 0.1 };
+    const flip = () => {
+      throw new Error("no flip is needed when every entry has its coin");
+    };
+    expect(names(turnOrder([a, b], flip))).toEqual(["b", "a"]);
+    expect(names(turnOrder([a, b, { ...entry("c", 10), coin: 0.5 }], flip))).toEqual(["b", "c", "a"]);
   });
 
   it("does not change the list it was given", () => {

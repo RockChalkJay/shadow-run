@@ -5,7 +5,7 @@
   "conditionMonitor": { "baseBoxes": 8, "stunOverflowPerPhysical": 1, "overflowMultiplier": 2 },
   "woundModifier": { "boxesPerRow": 3 },
   "grunt": { "woundBoxesPerRow": 2, "maxGroupSize": 5 },
-  "initiative": { "maxDice": 5, "majorActions": 1, "baseMinorActions": 1, "minorActionsPerDie": 1 },
+  "initiative": { "maxDice": 5, "majorActions": 1, "baseMinorActions": 1, "minorActionsPerDie": 1, "maxMinorActions": 5 },
   "pages": {
     "hitMinimum": "36, 106",
     "glitch.rule": "36, 45, 106",
@@ -21,12 +21,15 @@
     "initiative.maxDice": "40",
     "initiative.majorActions": "41",
     "initiative.baseMinorActions": "41",
-    "initiative.minorActionsPerDie": "41"
+    "initiative.minorActionsPerDie": "41",
+    "initiative.maxMinorActions": "108"
   },
   "rulesInCode": {
     "ties go to the attacker": "36, 106",
     "damage resistance rolls Body only": "106",
     "initiative ties break on Edge, Reaction, Intuition, then a coin flip": "107",
+    "initiative is rolled once when a fight begins and not rerolled between combat rounds": "108",
+    "grunts of one group share an initiative roll, and a grunt's Professional Rating stands in for their Edge when breaking a tie": "108",
     "first aid, a medkit and healing magic roll against a threshold of 5 minus the patient's Essence": "120, 121",
     "first aid and medkits add a free hit for a fully natural patient": "120, 121",
     "first aid heals one stun box per hit over the threshold, or one physical or overflow box per 2 hits": "120",
@@ -56,6 +59,8 @@
     "natural recovery of stun and physical damage takes no wound penalty, since the book subtracts wound modifiers only for overflow, and an unconscious character can roll it",
     "the book's time limits (a minute for first aid, an hour for a medkit, an hour or a day between natural recovery rolls) and medkit supplies are the GM's to keep; the system tracks no game time",
     "natural recovery can be rolled only by a player character for their own injuries",
+    "the book says initiative scores change for injury and special effects but gives no number, so wounds do not change anyone's score",
+    "a character who joins a fight already under way rolls initiative and takes their place by score, without moving anyone already in the order",
     "the book leaves a grunt's Composure threshold to the GM; the system uses a fixed threshold of 2 and tests once, when the grunt first passes their Professional Rating while still standing",
     "a grunt that fails Composure bolts, which the GM is told to carry out; one that passes holds for the rest of the fight",
     "a grunt knocked out by stun damage who is then hit by physical damage is dead, since the last damage decides",

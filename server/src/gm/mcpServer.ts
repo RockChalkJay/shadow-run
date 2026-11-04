@@ -3,19 +3,23 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { AttackInput, DealDamageInput, HealInput, NpcRollInput, RollRequestInput } from "@shadow-run/shared";
+import { AttackInput, DealDamageInput, HealInput, JoinCombatInput, NpcRollInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "start_combat", "join_combat", "next_round", "end_combat"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
   rollNpc(input: unknown): Promise<ToolReply>;
   attack(input: unknown): Promise<ToolReply>;
+  startCombat(input: unknown): Promise<ToolReply>;
+  joinCombat(input: unknown): Promise<ToolReply>;
+  nextRound(): Promise<ToolReply>;
+  endCombat(): Promise<ToolReply>;
   dealDamage(input: unknown): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
 }
@@ -94,6 +98,51 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: DealDamageInput.shape,
     },
     async (input) => asResult(await handlers.dealDamage(input)),
+  );
+
+  server.registerTool(
+    "start_combat",
+    {
+      description:
+        "Begin a fight. List everyone taking part and the system rolls initiative: Reaction + Intuition plus the " +
+        "initiative dice. A player character's numbers come from their sheet, so give none; for a non-player " +
+        "character give reaction, intuition and dice, and their name, body and willpower the first time. Grunts " +
+        "with the same group label roll once and act together. You get the order, highest first, and everyone acts " +
+        "once per round in it. Initiative is not rerolled between rounds. Never make up an order yourself.",
+      inputSchema: StartCombatInput.shape,
+    },
+    async (input) => asResult(await handlers.startCombat(input)),
+  );
+
+  server.registerTool(
+    "join_combat",
+    {
+      description:
+        "Add people to a fight already under way, such as reinforcements. They roll initiative and take their place " +
+        "by score; no one already in the order moves. Same participants as start_combat.",
+      inputSchema: JoinCombatInput.shape,
+    },
+    async (input) => asResult(await handlers.joinCombat(input)),
+  );
+
+  server.registerTool(
+    "next_round",
+    {
+      description:
+        "Move the fight on to the next round once everyone in the order has acted. The order stands. Each turn you " +
+        "are also told the round and the order, including who is down.",
+      inputSchema: {},
+    },
+    async () => asResult(await handlers.nextRound()),
+  );
+
+  server.registerTool(
+    "end_combat",
+    {
+      description: "End the fight when it is over, whether everyone on one side is down, has fled or has surrendered.",
+      inputSchema: {},
+    },
+    async () => asResult(await handlers.endCombat()),
   );
 
   server.registerTool(
