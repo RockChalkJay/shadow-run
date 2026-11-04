@@ -8,9 +8,11 @@ A local web app that runs Shadowrun 6th Edition sessions with Claude as the Game
 
 ## Trying the table
 
+Start the table (below), then run `npm run dev:web` and open http://localhost:5173 for its screen. It shows the story, lets any character speak (one person types for everyone), and puts each roll the GM asks for on a card: stakes, pool and what it needs up front, with what happens and the Edge advice opening on a click. A roll can be made with the app's dice (they tumble, then the result drops into the story), with dice rolled by hand (one box per die, or paste them all into the first), skipped (not for rolls that resist damage or defend), or replaced by a Smackdown after a confirmation. Health, the fight's order and Edge are not on the screen yet; the command-line client below shows them, and is still the way to hold a roll to spend Edge after seeing the dice. For a try that costs no usage, start the server with `SHADOWRUN_GM=scripted`.
+
 ```
 npm run dev:server      # the table, with Claude as the GM on your own plan
-npm run play            # in another terminal: play at it from the command line
+npm run play            # in another terminal: play at it from the command line instead of the browser
 ```
 
 Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
