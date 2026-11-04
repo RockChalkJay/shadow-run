@@ -18,6 +18,7 @@ import {
   type GmStatus,
   type CharacterSheet,
   type EdgeActionOnRoll,
+  type EdgeBurn,
   type ResolvedRoll,
   type RollRequest,
   type RollResult,
@@ -30,13 +31,13 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, burnEdge, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDGE_ADVICE } from "./attack.js";
 import { calledShotOf, edgeActionSummary, type CalledShot } from "./edgeAction.js";
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
 import { formatRecap } from "./recap.js";
 import { Roster, type Target } from "./roster.js";
-import { formatAttackForGm, formatCancelledForGm, formatCombat, formatCombatStatus, formatEdgeNote, formatStanding, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
+import { formatAttackForGm, formatCancelledForGm, formatCombat, formatBurnNote, formatCombatStatus, formatEdgeNote, formatStanding, formatDamageForGm, formatHealForGm, formatHealingOffer, formatNpcRoll, formatRollForGm } from "./rollReport.js";
 import { MAX_PENDING_ROLLS, RollManager, type EdgeBoost, type RollEntry } from "./rollManager.js";
 import type { CampaignStore, NewEntry, SavedState } from "./store.js";
 
@@ -48,15 +49,18 @@ const WAIT_FOR_DICE = "The roll card is on the table's screen. End your turn now
 type Found = Extract<Target, { ok: true }>;
 
 /** What a player hands in with their dice. */
-export type RollAnswer = (
-  | { mode: "app" }
-  | { mode: "physical"; dice: string; /** Extra dice rolled by hand for exploding 6s with Edge dice. */ explosions?: string }
-) & {
-  /** Spend Edge before the roll: 4 to add the Edge attribute to the pool and make 6s explode, or 5 to make 2s count as glitches on the opposing roll. */
-  edge?: "dice" | "widen_glitch";
-  /** Count the roll but wait for the player to decide on Edge before it counts. */
-  hold?: boolean;
-};
+export type RollAnswer =
+  | ((
+      | { mode: "app" }
+      | { mode: "physical"; dice: string; /** Extra dice rolled by hand for exploding 6s with Edge dice. */ explosions?: string }
+    ) & {
+      /** Spend Edge before the roll: 4 to add the Edge attribute to the pool and make 6s explode, or 5 to make 2s count as glitches on the opposing roll. */
+      edge?: "dice" | "widen_glitch";
+      /** Count the roll but wait for the player to decide on Edge before it counts. */
+      hold?: boolean;
+    })
+  /** Burn Edge instead of rolling: an automatic success with four net hits. */
+  | { mode: "smackdown" };
 
 /** Edge spent on something other than a roll. */
 export interface EdgeUse {
@@ -70,7 +74,9 @@ export type EdgeChoice =
   | { boost: "reroll"; targets: Array<{ side: "mine" | "theirs"; index: number }>; dice?: string }
   | { boost: "bump"; targets: Array<{ side: "mine" | "theirs"; index: number }> }
   | { boost: "buy_hit"; times?: number }
-  | { boost: "reroll_failed"; dice?: string };
+  | { boost: "reroll_failed"; dice?: string }
+  /** Burn Edge to survive a held roll to resist damage that would kill. */
+  | { boost: "not_dead_yet" };
 
 /** The Edge catalog entry behind each way of spending Edge on a roll, so costs are the book's and in one place. */
 const BOOST_ENTRY = {
@@ -127,6 +133,10 @@ export class GameSession {
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
   private readonly edge = new Map<string, EdgeState>();
+  /** The sheets as played: their Edge is what is left after the rank each character has burned. */
+  private sheets: CharacterSheet[];
+  /** Edge rank each player character has burned for good, saved with the game and taken off their sheet whenever it is loaded. */
+  private readonly burned: Record<string, number>;
   /** Edge given for an attack its player has yet to make, by roll id, which is taken back if they skip it. */
   private readonly edgeForAttack = new Map<string, { characterId: string; gained: number }>();
   private readonly rules: Ruleset | undefined;
@@ -167,7 +177,9 @@ export class GameSession {
     this.d6 = opts.d6 ?? cryptoD6;
     this.flip = opts.flip ?? cryptoFlip;
     this.combat = saved?.combat ?? null;
-    for (const sheet of opts.party) this.edge.set(sheet.id, startSession(sheet.attributes.edge));
+    this.sheets = [...opts.party];
+    this.burned = { ...saved?.burned };
+    for (const sheet of this.sheets) this.edge.set(sheet.id, startSession(sheet.attributes.edge));
     this.rules = opts.rules;
     this.roster = new Roster(opts.party, saved ?? undefined, this.rules);
     this.rolls = new RollManager(
@@ -191,7 +203,7 @@ export class GameSession {
   }
 
   get party(): readonly CharacterSheet[] {
-    return this.opts.party;
+    return this.sheets;
   }
 
   /** The Claude session the GM resumes, once there is one. */
@@ -200,7 +212,7 @@ export class GameSession {
   }
 
   private member(id: string | undefined): CharacterSheet | undefined {
-    return id === undefined ? undefined : this.opts.party.find((m) => m.id === id);
+    return id === undefined ? undefined : this.sheets.find((m) => m.id === id);
   }
 
   private nameOf(id: string | undefined): string {
@@ -228,6 +240,7 @@ export class GameSession {
       results: this.results,
       ...this.roster.toSaved(),
       combat: this.combat,
+      burned: this.burned,
       healBudgets: [...this.healBudgets].map(([rollId, b]) => ({ rollId, patient: b.patient, method: b.method, remaining: b.remaining })),
       held: this.held,
     };
@@ -254,7 +267,7 @@ export class GameSession {
   snapshot(): Snapshot {
     return {
       type: "snapshot",
-      party: [...this.opts.party],
+      party: [...this.sheets],
       characters: this.roster.views(),
       pendingRolls: this.rolls.list(),
       edge: this.edgeViews(),
@@ -324,6 +337,34 @@ export class GameSession {
     this.announceEdge(id);
   }
 
+  /** Why this character cannot burn Edge, or null if they can. Burning works even in a round Edge was spent. */
+  private burnProblem(id: string): string | null {
+    const state = this.edge.get(id);
+    if (!state) return "That character has no Edge to burn.";
+    if (state.rank === 0) return `${this.nameOf(id)} has no Edge rank left to burn.`;
+    return null;
+  }
+
+  /** Burns a point of Edge rank for good, and every Edge point on hand, and says what it cost. The caller saves the game. */
+  private async burnFor(id: string, kind: EdgeBurn["kind"]): Promise<EdgeBurn> {
+    const before = this.edge.get(id)!;
+    const after = burnEdge(before);
+    this.edge.set(id, after);
+    this.burned[id] = (this.burned[id] ?? 0) + 1;
+    this.sheets = this.sheets.map((sheet) => (sheet.id === id ? { ...sheet, attributes: { ...sheet.attributes, edge: after.rank } } : sheet));
+    this.announceEdge(id);
+    const burn = { kind, lost: before.points, rank: after.rank };
+    await this.record({ kind: "edge_burn", characterId: id, name: this.nameOf(id), burn: kind, lost: burn.lost, rank: burn.rank });
+    return burn;
+  }
+
+  /** What a player spent or burned on a roll, for the GM. */
+  private edgeNotes(resolved: ResolvedRoll): string | undefined {
+    const name = this.nameOf(resolved.request.characterId);
+    const notes = [resolved.edge && formatEdgeNote(name, resolved.edge), resolved.burn && formatBurnNote(name, resolved.burn)].filter((n): n is string => n !== undefined);
+    return notes.length > 0 ? notes.join("\n") : undefined;
+  }
+
   /**
    * An Edge Action the GM named for a player character's roll, read from the catalog, or why it cannot be used.
    * Nothing is charged here: the Edge is paid when the roll counts. Called Shot works on an attack's damage, so it
@@ -331,7 +372,7 @@ export class GameSession {
    */
   private edgeActionFor(characterId: string, id: string, goesWith: "roll" | "attack" | "defense"): { ok: true; action: EdgeActionOnRoll } | { ok: false; error: string } {
     const entry = findEdgeEntry(id);
-    if (entry?.kind === "burn") return { ok: false, error: `${entry.name} is burning Edge, which the system does not handle yet. Narrate around it.` };
+    if (entry?.kind === "burn") return { ok: false, error: `${entry.name} is burning Edge, which only the player can choose, on the roll card or the roll they hold. Do not pass it as an Edge Action.` };
     if (!entry || entry.kind !== "action") {
       const ids = defaultEdgeCatalog.entries.filter((e) => e.kind === "action").map((e) => e.id).join(", ");
       return { ok: false, error: `"${id}" is not an Edge Action. They are: ${ids}.` };
@@ -364,6 +405,7 @@ export class GameSession {
     // A roll can outlive its character if the party was edited while it waited; it has nobody to apply to.
     const waiting = this.rolls.list().find((r) => r.id === requestId);
     if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+    if (answer.mode === "smackdown") return this.smackdown(requestId, waiting);
 
     // An Edge Action the GM declared is the one expenditure of Edge this roll gets, paid when it counts. A player who
     // can no longer pay for it, because Edge went elsewhere meanwhile, rolls without it.
@@ -388,8 +430,9 @@ export class GameSession {
       }
     }
     if (waiting && answer.hold) {
+      // A roll to resist damage may be held with no Edge to spend, since a player with some rank left can burn it to survive a killing blow.
       const problem = this.edgeProblem(waiting.characterId, 1);
-      if (problem) return { ok: false, error: `${problem} Roll without holding.` };
+      if (problem && !(waiting.soak && this.burnProblem(waiting.characterId) === null)) return { ok: false, error: `${problem} Roll without holding.` };
     }
 
     const entry: RollEntry = {
@@ -422,12 +465,57 @@ export class GameSession {
     return this.completeRoll(result.resolved);
   }
 
+  /**
+   * The player burns Edge for Smackdown instead of rolling: an automatic success with four net hits, for a point of Edge
+   * rank and every Edge point on hand. It replaces the roll, so it needs a roll that has yet to be counted, and it is not
+   * for the rolls that resist damage or heal, which have their own ways.
+   */
+  private async smackdown(requestId: string, waiting: RollRequest | undefined): Promise<Ack> {
+    if (!waiting) return { ok: false, error: "That roll is not waiting for dice; it may already have been rolled or skipped." };
+    const name = this.nameOf(waiting.characterId);
+    if (waiting.held) return { ok: false, error: "That roll is already counted. Smackdown replaces the roll, so it has to come before the dice." };
+    if (waiting.soak) return { ok: false, error: `Smackdown cannot resist damage. If the blow would kill ${name}, hold this roll and burn Not Dead Yet once the dice are counted.` };
+    if (waiting.healing) return { ok: false, error: "A healing roll cannot be a Smackdown." };
+    const declared = waiting.edgeAction;
+    if (declared && !this.edgeProblem(waiting.characterId, declared.cost)) {
+      return { ok: false, error: `${name} declared ${declared.name}, and burning Edge spends all their Edge, so the two cannot go together. Roll without Smackdown.` };
+    }
+    const problem = this.burnProblem(waiting.characterId);
+    if (problem) return { ok: false, error: problem };
+
+    const result = this.rolls.resolve(requestId, { mode: "smackdown", netHits: findEdgeEntry("smackdown")!.amount! });
+    if (!result.ok) return result;
+    const burn = await this.burnFor(waiting.characterId, "smackdown");
+    return this.completeRoll({ ...result.resolved, burn });
+  }
+
+  /**
+   * The player burns Edge, for good, to survive a held roll to resist damage that would kill. The damage still lands, but
+   * stops one box short of death, so they are left unconscious and dying and still in whatever danger the blow came from.
+   */
+  private async notDeadYet(waiting: RollRequest): Promise<Ack> {
+    const name = this.nameOf(waiting.characterId);
+    if (!waiting.soak) return { ok: false, error: "Not Dead Yet saves a character from a killing blow, so only a held roll to resist damage can use it." };
+    const taken = damageAfterResistance(waiting.soak.damageValue, waiting.held!.roll.hits);
+    if (!this.roster.wouldKill("pc", waiting.characterId, waiting.soak.damageType, taken)) {
+      return { ok: false, error: `${name} would survive this as the roll stands, so there is no killing blow for Not Dead Yet to save them from.` };
+    }
+    const problem = this.burnProblem(waiting.characterId);
+    if (problem) return { ok: false, error: problem };
+
+    const finished = this.rolls.finish(waiting.id);
+    if (!finished.ok) return finished;
+    const burn = await this.burnFor(waiting.characterId, "not_dead_yet");
+    return this.completeRoll({ ...finished.resolved, burn });
+  }
+
   /** The player has seen a held roll and spends Edge on it; it then counts. */
   async spendEdge(requestId: string, choice: EdgeChoice): Promise<Ack> {
     const waiting = this.rolls.list().find((r) => r.id === requestId);
     if (!waiting) return { ok: false, error: "That roll is not waiting; it may already have counted or been skipped." };
     if (!this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
     if (!waiting.held) return { ok: false, error: "That roll has not been counted yet, so there is nothing to spend Edge on. Roll it with hold first." };
+    if (choice.boost === "not_dead_yet") return this.notDeadYet(waiting);
 
     let boost: EdgeBoost;
     let cost: number;
@@ -745,12 +833,13 @@ export class GameSession {
   private applySoak(resolved: ResolvedRoll): { report: string; entry: NewEntry } {
     const { request, roll, source } = resolved;
     const soak = request.soak!;
+    if (source === "smackdown") throw new Error("A roll to resist damage cannot be a Smackdown.");
     const taken = damageAfterResistance(soak.damageValue, roll.hits);
-    const after = this.roster.damage("pc", request.characterId, soak.damageType, taken);
+    const after = this.roster.damage("pc", request.characterId, soak.damageType, taken, { surviveDeath: resolved.burn?.kind === "not_dead_yet" });
     this.announce(after);
     const damage = { label: soak.source, damageType: soak.damageType, damageValue: soak.damageValue, resistance: roll, resistedBy: source, taken, after };
     return {
-      report: formatDamageForGm({ ...damage, body: request.pool.total, edge: resolved.edge && formatEdgeNote(this.nameOf(request.characterId), resolved.edge) }),
+      report: formatDamageForGm({ ...damage, body: request.pool.total, edge: this.edgeNotes(resolved) }),
       entry: { kind: "damage", ...damage },
     };
   }
@@ -1020,7 +1109,7 @@ export class GameSession {
       weapon: attack.weapon,
       attackerName: attacking ? player : attack.other.name,
       groupSize: attack.groupSize ?? 1,
-      edgeNote: resolved.edge && formatEdgeNote(player, resolved.edge),
+      edgeNote: this.edgeNotes(resolved),
       // Called Shot reshapes the damage of the player's own attack; the system applies it here.
       ...(attacking && { calledShot: calledShotOf(resolved.edge?.action) }),
       defender,
@@ -1048,10 +1137,10 @@ export class GameSession {
     defender: Found;
     attackRoll: RollResult;
     attackDice: number;
-    attackedBy: "app" | "physical" | "system";
+    attackedBy: "app" | "physical" | "system" | "smackdown";
     defenseRoll: RollResult;
     defenseDice: number;
-    defendedBy: "app" | "physical" | "system";
+    defendedBy: "app" | "physical" | "system" | "smackdown";
   }): Promise<{ text: string; resist?: string }> {
     const landed = attackDamage(a.attackRoll, a.defenseRoll, a.weapon.damageValue);
     const shot = a.calledShot;

@@ -46,16 +46,25 @@ function addPhysical(monitor: ConditionMonitor, amount: number): ConditionMonito
   return { ...monitor, physical: monitor.physical + taken, overflow: monitor.overflow + (amount - taken) };
 }
 
-/** Marks damage on the monitor; stun past the last stun box carries over as physical. */
+/**
+ * Marks damage on the monitor; stun past the last stun box carries over as physical. With `surviveDeath`, damage that
+ * would fill the overflow stops one box short of it, so the character is left dying instead of dead.
+ */
 export function applyDamage(
   monitor: ConditionMonitor,
   type: DamageType,
   amount: number,
   rules: Ruleset = defaultRuleset,
+  options: { surviveDeath?: boolean } = {},
 ): ConditionMonitor {
   if (!Number.isInteger(amount) || amount < 0) throw new RangeError(`Damage must be a whole number, got ${amount}`);
-  if (type === "physical") return addPhysical(monitor, amount);
+  const marked = markDamage(monitor, type, amount, rules);
+  if (!options.surviveDeath || marked.overflow < marked.overflowBoxes) return marked;
+  return { ...marked, overflow: marked.overflowBoxes - 1 };
+}
 
+function markDamage(monitor: ConditionMonitor, type: DamageType, amount: number, rules: Ruleset): ConditionMonitor {
+  if (type === "physical") return addPhysical(monitor, amount);
   const taken = Math.min(amount, monitor.stunBoxes - monitor.stun);
   const filled = { ...monitor, stun: monitor.stun + taken };
   const carried = Math.floor((amount - taken) / rules.conditionMonitor.stunOverflowPerPhysical);

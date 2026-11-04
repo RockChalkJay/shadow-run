@@ -30,6 +30,8 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Attack] ${entry.attacker} ${entry.hit ? "hit" : "missed"} ${entry.defender} with ${entry.weapon.name}${entry.edgeAction ? `, using ${entry.edgeAction}` : ""}.`;
     case "edge":
       return entry.gained < 0 ? `[Edge] ${entry.name} lost ${-entry.gained} Edge: ${entry.reason}.` : `[Edge] ${entry.name} gained ${entry.gained} Edge: ${entry.reason}.`;
+    case "edge_burn":
+      return `[Edge] ${entry.name} burned Edge for ${entry.burn === "smackdown" ? "Smackdown" : "Not Dead Yet"} and lost a point of Edge rank for good (now ${entry.rank}).`;
     case "edge_use":
       return `[Edge] ${entry.name} spent ${entry.cost} Edge and ${entry.detail}.`;
     case "combat": {

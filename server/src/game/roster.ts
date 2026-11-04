@@ -155,8 +155,17 @@ export class Roster {
     return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
   }
 
-  /** Marks damage that has already been resisted; returns how they stand now. */
-  damage(kind: "pc" | "npc", id: string, type: DamageType, amount: number): CharacterView {
+  /** Whether this much damage, already resisted, would kill a player character as they stand. */
+  wouldKill(kind: "pc" | "npc", id: string, type: DamageType, amount: number): boolean {
+    const entry = this.entry(kind, id);
+    return entry !== undefined && !entry.grunt && statusOf(applyDamage(entry.monitor, type, amount, this.rules)) === "dead";
+  }
+
+  /**
+   * Marks damage that has already been resisted; returns how they stand now. With `surviveDeath`, damage that would
+   * kill leaves them dying instead.
+   */
+  damage(kind: "pc" | "npc", id: string, type: DamageType, amount: number, options: { surviveDeath?: boolean } = {}): CharacterView {
     const entry = this.entry(kind, id);
     if (!entry) throw new Error(`No ${kind} "${id}" to hurt.`);
     if (entry.grunt) {
@@ -164,7 +173,7 @@ export class Roster {
       entry.monitor = { ...entry.monitor, physical: Math.min(entry.monitor.physicalBoxes, entry.monitor.physical + amount) };
       if (amount > 0) entry.grunt.last = type;
     } else {
-      entry.monitor = applyDamage(entry.monitor, type, amount, this.rules);
+      entry.monitor = applyDamage(entry.monitor, type, amount, this.rules, options);
     }
     // New injuries are a new set of injuries, which can be treated again.
     if (amount > 0) entry.treated.clear();

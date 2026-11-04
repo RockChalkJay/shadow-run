@@ -1,5 +1,5 @@
-import type { CharacterView, CombatEntry, CombatState, DamageType, HealMethod, HealType, Status, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
-import { METHOD_NAMES } from "../rules/index.js";
+import type { CharacterView, CombatEntry, CombatState, DamageType, EdgeBurn, HealMethod, HealType, Status, ResolvedRoll, RollRequest, RollResult, Weapon } from "@shadow-run/shared";
+import { findEdgeEntry, METHOD_NAMES } from "../rules/index.js";
 import { damageCode } from "./attack.js";
 import { calledShotOf } from "./edgeAction.js";
 
@@ -25,12 +25,24 @@ export function formatEdgeNote(characterName: string, edge: NonNullable<Resolved
   return `EDGE. ${characterName} spent ${edge.spent} Edge and ${edge.summary}.${yours}`;
 }
 
+/** What burning Edge cost a player and did for them, for the GM. */
+export function formatBurnNote(characterName: string, burn: EdgeBurn): string {
+  const cost = `They permanently lose 1 point of Edge rank (it is now ${burn.rank}) and the ${plural(burn.lost, "Edge point")} they held.`;
+  if (burn.kind === "smackdown") {
+    const hits = findEdgeEntry("smackdown")?.amount;
+    return `EDGE BURNED. ${characterName} burned Edge for Smackdown, so this was an automatic success with ${hits === undefined ? "extra" : plural(hits, "net hit")} instead of a roll. ${cost}`;
+  }
+  return `EDGE BURNED. ${characterName} burned Edge for Not Dead Yet: the blow would have killed them, and they survive it instead, unconscious and dying. It does not take them out of the danger they are in. ${cost}`;
+}
+
 /** What the GM is told once a roll is counted. The consequence is the one the GM declared up front. */
 export function formatRollForGm(resolved: ResolvedRoll, characterName: string): string {
   const { request, roll, opposed, outcome, source } = resolved;
   const lines = [
     `ROLL RESULT. ${characterName}: ${request.label}.`,
-    `${characterName} rolled ${diceCount(roll.dice.length)} (${source === "app" ? "app dice" : "dice at the table"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
+    source === "smackdown"
+      ? `${characterName} did not roll: they burned Edge for Smackdown.`
+      : `${characterName} rolled ${diceCount(roll.dice.length)} (${source === "app" ? "app dice" : "dice at the table"}): ${showDice(roll)} = ${plural(roll.hits, "hit")}.`,
   ];
   if (opposed) {
     lines.push(
@@ -43,6 +55,7 @@ export function formatRollForGm(resolved: ResolvedRoll, characterName: string): 
   }
 
   if (resolved.edge) lines.push(formatEdgeNote(characterName, resolved.edge));
+  if (resolved.burn) lines.push(formatBurnNote(characterName, resolved.burn));
   if (opposed) {
     const note = glitchNote(opposed.roll);
     if (note) lines.push(`${opposed.by}: ${note}. The GM decides what goes wrong, keeping it ${opposed.roll.criticalGlitch ? "serious but not fatal" : "inconvenient, not disastrous"}.`);
@@ -99,6 +112,7 @@ export function formatStanding(view: CharacterView): string {
 }
 
 const how = { app: "app dice", physical: "dice at the table", system: "the system's dice" } as const;
+type Dice = keyof typeof how;
 
 export interface DamageReport {
   label: string;
@@ -106,10 +120,10 @@ export interface DamageReport {
   damageValue: number;
   body: number;
   resistance: RollResult;
-  resistedBy: keyof typeof how;
+  resistedBy: Dice;
   taken: number;
   after: CharacterView;
-  /** What the player spent on Edge for the resistance roll, if anything. */
+  /** What the player spent or burned on Edge for the resistance roll, if anything. */
   edge?: string | undefined;
   /** Set when a grunt passed their Professional Rating with this damage. */
   composure?: { roll: RollResult; pool: number; threshold: number; held: boolean };
@@ -177,10 +191,10 @@ export interface AttackReport {
   groupSize?: number;
   attackRoll: RollResult;
   attackDice: number;
-  attackedBy: keyof typeof how;
+  attackedBy: Dice | "smackdown";
   defenseRoll: RollResult;
   defenseDice: number;
-  defendedBy: keyof typeof how;
+  defendedBy: Dice | "smackdown";
   hit: boolean;
   damageValue: number;
   /** What the player spent on Edge on their side of the attack, if anything. */
@@ -196,8 +210,12 @@ export function formatAttackForGm(r: AttackReport): string {
   const base = r.weapon.damageValue;
   const lines = [
     `ATTACK RESULT. ${r.label}.`,
-    `${r.attacker} attacked ${(r.groupSize ?? 1) > 1 ? `as a group of ${r.groupSize} ` : ""}with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
-    `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
+    r.attackedBy === "smackdown"
+      ? `${r.attacker} attacked with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}) and burned Edge for Smackdown instead of rolling.`
+      : `${r.attacker} attacked ${(r.groupSize ?? 1) > 1 ? `as a group of ${r.groupSize} ` : ""}with ${r.weapon.name} (${damageCode(base, r.weapon.damageType)}), ${diceCount(r.attackDice)} (${how[r.attackedBy]}): ${showDice(r.attackRoll)} = ${plural(r.attackRoll.hits, "hit")}.`,
+    r.defendedBy === "smackdown"
+      ? `${r.defender} burned Edge for Smackdown instead of defending.`
+      : `${r.defender} defended, ${diceCount(r.defenseDice)} (${how[r.defendedBy]}): ${showDice(r.defenseRoll)} = ${plural(r.defenseRoll.hits, "hit")}.`,
     ...(r.edge ? [r.edge] : []),
   ];
   if (r.disarmed) {

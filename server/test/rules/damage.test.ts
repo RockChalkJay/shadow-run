@@ -27,6 +27,33 @@ describe("newMonitor", () => {
   });
 });
 
+describe("applyDamage that must leave the character alive", () => {
+  const kira = newMonitor(5, 3); // 11 physical, 10 stun, 10 overflow
+
+  it("stops physical damage one box short of death, leaving them unconscious", () => {
+    const dying = applyDamage(kira, "physical", 30, undefined, { surviveDeath: true });
+    expect(dying).toMatchObject({ physical: 11, overflow: 9 });
+    expect(statusOf(dying)).toBe("unconscious");
+    expect(statusOf(applyDamage(kira, "physical", 30))).toBe("dead");
+  });
+
+  it("does the same for stun that carries over into physical and then overflow", () => {
+    const dying = applyDamage(kira, "stun", 40, undefined, { surviveDeath: true });
+    expect(dying).toMatchObject({ stun: 10, physical: 11, overflow: 9 });
+    expect(statusOf(applyDamage(kira, "stun", 40))).toBe("dead");
+  });
+
+  it("changes nothing when the damage would not kill", () => {
+    expect(applyDamage(kira, "physical", 15, undefined, { surviveDeath: true })).toEqual(applyDamage(kira, "physical", 15));
+    expect(applyDamage(kira, "physical", 20, undefined, { surviveDeath: true })).toMatchObject({ overflow: 9 });
+  });
+
+  it("leaves someone already one box from death where they are", () => {
+    const edge = { ...kira, physical: 11, overflow: 9 };
+    expect(applyDamage(edge, "physical", 4, undefined, { surviveDeath: true })).toMatchObject({ physical: 11, overflow: 9 });
+  });
+});
+
 describe("applyDamage", () => {
   it("marks physical damage, and past the last box it overflows", () => {
     const hurt = applyDamage(newMonitor(5, 3), "physical", 5);

@@ -192,10 +192,21 @@ export const RollOutcome = z.object({
 });
 export type RollOutcome = z.infer<typeof RollOutcome>;
 
+/** Edge burned for good on a roll, and what that left the character with. */
+export const EdgeBurn = z.object({
+  kind: z.enum(["smackdown", "not_dead_yet"]),
+  /** The Edge points spent along with the rank. */
+  lost: z.number().int().min(0),
+  /** The Edge rank they have left. */
+  rank: z.number().int().min(0),
+});
+export type EdgeBurn = z.infer<typeof EdgeBurn>;
+
 /** A roll request after the dice were counted and the opposition, if any, rolled by the system. */
 export const ResolvedRoll = z.object({
   request: RollRequest,
-  source: z.enum(["app", "physical"]),
+  /** How the player's dice came about; `smackdown` means there were none, since burning Edge made it an automatic success. */
+  source: z.enum(["app", "physical", "smackdown"]),
   roll: RollResultSchema,
   opposed: z
     .object({
@@ -208,5 +219,7 @@ export const ResolvedRoll = z.object({
   outcome: RollOutcome,
   /** Set when the player spent Edge on this roll: how much, and what it did. */
   edge: z.object({ spent: z.number().int().min(1), summary: z.string(), /** The id of the Edge Action, when that is what was spent. */ action: z.string().optional() }).optional(),
+  /** Set when the player burned Edge on this roll. */
+  burn: EdgeBurn.optional(),
 });
 export type ResolvedRoll = z.infer<typeof ResolvedRoll>;

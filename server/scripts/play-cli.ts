@@ -33,6 +33,7 @@ function card(request: RollRequest) {
   if (request.soak) {
     line(`    resisting ${request.soak.damageValue} ${request.soak.damageType} damage: every hit removes one point of it`);
     line("    /app to roll with the app's dice, or /dice 6 5 3 1 ... for dice you rolled");
+    line("    if this could kill, roll with hold (/app hold) so you can burn Not Dead Yet after seeing the dice");
     return;
   }
   if (request.healing) {
@@ -51,6 +52,7 @@ function card(request: RollRequest) {
   line(`    Edge: ${request.edgeAdvice}`);
   if (request.edgeAction) line(`    Edge Action: ${request.edgeAction.name} for ${request.edgeAction.cost} Edge, paid when the roll counts. It is this round's one expenditure, so no other Edge can go on the roll`);
   line("    /app to roll with the app's dice, or /dice 6 5 3 1 ... for dice you rolled");
+  if (!request.healing) line("    /smackdown to BURN Edge instead of rolling: an automatic success with 4 net hits (a point of Edge rank for good, and all your Edge)");
 }
 
 /** A counted roll that is waiting for the player to decide on Edge, with its dice numbered so they can be named. */
@@ -66,6 +68,7 @@ function showHeld(request: RollRequest) {
   line("    /edge reroll 2 t1 [= 5 4]   reroll your die 2 and their die 1 (1 Edge each); new values after = if rolled by hand");
   line("    /edge bump 3                add 1 to your die 3 (2 Edge)     /edge buy [n]   buy hits (3 each)");
   line("    /edge failed [= 5 4 1]      reroll every die that missed (4 Edge)     /keep   count it as it stands");
+  if (request.soak) line("    /edge nde                   BURN Edge for Not Dead Yet if this would kill you: you survive, dying (a point of Edge rank for good, and all your Edge)");
 }
 
 function show(entry: TranscriptEntry) {
@@ -99,6 +102,8 @@ function show(entry: TranscriptEntry) {
       line(`\n  ${entry.after.name} resists ${entry.damageValue} ${entry.damageType} damage (${entry.label}): ${showDice(entry.resistance)} = ${entry.resistance.hits} hit(s), takes ${entry.taken}`);
       line(`  ${formatStanding(entry.after)}\n`);
       return;
+    case "edge_burn":
+      return line(`  ${entry.name} BURNS Edge for ${entry.burn === "smackdown" ? "Smackdown" : "Not Dead Yet"}: ${entry.lost} Edge point(s) spent and a point of Edge rank gone for good, so ${entry.rank} is left`);
     case "edge_use":
       return line(`  ${entry.name} spends ${entry.cost} Edge and ${entry.detail}`);
     case "edge":
@@ -205,6 +210,8 @@ const help = [
   "  /edge <reroll|bump|buy|failed> ...   spend Edge on a held roll (see the roll for the forms)",
   "  /edge give <id> | heal stun|physical | init | effect <text>   spend Edge as the active character: give 1 to an ally (2), heal a box (3 or 4), +3 initiative next round (1), a special effect (5)",
   "  (add widen to /app or /dice to spend 5 Edge making 2s count as glitches on the opposing roll)",
+  "  /smackdown [n]    BURN Edge instead of rolling pending roll n: an automatic success with 4 net hits. Costs a point of Edge rank for good and all your Edge",
+  "  /edge nde         BURN Edge for Not Dead Yet on a held roll to resist damage that would kill: you survive, dying. Costs a point of Edge rank for good and all your Edge",
   "  /keep [n]         let a held roll count as it stands",
   "  /skip [n]         skip a pending roll",
   "  /status           show how hurt everyone is, the fight, and Edge",
@@ -251,6 +258,10 @@ createInterface({ input: process.stdin }).on("line", (input) => {
         ? send({ type: "roll.app", requestId: request.id, ...edgeFlag(flags), ...(flags.includes("hold") && { hold: true }) })
         : console.log("  No such pending roll.");
     }
+    case "smackdown": {
+      const request = pick(args[0]);
+      return request ? send({ type: "roll.smackdown", requestId: request.id }) : console.log("  No such pending roll.");
+    }
     case "keep": {
       const request = pick(args[0]);
       return request ? send({ type: "roll.keep", requestId: request.id }) : console.log("  No such pending roll.");
@@ -276,7 +287,8 @@ createInterface({ input: process.stdin }).on("line", (input) => {
       if (boost === "bump") return send({ type: "roll.edge", requestId: held.id, boost: "bump", targets });
       if (boost === "buy") return send({ type: "roll.edge", requestId: held.id, boost: "buy_hit", ...(words[0] && { times: Number(words[0]) }) });
       if (boost === "failed") return send({ type: "roll.edge", requestId: held.id, boost: "reroll_failed", ...(dice !== undefined && { dice }) });
-      return console.log("  /edge reroll|bump|buy|failed ...");
+      if (boost === "nde") return send({ type: "roll.edge", requestId: held.id, boost: "not_dead_yet" });
+      return console.log("  /edge reroll|bump|buy|failed|nde ...");
     }
     case "skip": {
       const request = pick(args[0]);

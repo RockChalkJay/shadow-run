@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { CharacterSheet, CombatState, ConditionMonitor, DamageType, HealMethod, Party, ResolvedRoll, RollRequest, type TranscriptEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { TREATMENTS } from "../rules/index.js";
+import { withBurnedEdge } from "./burned.js";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -47,6 +48,8 @@ export const SavedState = z.object({
     .default([]),
   /** The fight in progress, if any. */
   combat: CombatState.nullable().default(null),
+  /** Edge rank each player character has burned for good, which comes off the Edge on their sheet whenever it is loaded. */
+  burned: z.record(z.string(), z.number().int().min(1)).default({}),
   /** Hits still unspent on healing rolls the GM has been told about, so a restart does not grant them again. */
   healBudgets: z
     .array(
@@ -139,14 +142,16 @@ export class CampaignStore {
   }
 
   /**
-   * The campaign's characters, or `fallback` written out as sheets when it has none. Either way they are read back
-   * from disk, so every start sees them in the same order, and `created` says which happened.
+   * The campaign's characters as they are played, or `fallback` written out as sheets when it has none. Either way
+   * they are read back from disk, so every start sees them in the same order, and `created` says which happened. The
+   * Edge rank each has burned is taken off their sheet's Edge here; the sheet files are not changed.
    */
   async loadOrCreateParty(fallback: Party): Promise<{ party: Party; created: boolean }> {
+    const burned = (await this.loadState())?.burned ?? {};
     const existing = await this.loadParty();
-    if (existing) return { party: existing, created: false };
+    if (existing) return { party: withBurnedEdge(existing, burned), created: false };
     await this.saveParty(fallback);
-    return { party: (await this.loadParty()) ?? fallback, created: true };
+    return { party: withBurnedEdge((await this.loadParty()) ?? fallback, burned), created: true };
   }
 
   async saveParty(party: Party): Promise<void> {
