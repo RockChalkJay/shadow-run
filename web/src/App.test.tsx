@@ -7,6 +7,8 @@ import { App } from "./App";
 class FakeSocket {
   static all: FakeSocket[] = [];
   static OPEN = 1;
+  /** False models a table that is down: the socket never opens. */
+  static autoOpen = true;
   readyState = 1;
   sent: unknown[] = [];
   onopen: (() => void) | null = null;
@@ -14,7 +16,7 @@ class FakeSocket {
   onclose: (() => void) | null = null;
   constructor(readonly url: string) {
     FakeSocket.all.push(this);
-    queueMicrotask(() => this.onopen?.());
+    if (FakeSocket.autoOpen) queueMicrotask(() => this.onopen?.());
   }
   send(data: string) { this.sent.push(JSON.parse(data)); }
   close() { this.onclose?.(); }
@@ -27,6 +29,7 @@ const socket = () => FakeSocket.all.at(-1)!;
 
 beforeEach(() => {
   FakeSocket.all = [];
+  FakeSocket.autoOpen = true;
   vi.stubGlobal("WebSocket", FakeSocket);
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -86,10 +89,14 @@ describe("the table screen", () => {
     render(<App url="ws://x" />);
     await act(async () => {});
     socket().push(snapshot({ transcript: [{ id: 1, ts: "t", kind: "gm", text: "Hi" }] }));
+    FakeSocket.autoOpen = false;
     act(() => socket().close());
     expect(screen.getByRole("status").textContent).toContain("Lost the table. Reconnecting… (attempt 1)");
+    expect(screen.getByRole("status").textContent).not.toContain("npm run dev:server");
     await act(async () => void vi.advanceTimersByTime(600));
     expect(FakeSocket.all).toHaveLength(2);
+    act(() => socket().close());
+    expect(screen.getByRole("status").textContent).toContain("(attempt 2) Is npm run dev:server running?");
     vi.useRealTimers();
   });
 });
