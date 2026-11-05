@@ -42,6 +42,7 @@ export function RollCard({ request, name, edge, error, send }: Props) {
   const skip = cannotSkip(request);
   const smack = cannotSmackdown(request, edge);
 
+  const { held } = request;
   const [before, setBefore] = useState<"none" | "dice" | "widen">("none");
   const [hold, setHold] = useState(false);
   const [extra, setExtra] = useState("");
@@ -52,6 +53,7 @@ export function RollCard({ request, name, edge, error, send }: Props) {
   const withEdge = before === "dice" ? (edge?.rank ?? 0) : 0;
   const total = size + withEdge;
 
+  const chosen = held ? null : before === "dice" ? "Edge dice chosen" : before === "widen" ? "2s count against them" : hold ? "deciding after the roll" : null;
   const face = (i: number) => faces[i] ?? "";
   const setFace = (index: number, value: string) => {
     const typed = facesFrom(value);
@@ -76,7 +78,6 @@ export function RollCard({ request, name, edge, error, send }: Props) {
     send({ type: "roll.physical", requestId: request.id, dice: entered.join(" "), ...(before === "dice" && extra.trim() !== "" && { explosions: extra.trim() }), ...edgeFields() });
   };
 
-  const { held } = request;
   return (
     <section className="card" aria-label={`Roll for ${name}`}>
       <h3>ROLL · {name.toUpperCase()} · {request.label.toUpperCase()}</h3>
@@ -101,7 +102,7 @@ export function RollCard({ request, name, edge, error, send }: Props) {
         {open.happens ? "▾" : "▸"} What happens
       </button>
       <button className="tog" aria-expanded={open.edge} onClick={() => setOpen((o) => ({ ...o, edge: !o.edge }))}>
-        {open.edge ? "▾" : "▸"} Edge advice
+        {open.edge ? "▾" : "▸"} Edge{chosen && <>{" · "}<span className="chosen">{chosen}</span></>}
       </button>
       {open.happens && (
         <div className="more">
@@ -113,7 +114,24 @@ export function RollCard({ request, name, edge, error, send }: Props) {
           <Row label="☠ CRITICAL">{request.consequences.criticalGlitch}</Row>
         </div>
       )}
-      {open.edge && <div className="more"><Row label="EDGE">{request.edgeAdvice}</Row></div>}
+      {open.edge && (
+        <div className="more edge-panel">
+          <Row label="ADVICE">{request.edgeAdvice}</Row>
+          {!held && (
+            <fieldset className="edge-opts">
+              <legend>Edge on this roll</legend>
+              <EdgeOption checked={before === "none"} onChange={() => setBefore("none")} label="No Edge before the roll" />
+              <EdgeOption checked={before === "dice"} onChange={() => { setBefore("dice"); setHold(false); }} reason={diceReason} label={`Edge dice · ${COST.dice} Edge`} detail="Adds your Edge attribute to the pool, and 6s explode." />
+              {request.opposed && <EdgeOption checked={before === "widen"} onChange={() => { setBefore("widen"); setHold(false); }} reason={widenReason} label={`Make 2s count against them · ${COST.widen} Edge`} detail="2s as well as 1s count toward the opposition's glitch." />}
+              <label className={`opt ${before !== "none" || holdReason ? "off" : ""}`}>
+                <input type="checkbox" checked={hold && before === "none"} disabled={before !== "none" || holdReason !== null} onChange={(e) => setHold(e.target.checked)} />
+                <span>Decide on Edge after seeing the dice<small>{before !== "none" ? "Not with Edge spent before the roll." : holdReason ?? "Reroll dice, add 1, buy a hit, or reroll the misses."}</small></span>
+              </label>
+              {taken && <p className="hint">{taken} No other Edge can go on this roll.</p>}
+            </fieldset>
+          )}
+        </div>
+      )}
 
       {held ? (
         <HeldRoll request={request} edge={edge} error={error} send={send} />
@@ -137,17 +155,6 @@ export function RollCard({ request, name, edge, error, send }: Props) {
       ) : (
         <>
           {error && <p className="problem" role="alert">{error}</p>}
-          <fieldset className="edge-opts">
-            <legend>Edge on this roll</legend>
-            <EdgeOption checked={before === "none"} onChange={() => setBefore("none")} label="No Edge before the roll" />
-            <EdgeOption checked={before === "dice"} onChange={() => { setBefore("dice"); setHold(false); }} reason={diceReason} label={`Edge dice · ${COST.dice} Edge`} detail="Adds your Edge attribute to the pool, and 6s explode." />
-            {request.opposed && <EdgeOption checked={before === "widen"} onChange={() => { setBefore("widen"); setHold(false); }} reason={widenReason} label={`Make 2s count against them · ${COST.widen} Edge`} detail="2s as well as 1s count toward the opposition's glitch." />}
-            <label className={`opt ${before !== "none" || holdReason ? "off" : ""}`}>
-              <input type="checkbox" checked={hold && before === "none"} disabled={before !== "none" || holdReason !== null} onChange={(e) => setHold(e.target.checked)} />
-              <span>Decide on Edge after seeing the dice<small>{before !== "none" ? "Not with Edge spent before the roll." : holdReason ?? "Reroll dice, add 1, buy a hit, or reroll the misses."}</small></span>
-            </label>
-            {taken && <p className="hint">{taken} No other Edge can go on this roll.</p>}
-          </fieldset>
           <div className="btns">
             <button className="pri" onClick={() => send({ type: "roll.app", requestId: request.id, ...edgeFields() })}>🎲 Roll with the app</button>
             <button onClick={() => setMode("dice")}>✎ Enter my dice</button>

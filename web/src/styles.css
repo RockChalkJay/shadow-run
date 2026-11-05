@@ -126,3 +126,5 @@ button.die.pick{outline:2px solid transparent}button.die.pick.on{outline-color:v
 .inline{display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--dim)}
 .num{width:64px;background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px}
 .wide{flex:1;min-width:200px;background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}
+.chosen{color:var(--cyan)}
+.edge-panel .edge-opts{margin-top:8px}
