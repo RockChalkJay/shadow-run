@@ -1,6 +1,7 @@
 import type { GmStatus } from "@shadow-run/shared";
 import { useEffect, useRef, useState } from "react";
 import { useTable } from "./connection";
+import { Rail } from "./Rail";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
 
@@ -70,10 +71,7 @@ export function App({ url }: { url: string }) {
           ))}
           <div ref={end} />
         </div>
-        <aside className="rail">
-          <div><h4>PARTY</h4><div className="ph">Health and Edge arrive in the next steps</div></div>
-          <div><h4>FIGHT</h4><div className="ph">The initiative order arrives in the next steps</div></div>
-        </aside>
+        <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} />
       </div>
       <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>
@@ -97,7 +95,7 @@ function Top({ state, send }: { state: ReturnType<typeof useTable>["state"]; sen
         {gm.phase === "thinking" && <button onClick={() => send({ type: "turn.cancel" })}>Stop</button>}
         <span className={`pill ${state.connected ? "on" : "bad"}`}>{state.connected ? "● online" : "● offline"}</span>
       </header>
-      {!state.connected && <div className="banner warn" role="status">⚠ Lost the table. Reconnecting… (attempt {Math.max(1, state.attempt)})</div>}
+      {!state.connected && <div className="banner warn" role="status">⚠ Lost the table. Reconnecting… (attempt {Math.max(1, state.attempt)}){state.attempt > 1 && <> Is <code>npm run dev:server</code> running?</>}</div>}
       {gm.phase === "error" && (
         <div className="banner err" role="alert">⚠ The GM hit a problem: {gm.message} <button onClick={() => send({ type: "turn.retry" })}>Retry</button></div>
       )}

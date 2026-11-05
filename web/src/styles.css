@@ -12,9 +12,6 @@ body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1a1f3a,var(--
 .banner.warn{background:#3a2a10;color:var(--amber)}.banner.err{background:#3a1420;color:var(--red)}.banner.info{background:#10283a;color:var(--cyan)}
 .main{flex:1;display:grid;grid-template-columns:1fr 300px;min-height:0}
 .story{padding:20px 28px;overflow:auto;display:flex;flex-direction:column;gap:14px}
-.rail{border-left:1px solid var(--line);padding:16px;background:#0e1120;display:flex;flex-direction:column;gap:14px}
-.rail h4{margin:0 0 6px;font-size:12px;letter-spacing:.15em;color:var(--dim)}
-.ph{border:1px dashed var(--line);color:var(--dim);padding:10px;border-radius:8px;font-size:13px}
 .who{font-size:12px;letter-spacing:.15em;color:var(--pink);text-transform:uppercase}
 .gm p{margin:4px 0;max-width:68ch;font-size:16px}
 .say{color:var(--cyan)}.say b{color:var(--txt)}
@@ -53,8 +50,8 @@ button.tog.inline{margin:0;text-align:left}
 .result{margin-top:6px}.result p{margin:4px 0}
 .ok{color:var(--green);font-weight:700;letter-spacing:.05em}.bad{color:var(--red)}
 .plain{font-weight:400;color:var(--txt);letter-spacing:0}
-.cur{display:inline-block;width:8px;height:16px;background:var(--cyan);vertical-align:-3px;margin-left:2px;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:0}}
+.cur{display:inline-block;width:8px;height:16px;background:var(--cyan);vertical-align:-3px;margin-left:2px;animation:blink 1s infinite}
 .input{display:flex;gap:10px;padding:12px 20px;border-top:1px solid var(--line);background:#0e1120}
 .input input{flex:1;background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit}
 .input select{background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:0 8px}
@@ -64,3 +61,54 @@ button.tog.inline{margin:0;text-align:left}
 .center{flex:1;display:flex;justify-content:center;align-items:center;text-align:center}
 .center h1{letter-spacing:.4em;color:var(--cyan);text-shadow:0 0 20px #38e1ff88;font-size:44px;margin:0}
 code{background:#0b0d14;padding:1px 5px;border-radius:4px}
+
+/* ---- fonts and focus ---- */
+:root{--hud:'Orbitron',ui-sans-serif,system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- the side panel ---- */
+.rail{border-left:1px solid var(--line);background:#0d1020;padding:14px;display:flex;flex-direction:column;gap:16px;overflow:auto}
+.rail h4{margin:0 0 8px;font:800 11px var(--hud);letter-spacing:.2em;color:var(--dim)}
+.tip{position:relative;cursor:help;border-radius:6px}
+.tip-text{display:none;position:absolute;z-index:20;left:0;top:calc(100% + 6px);width:max-content;max-width:230px;padding:8px 10px;border-radius:8px;border:1px solid #2e4f6b;background:#0b0d14;color:var(--txt);font:400 13px/1.4 ui-sans-serif,system-ui,sans-serif;letter-spacing:0;text-transform:none;white-space:normal;text-align:left;box-shadow:0 6px 20px #000a}
+.tip-text.open{display:block}
+.tip.chip .tip-text,.tip.count .tip-text{left:auto;right:0}
+.fight-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.fight-head h4{margin:0}
+.acting{list-style:none;margin:0;padding:0}.acting li.out{opacity:.7}
+.bystanders{margin-top:14px}
+.round{font:800 12px var(--hud);letter-spacing:.1em;color:#05222b;background:var(--cyan);border-radius:6px;padding:2px 10px}
+.place{width:28px;height:28px;border:1.5px solid var(--cyan);color:var(--cyan);border-radius:50%;display:grid;place-items:center;font:600 13px var(--mono)}
+.pcard{border:1px solid var(--line);border-radius:12px;background:#111628;padding:10px 12px;margin-bottom:10px}
+.pcard.speaking{border-color:var(--cyan);box-shadow:0 0 0 1px #38e1ff55,0 0 16px #38e1ff22}
+.pcard.unconscious{border-color:#6b5a2a}.pcard.dead{border-color:#7a2a45;opacity:.75}
+.head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.name{font:800 14px var(--hud);letter-spacing:.06em;color:var(--txt);background:none;border:none;padding:0;min-height:28px}.name:hover{color:var(--cyan)}
+.name-plain{font:800 14px var(--hud);letter-spacing:.06em}.meta{color:var(--dim);font-size:13px}
+.chip{margin-left:auto;font:600 11px var(--mono);letter-spacing:.06em;padding:2px 8px;border-radius:99px;border:1px solid #2a6b4d;color:var(--green)}
+.chip.unconscious{color:var(--amber);border-color:#6b5a2a}.chip.dead{color:var(--red);border-color:#7a2a45}
+svg{width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.meter{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;align-items:center;margin-top:8px;font:400 12px var(--mono)}
+.meter-label{color:var(--dim)}.meter-num{text-align:right}
+.bar{height:12px;border-radius:3px;background:#1b2240;overflow:hidden}
+.fill{height:100%}
+.fill.phy{background:repeating-linear-gradient(90deg,var(--pink) 0 9px,#c02a80 9px 11px)}
+.fill.stn{background:repeating-linear-gradient(90deg,var(--amber) 0 9px,#b8862e 9px 11px)}
+.fill.ovf{background:repeating-linear-gradient(135deg,var(--red) 0 6px,#8a2236 6px 9px)}
+.tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tag{font-size:13px;padding:2px 8px;border-radius:6px;background:#1a2140;color:var(--dim)}
+.tag.warn{color:var(--amber);background:#2a2210}.tag.edge{color:var(--cyan);background:#0f2b36}
+.grp{border:1px solid var(--line);border-radius:12px;background:#111628;padding:8px 12px;margin-bottom:10px}
+.grp summary{display:flex;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer;min-height:28px}
+.tag,.grp .count,.chip{white-space:nowrap}
+.grp .count{margin-left:auto;font:600 12px var(--mono);color:var(--dim)}
+.mem{padding:4px 0}.mem-name{font-size:13px;color:var(--dim)}.mem.out{opacity:.5}.mem.out .mem-name{text-decoration:line-through}
+.mem .meter{margin-top:2px}.mem .bar{height:8px}
+
+/* ---- narrow windows: the panel becomes a strip above the story ---- */
+@media (max-width:900px){
+  .main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .rail{order:-1;border-left:0;border-bottom:1px solid var(--line);flex-direction:row;align-items:flex-start;overflow-x:auto;max-height:42vh}
+  .rail>*{min-width:250px}
+}

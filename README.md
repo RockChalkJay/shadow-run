@@ -8,12 +8,16 @@ A local web app that runs Shadowrun 6th Edition sessions with Claude as the Game
 
 ## Trying the table
 
-Start the table (below), then run `npm run dev:web` and open http://localhost:5173 for its screen. It shows the story, lets any character speak (one person types for everyone), and puts each roll the GM asks for on a card: stakes, pool and what it needs up front, with what happens and the Edge advice opening on a click. A roll can be made with the app's dice (they tumble, then the result drops into the story), with dice rolled by hand (one box per die, or paste them all into the first), skipped (not for rolls that resist damage or defend), or replaced by a Smackdown after a confirmation. Health, the fight's order and Edge are not on the screen yet; the command-line client below shows them, and is still the way to hold a roll to spend Edge after seeing the dice. For a try that costs no usage, start the server with `SHADOWRUN_GM=scripted`.
+The table has two parts, each in its own terminal, both started from this folder:
 
 ```
-npm run dev:server      # the table, with Claude as the GM on your own plan
-npm run play            # in another terminal: play at it from the command line instead of the browser
+npm run dev:server      # terminal 1: the table, with Claude as the GM on your own plan
+npm run dev:web         # terminal 2: its screen; then open http://localhost:5173
 ```
+
+For a try that costs no usage, start the table with `SHADOWRUN_GM=scripted npm run dev:server`. If the page says "Lost the table", the server in terminal 1 is not running; the page keeps retrying and joins as soon as it is. Instead of the browser you can play from the command line with `npm run play` in a second terminal.
+
+The screen shows the story, lets any character speak (one person types for everyone), and puts each roll the GM asks for on a card: stakes, pool and what it needs up front, with what happens and the Edge advice opening on a click. A roll can be made with the app's dice (they tumble, then the result drops into the story), with dice rolled by hand (one box per die, or paste them all into the first), skipped (not for rolls that resist damage or defend), or replaced by a Smackdown after a confirmation. The side panel shows a card for each player character with their physical, stun and overflow bars, the dice their wounds cost, their Edge points and whether they are down or dead (click a name to speak as them), then the opposition, with a group of grunts as one row that opens to each grunt. While a fight is on it is one list in acting order, the cards and grunt rows each carrying their place (1, 2, 3 …) and the round at the top; anyone not in the order follows. Every chip and abbreviation has a tooltip that opens on hover, focus or tap, and changes in how hurt anyone is are announced to screen readers. Edge actions and spending are not on the screen yet; the command-line client is still the way to hold a roll to spend Edge after seeing the dice.
 
 Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
 
