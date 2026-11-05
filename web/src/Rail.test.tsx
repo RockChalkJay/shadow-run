@@ -75,11 +75,13 @@ describe("the fight", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("shows the round and the order, with groups and Edge-bought bonuses", () => {
+  it("shows the round and, in acting order, a place for each with the initiative score that earned it", () => {
     render(<FightPanel combat={combat} characters={[]} />);
-    expect(screen.getByText("FIGHT · ROUND 2")).toBeTruthy();
+    expect(screen.getByText("Round 2")).toBeTruthy();
     const items = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(items).toEqual(["14Kira", "11Guard A, Guard B (acting together)", "9Ganger (+3 next round)"]);
+    expect(items).toEqual(["1Kirainit 14", "2Guard A, Guard Bact togetherinit 11", "3Ganger+3 initiative from next roundinit 9"]);
+    expect(screen.getByLabelText("acts first")).toBeTruthy();
+    expect(screen.getByLabelText("acts third")).toBeTruthy();
   });
 
   it("strikes out those who are down", () => {
@@ -87,5 +89,6 @@ describe("the fight", () => {
     const { container } = render(<FightPanel combat={combat} characters={down} />);
     expect(container.querySelectorAll("li.down")).toHaveLength(1);
     expect(container.querySelector("li.down")?.textContent).toContain("Ganger");
+    expect(container.querySelector("li.down")?.textContent).toContain("out of the fight");
   });
 });

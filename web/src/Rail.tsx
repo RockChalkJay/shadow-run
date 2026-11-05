@@ -87,28 +87,38 @@ export function NpcPanel({ characters }: { characters: CharacterView[] }) {
   );
 }
 
-/** The fight's order, highest first, while one is on. */
+/** The fight's order: who acts first, second and so on each round, with the initiative score that put them there. */
 export function FightPanel({ combat, characters }: { combat: CombatState | null; characters: CharacterView[] }) {
   if (!combat) return null;
   const statusOf = (m: { kind: "pc" | "npc"; id: string }) => characters.find((c) => c.kind === m.kind && c.id === m.id)?.status;
   return (
-    <div>
-      <h4>FIGHT · ROUND {combat.round}</h4>
+    <section className="fight" aria-label={`Fight, round ${combat.round}`}>
+      <header className="fight-head">
+        <h4>FIGHT</h4>
+        <span className="round">Round {combat.round}</span>
+      </header>
+      <p className="fight-help">Acting order, top to bottom. The score is each side's initiative roll.</p>
       <ol className="order">
         {combat.order.map((entry, i) => {
           const allDown = entry.members.every((m) => (statusOf(m) ?? "active") !== "active");
           return (
             <li key={i} className={allDown ? "down" : ""}>
-              <span className="score">{entry.score}</span>
-              <span>
-                {entry.members.map((m) => m.name).join(", ")}
-                {entry.group !== undefined && <span className="dim"> (acting together)</span>}
-                {entry.bonus ? <span className="dim"> (+{entry.bonus} next round)</span> : null}
+              <span className="place" aria-label={`acts ${ordinal(i + 1)}`}>{i + 1}</span>
+              <span className="who-acts">
+                <span className="names">{entry.members.map((m) => m.name).join(", ")}</span>
+                {entry.group !== undefined && <span className="sub">act together</span>}
+                {entry.bonus ? <span className="sub">+{entry.bonus} initiative from next round</span> : null}
+                {allDown && <span className="sub">out of the fight</span>}
               </span>
+              <span className="init" title="Initiative score">init {entry.score}</span>
             </li>
           );
         })}
       </ol>
-    </div>
+    </section>
   );
+}
+
+function ordinal(n: number): string {
+  return n === 1 ? "first" : n === 2 ? "second" : n === 3 ? "third" : `${n}th`;
 }
