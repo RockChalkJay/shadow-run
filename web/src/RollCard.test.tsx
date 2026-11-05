@@ -2,7 +2,7 @@ import type { ClientMessage, RollRequest } from "@shadow-run/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { cannotSkip, cannotSmackdown, facesFrom, RollCard } from "./RollCard";
+import { cannotSkip, cannotSmackdown, RollCard } from "./RollCard";
 
 const base: RollRequest = {
   id: "r1",
@@ -113,11 +113,102 @@ describe("the roll card", () => {
   });
 });
 
-describe("facesFrom", () => {
-  it("reads faces from spaces, commas or nothing, ignoring anything else", () => {
-    expect(facesFrom("6 5 3 1")).toEqual([6, 5, 3, 1]);
-    expect(facesFrom("6,5,3")).toEqual([6, 5, 3]);
-    expect(facesFrom("6531")).toEqual([6, 5, 3, 1]);
-    expect(facesFrom("x 7 0 9")).toEqual([]);
+describe("Edge before the roll", () => {
+  const edge3 = { id: "kira", points: 3, rank: 3, spentThisRound: false };
+  const rich = { id: "kira", points: 5, rank: 3, spentThisRound: false };
+  const card = (request: RollRequest, e = rich) => {
+    const send = vi.fn<(m: ClientMessage) => void>();
+    render(<RollCard request={request} name="Kira" edge={e} error={null} send={send} />);
+    return { send, user: userEvent.setup() };
+  };
+
+  it("rolls with the Edge dice, which cost 4, and the app is told", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", edge: "dice" });
+  });
+
+  it("asks for the Edge attribute's worth of extra dice by hand, and the extra dice for 6s", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    expect(screen.getAllByRole("textbox").filter((b) => b.getAttribute("aria-label")?.startsWith("die "))).toHaveLength(7);
+    expect(screen.getByText(/7 dice \(4 plus 3 Edge dice\)/)).toBeTruthy();
+    await user.click(screen.getByLabelText("die 1"));
+    await user.paste("6 6 5 3 1 2 3");
+    await user.type(screen.getByLabelText("extra dice for 6s"), "5 3");
+    await user.click(screen.getByRole("button", { name: "Count these dice" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.physical", requestId: "r1", dice: "6 6 5 3 1 2 3", explosions: "5 3", edge: "dice" });
+  });
+
+  it("leaves the extra dice out when none were typed, so the app rolls them", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    await user.click(screen.getByLabelText("die 1"));
+    await user.paste("6 5 3 1 1 2 3");
+    await user.click(screen.getByRole("button", { name: "Count these dice" }));
+    expect(send.mock.calls[0]![0]).not.toHaveProperty("explosions");
+  });
+
+  it("does not send extra dice typed for Edge dice after the player goes back and drops the Edge dice", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    await user.type(screen.getByLabelText("extra dice for 6s"), "5 3");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByLabelText("No Edge before the roll"));
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    await user.click(screen.getByLabelText("die 1"));
+    await user.paste("6 5 3 1");
+    await user.click(screen.getByRole("button", { name: "Count these dice" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.physical", requestId: "r1", dice: "6 5 3 1" });
+  });
+
+  it("offers the glitch widener, which costs 5, only against an opposition", async () => {
+    const { send, user } = card({ ...base, threshold: undefined, opposed: { by: "Guard", pool: 6, role: "acting" } });
+    await user.click(screen.getByLabelText(/Make 2s count against them · 5 Edge/));
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", edge: "widen_glitch" });
+  });
+
+  it("does not offer the widener without an opposition", () => {
+    card(base);
+    expect(screen.queryByLabelText(/Make 2s count/)).toBeNull();
+  });
+
+  it("holds the roll to decide after seeing the dice", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Decide on Edge after seeing the dice/));
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", hold: true });
+  });
+
+  it("will not hold a roll that has Edge spent before it, nor the reverse", async () => {
+    const { send, user } = card(base);
+    await user.click(screen.getByLabelText(/Decide on Edge after seeing the dice/));
+    await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
+    expect((screen.getByLabelText(/Decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send.mock.calls[0]![0]).not.toHaveProperty("hold");
+  });
+
+  it("says why an option cannot be chosen: too little Edge, or already spent this round", () => {
+    card(base, edge3);
+    expect((screen.getByLabelText(/Edge dice · 4 Edge/) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("Needs 4 Edge; 3 on hand.")).toBeTruthy();
+  });
+
+  it("takes every Edge option away from a roll with a declared Edge Action the player can pay for", () => {
+    card({ ...base, edgeAction: { id: "bring_the_drama", name: "Bring the Drama", cost: 2, summary: "s" } });
+    expect((screen.getByLabelText(/Edge dice · 4 Edge/) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText(/Decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getAllByText(/Bring the Drama is declared and is this round's one expenditure of Edge\./).length).toBeGreaterThan(0);
+  });
+
+  it("leaves the Edge open when the player cannot pay for the declared action", () => {
+    card({ ...base, edgeAction: { id: "called_shot_vitals", name: "Called Shot: Vitals", cost: 5, summary: "s" } }, { ...rich, points: 4, rank: 3 });
+    expect((screen.getByLabelText(/Edge dice · 4 Edge/) as HTMLInputElement).disabled).toBe(false);
   });
 });

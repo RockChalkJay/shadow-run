@@ -62,6 +62,14 @@ describe("the table screen", () => {
     expect(screen.getByText("A guard turns")).toBeTruthy();
   });
 
+  it("has a link at the top that jumps to the typing box", async () => {
+    render(<App url="ws://x" />);
+    await act(async () => {});
+    socket().push(snapshot({ transcript: [{ id: 1, ts: "t", kind: "gm", text: "Hi" }] }));
+    await userEvent.click(screen.getByRole("link", { name: "Skip to the typing box" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Say or do something"));
+  });
+
   it("sends what a player says, as the character they chose", async () => {
     render(<App url="ws://x" />);
     await act(async () => {});

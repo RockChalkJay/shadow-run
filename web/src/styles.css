@@ -112,3 +112,17 @@ svg{width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;str
   .rail{order:-1;border-left:0;border-bottom:1px solid var(--line);flex-direction:row;align-items:flex-start;overflow-x:auto;max-height:42vh}
   .rail>*{min-width:250px}
 }
+
+/* ---- Edge on a roll ---- */
+.skip{position:absolute;left:8px;top:-60px;z-index:30;background:#0b0d14;border:1px solid var(--cyan);color:var(--cyan);padding:8px 14px;border-radius:8px}
+.skip:focus{top:8px}
+.edge-opts{border:1px solid var(--line);border-radius:10px;margin:12px 0 0;padding:8px 12px}
+.edge-opts legend{font:800 11px var(--hud);letter-spacing:.15em;color:var(--dim);padding:0 6px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:4px 0;cursor:pointer}.opt small{display:block;color:var(--dim);font-size:13px}.opt.off{opacity:.55;cursor:not-allowed}
+.held .dice{margin:6px 0}
+button.die{border:0;font-family:inherit;cursor:pointer;padding:0}
+button.die.pick{outline:2px solid transparent}button.die.pick.on{outline-color:var(--cyan);transform:translateY(-3px)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.inline{display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--dim)}
+.num{width:64px;background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px}
+.wide{flex:1;min-width:200px;background:#0b0d14;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}

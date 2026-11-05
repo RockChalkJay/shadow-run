@@ -1,5 +1,9 @@
 import type { ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
 import { useState } from "react";
+import { actionTakesTheEdge, cannotSpend, COST, facesFrom } from "./edge";
+import { HeldRoll } from "./HeldRoll";
+
+export { facesFrom };
 
 interface Props {
   request: RollRequest;
@@ -28,35 +32,48 @@ export function cannotSmackdown(request: RollRequest, edge: EdgeView | undefined
 
 const pluralDice = (n: number) => `${n} ${n === 1 ? "die" : "dice"}`;
 
-/** Splits what was typed into faces: spaces, commas or nothing at all between single digits. */
-export function facesFrom(text: string): number[] {
-  return (text.match(/[1-6]/g) ?? []).map(Number);
-}
-
 export function RollCard({ request, name, edge, error, send }: Props) {
   const [open, setOpen] = useState<{ happens: boolean; edge: boolean }>({ happens: false, edge: false });
   const [mode, setMode] = useState<"choose" | "dice" | "burn">("choose");
   const size = request.pool.total;
-  const [faces, setFaces] = useState<string[]>(() => Array(size).fill(""));
+  const [faces, setFaces] = useState<string[]>([]);
   const [local, setLocal] = useState<string | null>(null);
 
   const skip = cannotSkip(request);
   const smack = cannotSmackdown(request, edge);
 
+  const [before, setBefore] = useState<"none" | "dice" | "widen">("none");
+  const [hold, setHold] = useState(false);
+  const [extra, setExtra] = useState("");
+  const taken = actionTakesTheEdge(request, edge);
+  const diceReason = taken ?? cannotSpend(edge, COST.dice) ?? (edge && edge.rank === 0 ? "No Edge attribute to add to the pool." : null);
+  const widenReason = taken ?? (request.opposed ? cannotSpend(edge, COST.widen) : "There is no opposing roll to make glitch.");
+  const holdReason = taken ?? cannotSpend(edge, COST.hold);
+  const withEdge = before === "dice" ? (edge?.rank ?? 0) : 0;
+  const total = size + withEdge;
+
+  const face = (i: number) => faces[i] ?? "";
   const setFace = (index: number, value: string) => {
     const typed = facesFrom(value);
+    const grow = (f: string[]) => Array.from({ length: Math.max(f.length, total) }, (_, i) => f[i] ?? "");
     if (typed.length <= 1) {
-      setFaces((f) => f.map((x, i) => (i === index ? (typed[0]?.toString() ?? "") : x)));
+      setFaces((f) => grow(f).map((x, i) => (i === index ? (typed[0]?.toString() ?? "") : x)));
       return;
     }
     // Several dice typed or pasted into one box fill the boxes from there on.
-    setFaces((f) => f.map((x, i) => (i >= index && typed[i - index] !== undefined ? String(typed[i - index]) : x)));
+    setFaces((f) => grow(f).map((x, i) => (i >= index && typed[i - index] !== undefined ? String(typed[i - index]) : x)));
   };
 
+  const edgeFields = () => ({
+    ...(before === "dice" && { edge: "dice" as const }),
+    ...(before === "widen" && { edge: "widen_glitch" as const }),
+    ...(hold && { hold: true }),
+  });
   const count = () => {
-    if (faces.some((f) => f === "")) return setLocal(`This roll is ${pluralDice(size)}; you entered ${faces.filter((f) => f !== "").length}.`);
+    const entered = Array.from({ length: total }, (_, i) => face(i));
+    if (entered.some((f) => f === "")) return setLocal(`This roll is ${pluralDice(total)}${withEdge > 0 ? ` (${size} plus ${withEdge} Edge ${withEdge === 1 ? "die" : "dice"})` : ""}; you entered ${entered.filter((f) => f !== "").length}.`);
     setLocal(null);
-    send({ type: "roll.physical", requestId: request.id, dice: faces.join(" ") });
+    send({ type: "roll.physical", requestId: request.id, dice: entered.join(" "), ...(before === "dice" && extra.trim() !== "" && { explosions: extra.trim() }), ...edgeFields() });
   };
 
   const { held } = request;
@@ -99,15 +116,18 @@ export function RollCard({ request, name, edge, error, send }: Props) {
       {open.edge && <div className="more"><Row label="EDGE">{request.edgeAdvice}</Row></div>}
 
       {held ? (
-        <p className="hint">The dice are counted and waiting on an Edge decision. Use the command-line client (<code>npm run play</code>) for that until the Edge screen arrives.</p>
+        <HeldRoll request={request} edge={edge} error={error} send={send} />
       ) : mode === "dice" ? (
         <>
-          <p className="hint">Your {pluralDice(size)}. Type each face, or type them all in the first box.</p>
+          <p className="hint">Your {pluralDice(total)}{withEdge > 0 ? ` (${size} plus ${withEdge} Edge ${withEdge === 1 ? "die" : "dice"})` : ""}. Type each face, or type them all in the first box.</p>
           <div className="dice-entry">
-            {faces.map((f, i) => (
-              <input key={i} className="die-input" aria-label={`die ${i + 1}`} value={f} inputMode="numeric" onChange={(e) => setFace(i, e.target.value)} />
+            {Array.from({ length: total }, (_, i) => (
+              <input key={i} className="die-input" aria-label={`die ${i + 1}`} value={face(i)} inputMode="numeric" onChange={(e) => setFace(i, e.target.value)} />
             ))}
           </div>
+          {before === "dice" && (
+            <label className="inline">Extra dice for 6s, if rolled by hand <input className="wide" aria-label="extra dice for 6s" placeholder="Leave empty to let the app roll them" value={extra} onChange={(e) => setExtra(e.target.value)} /></label>
+          )}
           {(local ?? error) && <p className="problem" role="alert">{local ?? error}</p>}
           <div className="btns">
             <button className="pri" onClick={count}>Count these dice</button>
@@ -117,8 +137,19 @@ export function RollCard({ request, name, edge, error, send }: Props) {
       ) : (
         <>
           {error && <p className="problem" role="alert">{error}</p>}
+          <fieldset className="edge-opts">
+            <legend>Edge on this roll</legend>
+            <EdgeOption checked={before === "none"} onChange={() => setBefore("none")} label="No Edge before the roll" />
+            <EdgeOption checked={before === "dice"} onChange={() => { setBefore("dice"); setHold(false); }} reason={diceReason} label={`Edge dice · ${COST.dice} Edge`} detail="Adds your Edge attribute to the pool, and 6s explode." />
+            {request.opposed && <EdgeOption checked={before === "widen"} onChange={() => { setBefore("widen"); setHold(false); }} reason={widenReason} label={`Make 2s count against them · ${COST.widen} Edge`} detail="2s as well as 1s count toward the opposition's glitch." />}
+            <label className={`opt ${before !== "none" || holdReason ? "off" : ""}`}>
+              <input type="checkbox" checked={hold && before === "none"} disabled={before !== "none" || holdReason !== null} onChange={(e) => setHold(e.target.checked)} />
+              <span>Decide on Edge after seeing the dice<small>{before !== "none" ? "Not with Edge spent before the roll." : holdReason ?? "Reroll dice, add 1, buy a hit, or reroll the misses."}</small></span>
+            </label>
+            {taken && <p className="hint">{taken} No other Edge can go on this roll.</p>}
+          </fieldset>
           <div className="btns">
-            <button className="pri" onClick={() => send({ type: "roll.app", requestId: request.id })}>🎲 Roll with the app</button>
+            <button className="pri" onClick={() => send({ type: "roll.app", requestId: request.id, ...edgeFields() })}>🎲 Roll with the app</button>
             <button onClick={() => setMode("dice")}>✎ Enter my dice</button>
             <button disabled={skip !== null} title={skip ?? undefined} onClick={() => send({ type: "roll.cancel", requestId: request.id })}>Skip roll</button>
             <button className="dng" disabled={smack !== null} title={smack ?? undefined} onClick={() => setMode("burn")}>🔥 Burn Edge: Smackdown</button>
@@ -152,5 +183,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span>{label}</span>
       <span>{children}</span>
     </div>
+  );
+}
+
+function EdgeOption({ checked, onChange, label, detail, reason }: { checked: boolean; onChange: () => void; label: string; detail?: string; reason?: string | null }) {
+  return (
+    <label className={`opt ${reason ? "off" : ""}`}>
+      <input type="radio" name="before" checked={checked} disabled={Boolean(reason)} onChange={onChange} />
+      <span>{label}{(reason ?? detail) && <small>{reason ?? detail}</small>}</span>
+    </label>
   );
 }
