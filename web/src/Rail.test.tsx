@@ -2,7 +2,7 @@ import type { CharacterSheet, CharacterView, CombatState, EdgeView } from "@shad
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { announcements, OppositionPanel, PartyPanel, Rail, Tip, TurnStrip } from "./Rail";
+import { announcements, OppositionPanel, PartyPanel, Rail, Tip } from "./Rail";
 
 const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 0, stun: 0, overflow: 0 };
 const view = (over: Partial<CharacterView> & { id: string; name: string }): CharacterView => ({ kind: "pc", monitor, status: "active", woundModifier: 0, ...over });
@@ -75,73 +75,97 @@ describe("the party", () => {
   });
 });
 
-describe("the acting order", () => {
-  const entry = (score: number, members: { kind: "pc" | "npc"; id: string; name: string }[], extra: object = {}) => ({ members, score, reaction: 1, intuition: 1, dice: 1, rolls: [1], edge: 0, coin: 0.5, major: 1, minor: 1, ...extra });
+const entry = (score: number, members: { kind: "pc" | "npc"; id: string; name: string }[], extra: object = {}) => ({ members, score, reaction: 1, intuition: 1, dice: 1, rolls: [1], edge: 0, coin: 0.5, major: 1, minor: 1, ...extra });
+const gm = { ...monitor, physicalBoxes: 9 };
+const grunt = (id: string, name: string, physical: number, status: CharacterView["status"] = "active") =>
+  view({ id, kind: "npc", name, status, monitor: { ...gm, physical }, grunt: { professionalRating: 3, lieutenant: false, lastDamage: "physical" } });
+const ganger = view({ id: "ganger", kind: "npc", name: "Ganger", monitor: { ...monitor, physical: 3 } });
+
+describe("a fight is one list in acting order", () => {
   const combat = {
     round: 2,
     order: [
       entry(14, [{ kind: "pc", id: "kira", name: "Kira" }]),
-      entry(11, [{ kind: "npc", id: "g1", name: "Guard A" }, { kind: "npc", id: "g2", name: "Guard B" }], { group: "guards" }),
+      entry(11, [{ kind: "npc", id: "g1", name: "Guard A" }, { kind: "npc", id: "g2", name: "Guard B" }, { kind: "npc", id: "g3", name: "Guard C" }], { group: "Guards" }),
       entry(9, [{ kind: "npc", id: "ganger", name: "Ganger" }], { bonus: 3 }),
     ],
   } as CombatState;
+  const grunts = [grunt("g1", "Guard A", 9, "unconscious"), grunt("g2", "Guard B", 2), grunt("g3", "Guard C", 0)];
+  const characters = [view({ id: "kira", name: "Kira", monitor: { ...monitor, physical: 2 } }), view({ id: "doc", name: "Doc" }), ...grunts, ganger];
+  const show = () => render(<Rail party={party} characters={characters} edge={edge} combat={combat} speaking="kira" onSpeak={noop} />);
 
-  it("shows the round and each side's place, with no initiative score on the row", () => {
-    render(<TurnStrip combat={combat} characters={[]} />);
+  it("has no separate card for the order: the player cards and the opposition are the list, each with its place", () => {
+    show();
+    expect(screen.queryByText("ACTING ORDER")).toBeNull();
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(within(items[0]!).getByRole("button", { name: "Kira" })).toBeTruthy();
+    expect(within(items[1]!).getByText("Guards")).toBeTruthy();
+    expect(within(items[2]!).getByText("Ganger")).toBeTruthy();
+    expect(items.map((li) => li.querySelector(".place")?.firstChild?.textContent)).toEqual(["1", "2", "3"]);
+  });
+
+  it("shows the round, and keeps the initiative score in the place's tooltip, not on the card", () => {
+    show();
     expect(screen.getByText("ROUND 2")).toBeTruthy();
-    const rows = screen.getAllByRole("listitem").map((li) => li.textContent?.replace(/Acts .*?each round\. .*?Intuition\./, "").trim());
-    expect(rows).toEqual(["1Kira", "2Guard A, Guard Bact together", "3Ganger+3 initiative from next round"]);
     expect(screen.queryByText("14")).toBeNull();
+    const tips = screen.getAllByRole("tooltip", { hidden: true }).map((x) => x.textContent);
+    expect(tips).toContain("Acts 1st each round. Initiative 14: Reaction + Intuition + dice; ties go to Edge, then Reaction, then Intuition.");
+    expect(tips).toContain("Acts 3rd each round. Initiative 9: Reaction + Intuition + dice; ties go to Edge, then Reaction, then Intuition.");
   });
 
-  it("keeps the initiative score and the tie rule in the tooltip on the place", () => {
-    render(<TurnStrip combat={combat} characters={[]} />);
-    const tips = screen.getAllByRole("tooltip", { hidden: true }).map((t) => t.textContent);
-    expect(tips[0]).toBe("Acts 1st each round. Initiative 14: Reaction + Intuition + dice; ties go to Edge, then Reaction, then Intuition.");
-    expect(tips[2]).toContain("Acts 3rd each round. Initiative 9");
+  it("shows a group of grunts as one row with a place, how many and how many are down, opening to each", () => {
+    show();
+    const row = screen.getByText("Guards").closest("summary")!;
+    expect(row.textContent).toContain("grunts · rating 3");
+    expect(row.textContent).toContain("×3 · 1 down");
+    expect(row.querySelector(".place")).toBeTruthy();
+    const members = within(row.parentElement!).getAllByLabelText(/Damage \d of 9/);
+    expect(members).toHaveLength(3);
+    expect(within(row.parentElement!).getByText("Guard A").closest(".mem")?.className).toContain("out");
   });
 
-  it("strikes out and labels a side that is all down", () => {
-    const { container } = render(<TurnStrip combat={combat} characters={[view({ id: "ganger", kind: "npc", name: "Ganger", status: "unconscious" })]} />);
+  it("notes initiative bought with Edge on the card that bought it", () => {
+    show();
+    expect(screen.getByText("+3 initiative next round")).toBeTruthy();
+  });
+
+  it("lists anyone the order does not include after it, so nobody on the table is missing", () => {
+    show();
+    expect(screen.getByText("NOT IN THE FIGHT")).toBeTruthy();
+    const bystanders = document.querySelector(".bystanders")!;
+    expect(within(bystanders as HTMLElement).getByRole("button", { name: "Doc" })).toBeTruthy();
+  });
+
+  it("dims a side that is out of the fight", () => {
+    const down = characters.map((c) => (c.id === "ganger" ? { ...c, status: "unconscious" as const } : c));
+    const { container } = render(<Rail party={party} characters={down} edge={edge} combat={combat} speaking="kira" onSpeak={noop} />);
     expect(container.querySelectorAll("li.out")).toHaveLength(1);
-    expect(container.querySelector("li.out")?.textContent).toContain("out of the fight");
+    expect(container.querySelector("li.out")?.textContent).toContain("Ganger");
   });
 });
 
-describe("the opposition", () => {
-  const m = { ...monitor, physicalBoxes: 9 };
-  const grunt = (id: string, name: string, physical: number, status: CharacterView["status"] = "active") =>
-    view({ id, kind: "npc", name, status, monitor: { ...m, physical }, grunt: { professionalRating: 3, lieutenant: false, lastDamage: "physical" } });
-  const ganger = view({ id: "ganger", kind: "npc", name: "Ganger", monitor: { ...monitor, physical: 3 } });
-  const order = (extra: object) => ({ round: 1, order: [{ members: [{ kind: "npc", id: "g1", name: "Guard A" }, { kind: "npc", id: "g2", name: "Guard B" }, { kind: "npc", id: "g3", name: "Guard C" }], group: "Guards", score: 11, reaction: 1, intuition: 1, dice: 1, rolls: [1], edge: 0, coin: 0.5, major: 1, minor: 1, ...extra }] }) as CombatState;
-  const grunts = [grunt("g1", "Guard A", 9, "unconscious"), grunt("g2", "Guard B", 2), grunt("g3", "Guard C", 0)];
+describe("out of a fight", () => {
+  it("shows the party, then whoever the GM has put on the table", () => {
+    render(<Rail party={party} characters={[view({ id: "kira", name: "Kira" }), view({ id: "doc", name: "Doc" }), ganger]} edge={edge} combat={null} speaking="kira" onSpeak={noop} />);
+    expect(screen.getByText("PARTY")).toBeTruthy();
+    expect(screen.getByText("OPPOSITION")).toBeTruthy();
+    expect(screen.queryByText("ROUND 2")).toBeNull();
+    expect(document.querySelector(".place")).toBeNull();
+  });
 
-  it("shows nothing when nobody is there", () => {
-    const { container } = render(<OppositionPanel characters={[view({ id: "kira", name: "Kira" })]} combat={null} />);
+  it("shows nothing for the opposition when nobody is there", () => {
+    const { container } = render(<OppositionPanel characters={[view({ id: "kira", name: "Kira" })]} />);
     expect(container.textContent).toBe("");
   });
 
-  it("collapses a group of grunts into one row with how many there are and how many are down", () => {
-    render(<OppositionPanel characters={grunts} combat={order({})} />);
-    const summary = screen.getByText("Guards").closest("summary")!;
-    expect(summary.textContent).toContain("grunts · rating 3");
-    expect(summary.textContent).toContain("×3 · 1 down");
-    const details = summary.parentElement!;
-    expect(within(details).getByText("Guard A").closest(".mem")?.className).toContain("out");
-    expect(within(details).getAllByLabelText(/Damage \d of 9/)).toHaveLength(3);
-  });
-
-  it("shows a named character as a card with their tracks, and a grunt on their own with their rating", () => {
-    render(<OppositionPanel characters={[ganger, grunt("g9", "Thug", 4)]} combat={null} />);
+  it("shows a named character with their tracks, a grunt with their rating, and a dead one without tracks", () => {
+    render(<OppositionPanel characters={[ganger, grunt("g9", "Thug", 4), { ...ganger, id: "g8", name: "Dead Guy", status: "dead" }]} />);
     expect(screen.getByLabelText("Physical 3 of 11")).toBeTruthy();
     expect(screen.getByText(/grunt · rating 3/)).toBeTruthy();
     expect(screen.getByLabelText("Damage 4 of 9")).toBeTruthy();
-  });
-
-  it("shows a dead one as a name and a chip, without tracks", () => {
-    render(<OppositionPanel characters={[{ ...ganger, status: "dead" }]} combat={null} />);
+    expect(screen.getAllByLabelText(/Physical/)).toHaveLength(1);
     expect(screen.getByText("DEAD")).toBeTruthy();
-    expect(screen.queryByLabelText(/Physical/)).toBeNull();
   });
 });
 

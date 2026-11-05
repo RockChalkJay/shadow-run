@@ -1,4 +1,4 @@
-import type { CharacterSheet, CharacterView, CombatEntry, CombatState, ConditionMonitor, EdgeView } from "@shadow-run/shared";
+import type { CharacterSheet, CharacterView, CombatState, ConditionMonitor, EdgeView } from "@shadow-run/shared";
 import { useEffect, useId, useRef, useState } from "react";
 
 // ---- small pieces ----------------------------------------------------------------------------
@@ -83,13 +83,35 @@ export function StatusChip({ status }: { status: CharacterView["status"] }) {
   );
 }
 
-// ---- the party -------------------------------------------------------------------------------
+// ---- cards -----------------------------------------------------------------------------------
 
-export function PartyCard({ sheet, view, edge, speaking, onSpeak }: { sheet: CharacterSheet; view: CharacterView | undefined; edge: EdgeView | undefined; speaking: boolean; onSpeak: (id: string) => void }) {
+/** Where a side stands in the acting order, and the initiative that put it there. */
+export interface Place {
+  n: number;
+  score: number;
+  /** Initiative bought with Edge, which counts from the next round. */
+  bonus?: number | undefined;
+}
+
+function PlaceBadge({ place }: { place: Place }) {
+  return (
+    <Tip className="place" text={`Acts ${ordinal(place.n)} each round. Initiative ${place.score}: Reaction + Intuition + dice; ties go to Edge, then Reaction, then Intuition.`}>
+      {place.n}
+    </Tip>
+  );
+}
+
+function BonusTag({ place }: { place: Place | undefined }) {
+  if (!place?.bonus) return null;
+  return <Tip className="tag edge" text="Edge bought extra initiative, which counts from the next round.">+{place.bonus} initiative next round</Tip>;
+}
+
+export function PartyCard({ sheet, view, edge, speaking, onSpeak, place }: { sheet: CharacterSheet; view: CharacterView | undefined; edge: EdgeView | undefined; speaking: boolean; onSpeak: (id: string) => void; place?: Place | undefined }) {
   const status = view?.status ?? "active";
   return (
     <div className={`pcard ${status} ${speaking ? "speaking" : ""}`}>
       <div className="head">
+        {place && <PlaceBadge place={place} />}
         <button className="name" aria-pressed={speaking} title={`Speak as ${sheet.name}`} onClick={() => onSpeak(sheet.id)}>{sheet.name}</button>
         <span className="meta">{sheet.metatype}</span>
         {view && <StatusChip status={status} />}
@@ -106,10 +128,64 @@ export function PartyCard({ sheet, view, edge, speaking, onSpeak }: { sheet: Cha
             <Icon name="bolt" /> Edge {edge.points}
           </Tip>
         )}
+        <BonusTag place={place} />
       </div>
     </div>
   );
 }
+
+const gruntHelp = (rating: number, lieutenant = false) =>
+  `Nameless opposition with one condition track. Professional Rating ${rating} decides when they test their nerve.${lieutenant ? " A lieutenant has a longer track." : ""}`;
+
+/** A non-player character: a named one with their tracks, a grunt on their own with theirs. */
+export function NpcCard({ character, place }: { character: CharacterView; place?: Place | undefined }) {
+  const c = character;
+  return (
+    <div className={`pcard npc ${c.status}`}>
+      <div className="head">
+        {place && <PlaceBadge place={place} />}
+        <span className="name-plain">{c.name}</span>
+        {c.grunt && (
+          <Tip className="tag" text={gruntHelp(c.grunt.professionalRating, c.grunt.lieutenant)}>
+            grunt · rating {c.grunt.professionalRating}{c.grunt.lieutenant ? " · lieutenant" : ""}
+          </Tip>
+        )}
+        <StatusChip status={c.status} />
+      </div>
+      {c.status !== "dead" && <Tracks character={c} />}
+      <div className="tags"><BonusTag place={place} /></div>
+    </div>
+  );
+}
+
+function GruntRow({ character }: { character: CharacterView }) {
+  return (
+    <div className={`mem ${character.status !== "active" ? "out" : ""}`}>
+      <span className="mem-name">{character.name}</span>
+      <Tracks character={character} />
+    </div>
+  );
+}
+
+/** Grunts who act together: one row saying how many and how many are down, opening to each. */
+export function GroupRow({ label, members, place }: { label: string; members: CharacterView[]; place?: Place | undefined }) {
+  const down = members.filter((m) => m.status !== "active").length;
+  const rating = members[0]?.grunt?.professionalRating;
+  return (
+    <details className="grp">
+      <summary>
+        {place && <PlaceBadge place={place} />}
+        <span className="name-plain">{label}</span>
+        {rating !== undefined && <Tip className="tag" text={gruntHelp(rating)}>grunts · rating {rating}</Tip>}
+        <Tip className="count" text="How many are in this group, and how many are down.">×{members.length}{down > 0 ? ` · ${down} down` : ""}</Tip>
+        <BonusTag place={place} />
+      </summary>
+      {members.map((m) => <GruntRow key={m.id} character={m} />)}
+    </details>
+  );
+}
+
+// ---- out of a fight --------------------------------------------------------------------------
 
 export function PartyPanel({ party, characters, edge, speaking, onSpeak }: { party: CharacterSheet[]; characters: CharacterView[]; edge: EdgeView[]; speaking: string | undefined; onSpeak: (id: string) => void }) {
   return (
@@ -122,96 +198,65 @@ export function PartyPanel({ party, characters, edge, speaking, onSpeak }: { par
   );
 }
 
-// ---- the fight -------------------------------------------------------------------------------
-
-const statusOf = (characters: CharacterView[], m: { kind: "pc" | "npc"; id: string }) => characters.find((c) => c.kind === m.kind && c.id === m.id)?.status ?? "active";
-
-/** Who acts first, second and so on each round. The initiative score that put them there is in a tooltip, not on the row. */
-export function TurnStrip({ combat, characters }: { combat: CombatState; characters: CharacterView[] }) {
+export function OppositionPanel({ characters }: { characters: CharacterView[] }) {
+  const npcs = characters.filter((c) => c.kind === "npc");
+  if (npcs.length === 0) return null;
   return (
-    <section className="turns" aria-label={`Acting order, round ${combat.round}`}>
-      <header className="turns-head">
-        <h4>ACTING ORDER</h4>
-        <span className="round">ROUND {combat.round}</span>
-      </header>
-      <ol>
-        {combat.order.map((entry, i) => {
-          const out = entry.members.every((m) => statusOf(characters, m) !== "active");
-          return (
-            <li key={i} className={out ? "out" : ""}>
-              <Tip className="place" text={`Acts ${ordinal(i + 1)} each round. Initiative ${entry.score}: Reaction + Intuition + dice; ties go to Edge, then Reaction, then Intuition.`}>{i + 1}</Tip>
-              <span className="turn-who">
-                <span className="turn-name">{entry.members.map((m) => m.name).join(", ")}</span>
-                {entry.group !== undefined && <span className="sub">act together</span>}
-                {entry.bonus ? <span className="sub">+{entry.bonus} initiative from next round</span> : null}
-                {out && <span className="sub">out of the fight</span>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+    <section aria-label="Opposition">
+      <h4>OPPOSITION</h4>
+      {npcs.map((c) => <NpcCard key={c.id} character={c} />)}
     </section>
   );
 }
 
-// ---- opposition ------------------------------------------------------------------------------
+// ---- in a fight ------------------------------------------------------------------------------
 
-function groupsOf(combat: CombatState | null, npcs: CharacterView[]): { entry: CombatEntry; members: CharacterView[] }[] {
-  if (!combat) return [];
-  return combat.order
-    .filter((e) => e.group !== undefined && e.members.length > 1)
-    .map((entry) => ({ entry, members: entry.members.map((m) => npcs.find((c) => c.id === m.id)).filter((c): c is CharacterView => c !== undefined) }))
-    .filter((g) => g.members.length > 1);
-}
+type Props = { party: CharacterSheet[]; characters: CharacterView[]; edge: EdgeView[]; speaking: string | undefined; onSpeak: (id: string) => void };
 
-function GruntRow({ character }: { character: CharacterView }) {
-  const out = character.status !== "active";
-  return (
-    <div className={`mem ${out ? "out" : ""}`}>
-      <span className="mem-name">{character.name}</span>
-      <Tracks character={character} />
-    </div>
-  );
-}
-
-export function OppositionPanel({ characters, combat }: { characters: CharacterView[]; combat: CombatState | null }) {
-  const npcs = characters.filter((c) => c.kind === "npc");
-  if (npcs.length === 0) return null;
-  const groups = groupsOf(combat, npcs);
-  const grouped = new Set(groups.flatMap((g) => g.members.map((m) => m.id)));
-  const rest = npcs.filter((c) => !grouped.has(c.id));
+/**
+ * A fight is one list in acting order: each side's card, or a group of grunts as one row, with its place on it. Anyone
+ * the GM has put on the table who is not in the order follows.
+ */
+export function FightList({ combat, party, characters, edge, speaking, onSpeak }: Props & { combat: CombatState }) {
+  const find = (m: { kind: "pc" | "npc"; id: string }) => characters.find((c) => c.kind === m.kind && c.id === m.id);
+  const inOrder = new Set(combat.order.flatMap((e) => e.members.map((m) => `${m.kind}:${m.id}`)));
+  const sheetCard = (id: string, place?: Place) => {
+    const sheet = party.find((p) => p.id === id);
+    return sheet && <PartyCard key={`pc:${id}`} sheet={sheet} view={find({ kind: "pc", id })} edge={edge.find((e) => e.id === id)} speaking={speaking === id} onSpeak={onSpeak} place={place} />;
+  };
 
   return (
-    <section aria-label="Opposition">
-      <h4>OPPOSITION</h4>
-      {groups.map(({ entry, members }) => {
-        const down = members.filter((m) => m.status !== "active").length;
-        const rating = members[0]?.grunt?.professionalRating;
-        return (
-          <details key={entry.group} className="grp">
-            <summary>
-              <span className="name-plain">{entry.group}</span>
-              {rating !== undefined && <Tip className="tag" text={`Nameless opposition with one condition track each. Professional Rating ${rating} decides when they test their nerve.`}>grunts · rating {rating}</Tip>}
-              <Tip className="count" text="How many are in this group, and how many are down.">×{members.length}{down > 0 ? ` · ${down} down` : ""}</Tip>
-            </summary>
-            {members.map((m) => <GruntRow key={m.id} character={m} />)}
-          </details>
-        );
-      })}
-      {rest.map((c) => (
-        <div key={c.id} className={`pcard npc ${c.status}`}>
-          <div className="head">
-            <span className="name-plain">{c.name}</span>
-            {c.grunt && (
-              <Tip className="tag" text={`Nameless opposition with one condition track. Professional Rating ${c.grunt.professionalRating} decides when they test their nerve.${c.grunt.lieutenant ? " A lieutenant has a longer track." : ""}`}>
-                grunt · rating {c.grunt.professionalRating}{c.grunt.lieutenant ? " · lieutenant" : ""}
-              </Tip>
-            )}
-            <StatusChip status={c.status} />
-          </div>
-          {c.status !== "dead" && <Tracks character={c} />}
+    <section aria-label={`Fight, round ${combat.round}`}>
+      <header className="fight-head">
+        <h4>FIGHT</h4>
+        <span className="round">ROUND {combat.round}</span>
+      </header>
+      <ol className="acting">
+        {combat.order.map((entry, i) => {
+          const place: Place = { n: i + 1, score: entry.score, bonus: entry.bonus };
+          const views = entry.members.map(find).filter((c): c is CharacterView => c !== undefined);
+          const out = views.length > 0 && views.every((c) => c.status !== "active");
+          const [only] = entry.members;
+          return (
+            <li key={i} className={out ? "out" : ""}>
+              {entry.group !== undefined && entry.members.length > 1 ? (
+                <GroupRow label={entry.group} members={views} place={place} />
+              ) : only?.kind === "pc" ? (
+                sheetCard(only.id, place)
+              ) : views[0] ? (
+                <NpcCard character={views[0]} place={place} />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      {(party.some((p) => !inOrder.has(`pc:${p.id}`)) || characters.some((c) => c.kind === "npc" && !inOrder.has(`npc:${c.id}`))) && (
+        <div className="bystanders">
+          <h4>NOT IN THE FIGHT</h4>
+          {party.filter((p) => !inOrder.has(`pc:${p.id}`)).map((p) => sheetCard(p.id))}
+          {characters.filter((c) => c.kind === "npc" && !inOrder.has(`npc:${c.id}`)).map((c) => <NpcCard key={c.id} character={c} />)}
         </div>
-      ))}
+      )}
     </section>
   );
 }
@@ -248,13 +293,18 @@ function Announcer({ characters }: { characters: CharacterView[] }) {
 
 // ---- the whole rail --------------------------------------------------------------------------
 
-export function Rail({ party, characters, edge, combat, speaking, onSpeak }: { party: CharacterSheet[]; characters: CharacterView[]; edge: EdgeView[]; combat: CombatState | null; speaking: string | undefined; onSpeak: (id: string) => void }) {
+export function Rail({ combat, ...props }: Props & { combat: CombatState | null }) {
   return (
     <aside className="rail" aria-label="The table's status">
-      {combat && <TurnStrip combat={combat} characters={characters} />}
-      <PartyPanel party={party} characters={characters} edge={edge} speaking={speaking} onSpeak={onSpeak} />
-      <OppositionPanel characters={characters} combat={combat} />
-      <Announcer characters={characters} />
+      {combat ? (
+        <FightList combat={combat} {...props} />
+      ) : (
+        <>
+          <PartyPanel {...props} />
+          <OppositionPanel characters={props.characters} />
+        </>
+      )}
+      <Announcer characters={props.characters} />
     </aside>
   );
 }
