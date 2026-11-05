@@ -83,6 +83,8 @@ describe("the roll card", () => {
 
   it("asks before burning Edge, says what it costs, and sends nothing if cancelled", async () => {
     const { send, user } = setup();
+    expect(screen.queryByRole("button", { name: /Burn Edge: Smackdown/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^▸ Edge/ }));
     await user.click(screen.getByRole("button", { name: /Burn Edge: Smackdown/ }));
     const dialog = screen.getByRole("dialog");
     expect(dialog.textContent).toContain("(3 → 2)");
@@ -144,9 +146,8 @@ describe("Edge before the roll", () => {
     expect(screen.getByRole("button", { name: /^[▸▾] Edge · Edge dice chosen/ })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /^[▸▾] Edge/ }));
     await user.click(screen.getByLabelText("No Edge before the roll"));
-    await user.click(screen.getByLabelText(/Decide on Edge after seeing the dice/));
     await user.click(screen.getByRole("button", { name: /^[▸▾] Edge/ }));
-    expect(screen.getByRole("button", { name: /^[▸▾] Edge · deciding after the roll/ })).toBeTruthy();
+    expect(screen.queryByText(/chosen/)).toBeNull();
   });
 
   it("still sends a choice made inside the section after it is folded away again", async () => {
@@ -213,18 +214,28 @@ describe("Edge before the roll", () => {
     expect(screen.queryByLabelText(/Make 2s count/)).toBeNull();
   });
 
-  it("holds the roll to decide after seeing the dice", async () => {
-    const { send, user } = await card(base);
-    await user.click(screen.getByLabelText(/Decide on Edge after seeing the dice/));
+  it("holds the roll to decide after seeing the dice, from the dice card, with the Edge section still closed", async () => {
+    const { send, user } = await card(base, rich, false);
+    await user.click(screen.getByLabelText(/decide on Edge after seeing the dice/));
     await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
     expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", hold: true });
   });
 
+  it("holds a roll whose dice were entered by hand too", async () => {
+    const { send, user } = await card(base, rich, false);
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    await user.click(screen.getByLabelText(/decide on Edge after seeing the dice/));
+    await user.click(screen.getByLabelText("die 1"));
+    await user.paste("6 5 3 1");
+    await user.click(screen.getByRole("button", { name: "Count these dice" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.physical", requestId: "r1", dice: "6 5 3 1", hold: true });
+  });
+
   it("will not hold a roll that has Edge spent before it, nor the reverse", async () => {
     const { send, user } = await card(base);
-    await user.click(screen.getByLabelText(/Decide on Edge after seeing the dice/));
+    await user.click(screen.getByLabelText(/decide on Edge after seeing the dice/));
     await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
-    expect((screen.getByLabelText(/Decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText(/decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
     expect(send.mock.calls[0]![0]).not.toHaveProperty("hold");
   });
@@ -238,7 +249,7 @@ describe("Edge before the roll", () => {
   it("takes every Edge option away from a roll with a declared Edge Action the player can pay for", async () => {
     await card({ ...base, edgeAction: { id: "bring_the_drama", name: "Bring the Drama", cost: 2, summary: "s" } });
     expect((screen.getByLabelText(/Edge dice · 4 Edge/) as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText(/Decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText(/decide on Edge after seeing the dice/) as HTMLInputElement).disabled).toBe(true);
     expect(screen.getAllByText(/Bring the Drama is declared and is this round's one expenditure of Edge\./).length).toBeGreaterThan(0);
   });
 
