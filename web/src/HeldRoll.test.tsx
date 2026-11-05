@@ -67,6 +67,15 @@ describe("a roll that is held", () => {
     expect(screen.queryByRole("button", { name: /their die/ })).toBeNull();
   });
 
+  it("will not add 1 to a 6, and says so before anything is sent", async () => {
+    const { send, user } = show(held());
+    await user.click(screen.getByRole("radio", { name: /Add 1 to a die/ }));
+    await user.click(die("your", 1, 6));
+    expect(screen.getByRole("alert").textContent).toBe("A 6 cannot be raised.");
+    expect((screen.getByRole("button", { name: /Add 1 to 1 die/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("buys hits at 3 Edge each", async () => {
     const { send, user } = show(held(), { ...edge, points: 6 });
     await user.click(screen.getByRole("radio", { name: /Buy a hit/ }));

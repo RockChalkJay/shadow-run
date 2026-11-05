@@ -54,7 +54,7 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
   const blocked =
     tool === "missed"
       ? held.roll.glitch ? "Rerolling the misses cannot be done after a glitch." : misses === 0 ? "Every die is a hit." : null
-      : tool === "buy" ? null : picked.size === 0 ? "Pick the dice by clicking them." : tool === "bump" && mine.length === 0 ? "Only your own dice can be raised." : null;
+      : tool === "buy" ? null : picked.size === 0 ? "Pick the dice by clicking them." : tool === "bump" && mine.length === 0 ? "Only your own dice can be raised." : tool === "bump" && mine.some((i) => held.roll.dice[i] === 6) ? "A 6 cannot be raised." : null;
   const poor = cannotSpend(edge, cost);
   const reason = blocked ?? poor;
   const diceText = byHand && typed.trim() !== "" ? typed.trim() : undefined;
