@@ -1,7 +1,7 @@
 import type { GmStatus } from "@shadow-run/shared";
 import { useEffect, useRef, useState } from "react";
 import { useTable } from "./connection";
-import { FightPanel, NpcPanel, PartyPanel } from "./Rail";
+import { Rail } from "./Rail";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
 
@@ -71,11 +71,7 @@ export function App({ url }: { url: string }) {
           ))}
           <div ref={end} />
         </div>
-        <aside className="rail">
-          <PartyPanel party={state.party} characters={state.characters} speaking={who} />
-          <FightPanel combat={state.combat} characters={state.characters} />
-          <NpcPanel characters={state.characters} />
-        </aside>
+        <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} />
       </div>
       <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>
