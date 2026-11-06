@@ -1,7 +1,8 @@
 import type { ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TUMBLE_MS } from "./Dice";
 import { RollCard } from "./RollCard";
 
 const roll = (dice: number[], extra: object = {}) => ({ dice, hits: dice.filter((d) => d >= 5).length, ones: dice.filter((d) => d === 1).length, glitch: false, criticalGlitch: false, ...extra });
@@ -9,7 +10,7 @@ const base = {
   id: "r1", characterId: "kira", label: "Sneak", pool: { total: 4, breakdown: "x" }, stakes: "s", goodRoll: "g", badRoll: "b", edgeAdvice: "e",
   consequences: { success: "s", failure: "f", glitch: "g", criticalGlitch: "c" },
 } as RollRequest;
-const held = (over: object = {}, opposed = false) => ({ ...base, ...(opposed && { opposed: { by: "Guard", pool: 4, role: "acting" as const } }), held: { source: "app" as const, roll: roll([6, 3, 3, 1]), ...(opposed && { opponent: roll([5, 5, 2, 1]) }), ...over } }) as RollRequest;
+const held = (over: object = {}, opposed = false) => ({ ...base, ...(opposed && { opposed: { by: "Guard", pool: 4, role: "acting" as const } }), held: { source: "physical" as const, roll: roll([6, 3, 3, 1]), ...(opposed && { opponent: roll([5, 5, 2, 1]) }), ...over } }) as RollRequest;
 const edge: EdgeView = { id: "kira", points: 4, rank: 3, spentThisRound: false };
 
 function show(request: RollRequest, e: EdgeView | undefined = edge, error: string | null = null) {
@@ -19,7 +20,32 @@ function show(request: RollRequest, e: EdgeView | undefined = edge, error: strin
 }
 const die = (side: "your" | "their", n: number, face: number) => screen.getByRole("button", { name: `${side} die ${n}, showing ${face}` });
 
+afterEach(() => vi.useRealTimers());
+
 describe("a roll that is held", () => {
+  it("tumbles the app's dice before showing the faces, and not dice rolled by hand", () => {
+    vi.useFakeTimers();
+    show(held({ source: "app" }));
+    expect(screen.getAllByLabelText("rolling").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /your die/ })).toBeNull();
+    act(() => void vi.advanceTimersByTime(TUMBLE_MS + 10));
+    expect(screen.getByRole("button", { name: "your die 1, showing 6" })).toBeTruthy();
+  });
+
+  it("shows dice rolled by hand at once", () => {
+    show(held());
+    expect(screen.getByRole("button", { name: "your die 1, showing 6" })).toBeTruthy();
+  });
+
+  it("names what it will do, with no cost, until dice are picked", async () => {
+    const { user } = show(held());
+    expect(screen.getByRole("button", { name: "Reroll dice" })).toBeTruthy();
+    await user.click(screen.getByRole("radio", { name: /Add 1 to a die/ }));
+    expect(screen.getByRole("button", { name: "Add 1 to a die" })).toBeTruthy();
+    await user.click(die("your", 2, 3));
+    expect(screen.getByRole("button", { name: "Add 1 to 1 die · 2 Edge" })).toBeTruthy();
+  });
+
   it("shows the counted dice and the hits, and no longer offers to roll", () => {
     show(held());
     expect(screen.getByText(/Your roll: 1 hit/)).toBeTruthy();
@@ -123,7 +149,7 @@ describe("a roll that is held", () => {
     show(held());
     expect(screen.getByText("Pick the dice by clicking them.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect((screen.getByRole("button", { name: /Reroll 0 dice/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Reroll dice$/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows what the server refused", () => {

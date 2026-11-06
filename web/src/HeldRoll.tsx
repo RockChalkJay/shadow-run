@@ -1,6 +1,6 @@
 import type { ClientMessage, EdgeView, RollRequest, RollResult } from "@shadow-run/shared";
-import { useState } from "react";
-import { HIT } from "./Dice";
+import { useEffect, useState } from "react";
+import { Dice, HIT, TUMBLE_MS } from "./Dice";
 import { cannotSpend, COST } from "./edge";
 
 type Tool = "reroll" | "bump" | "buy" | "missed";
@@ -28,6 +28,13 @@ function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "min
 /** A roll the player has counted but not committed: its dice, and what Edge can do to them. */
 export function HeldRoll({ request, edge, error, send }: { request: RollRequest; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void }) {
   const held = request.held!;
+  // The app's dice tumble when they first show. The screen cannot tell a fresh roll from one restored after a reload, so a reload plays it again.
+  const [tumbling, setTumbling] = useState(held.source === "app");
+  useEffect(() => {
+    if (!tumbling) return;
+    const timer = setTimeout(() => setTumbling(false), TUMBLE_MS);
+    return () => clearTimeout(timer);
+  }, [tumbling]);
   const [tool, setTool] = useState<Tool>("reroll");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [times, setTimes] = useState(1);
@@ -69,14 +76,19 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
     else send({ ...base, boost: "reroll_failed", ...(diceText !== undefined && { dice: diceText }) });
   };
 
-  const label = tool === "reroll" ? `Reroll ${picked.size} ${picked.size === 1 ? "die" : "dice"}` : tool === "bump" ? `Add 1 to ${mine.length} ${mine.length === 1 ? "die" : "dice"}` : tool === "buy" ? `Buy ${times} ${times === 1 ? "hit" : "hits"}` : `Reroll the ${misses} that missed`;
+  const label =
+    tool === "reroll" ? (picked.size === 0 ? "Reroll dice" : `Reroll ${picked.size} ${picked.size === 1 ? "die" : "dice"}`)
+    : tool === "bump" ? (mine.length === 0 ? "Add 1 to a die" : `Add 1 to ${mine.length} ${mine.length === 1 ? "die" : "dice"}`)
+    : tool === "buy" ? `Buy ${times} ${times === 1 ? "hit" : "hits"}`
+    : `Reroll the ${misses} that missed`;
+  const priced = needsPick ? "" : ` · ${cost} Edge`;
   const needsDice = tool === "reroll" || tool === "missed";
 
   return (
     <div className="held">
       <p className="hint">Your roll: {held.roll.hits} {held.roll.hits === 1 ? "hit" : "hits"}{held.opponent ? ` against ${held.opponent.hits}` : ""}. Keep it, or spend Edge on it.</p>
-      <PickableDice roll={held.roll} side="mine" on={picked} toggle={tool === "reroll" || tool === "bump" ? toggle : null} />
-      {held.opponent && (
+      {tumbling ? <Dice roll={held.roll} tumble /> : <PickableDice roll={held.roll} side="mine" on={picked} toggle={tool === "reroll" || tool === "bump" ? toggle : null} />}
+      {held.opponent && !tumbling && (
         <p className="dim">{request.opposed?.by ?? "Opposition"}: <PickableDice roll={held.opponent} side="theirs" on={picked} toggle={tool === "reroll" ? toggle : null} /> {held.opponent.hits} {held.opponent.hits === 1 ? "hit" : "hits"}</p>
       )}
       <div className="btns">
@@ -102,7 +114,7 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
       {needsPick && <p className="hint">Pick the dice by clicking them.</p>}
       {(reason ?? error) && <p className="problem" role="alert">{reason ?? error}</p>}
       <div className="btns">
-        <button disabled={reason !== null || needsPick} onClick={confirm}>{label} · {cost} Edge</button>
+        <button disabled={reason !== null || needsPick} onClick={confirm}>{label}{priced}</button>
       </div>
     </div>
   );
