@@ -130,3 +130,4 @@ button.die.pick{outline:2px solid transparent}button.die.pick.on{outline-color:v
 .edge-panel .edge-opts{margin-top:8px}
 .smack{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}.smack button{margin-left:0}.smack small{display:block;color:var(--dim);font-size:13px;margin-top:4px}
 .opt.hold{margin-top:12px}
+h4.spend{margin:14px 0 0;font:800 11px var(--hud);letter-spacing:.15em;color:var(--dim)}

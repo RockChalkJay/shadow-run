@@ -1,6 +1,6 @@
 import type { ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
 import { useState } from "react";
-import { actionTakesTheEdge, cannotSpend, COST, facesFrom } from "./edge";
+import { actionTakesTheEdge, cannotSpend, COST, facesFrom, shouldKeepBack } from "./edge";
 import { HeldRoll } from "./HeldRoll";
 
 export { facesFrom };
@@ -44,22 +44,14 @@ export function RollCard({ request, name, edge, error, send }: Props) {
 
   const { held } = request;
   const [before, setBefore] = useState<"none" | "dice" | "widen">("none");
-  const [hold, setHold] = useState(false);
   const [extra, setExtra] = useState("");
   const taken = actionTakesTheEdge(request, edge);
   const diceReason = taken ?? cannotSpend(edge, COST.dice) ?? (edge && edge.rank === 0 ? "No Edge attribute to add to the pool." : null);
   const widenReason = taken ?? (request.opposed ? cannotSpend(edge, COST.widen) : "There is no opposing roll to make glitch.");
-  const holdReason = taken ?? cannotSpend(edge, COST.hold);
   const withEdge = before === "dice" ? (edge?.rank ?? 0) : 0;
   const total = size + withEdge;
 
   const chosen = held ? null : before === "dice" ? "Edge dice chosen" : before === "widen" ? "2s count against them" : null;
-  const holdOption = (
-    <label className={`opt hold ${before !== "none" || holdReason ? "off" : ""}`}>
-      <input type="checkbox" checked={hold && before === "none"} disabled={before !== "none" || holdReason !== null} onChange={(e) => setHold(e.target.checked)} />
-      <span>Hold the roll, and decide on Edge after seeing the dice<small>{before !== "none" ? "Not with Edge spent before the roll." : holdReason ?? "Then reroll dice, add 1, buy a hit, or reroll the misses."}</small></span>
-    </label>
-  );
   const face = (i: number) => faces[i] ?? "";
   const setFace = (index: number, value: string) => {
     const typed = facesFrom(value);
@@ -75,7 +67,7 @@ export function RollCard({ request, name, edge, error, send }: Props) {
   const edgeFields = () => ({
     ...(before === "dice" && { edge: "dice" as const }),
     ...(before === "widen" && { edge: "widen_glitch" as const }),
-    ...(hold && { hold: true }),
+    ...(shouldKeepBack(request, edge, before) && { hold: true }),
   });
   const count = () => {
     const entered = Array.from({ length: total }, (_, i) => face(i));
@@ -127,8 +119,8 @@ export function RollCard({ request, name, edge, error, send }: Props) {
             <fieldset className="edge-opts">
               <legend>Edge on this roll</legend>
               <EdgeOption checked={before === "none"} onChange={() => setBefore("none")} label="No Edge before the roll" />
-              <EdgeOption checked={before === "dice"} onChange={() => { setBefore("dice"); setHold(false); }} reason={diceReason} label={`Edge dice · ${COST.dice} Edge`} detail="Adds your Edge attribute to the pool, and 6s explode." />
-              {request.opposed && <EdgeOption checked={before === "widen"} onChange={() => { setBefore("widen"); setHold(false); }} reason={widenReason} label={`Make 2s count against them · ${COST.widen} Edge`} detail="2s as well as 1s count toward the opposition's glitch." />}
+              <EdgeOption checked={before === "dice"} onChange={() => { setBefore("dice"); }} reason={diceReason} label={`Edge dice · ${COST.dice} Edge`} detail="Adds your Edge attribute to the pool, and 6s explode." />
+              {request.opposed && <EdgeOption checked={before === "widen"} onChange={() => { setBefore("widen"); }} reason={widenReason} label={`Make 2s count against them · ${COST.widen} Edge`} detail="2s as well as 1s count toward the opposition's glitch." />}
               {taken && <p className="hint">{taken} No other Edge can go on this roll.</p>}
               <div className="smack">
                 <button className="dng" disabled={smack !== null} title={smack ?? undefined} onClick={() => setMode("burn")}>🔥 Burn Edge: Smackdown</button>
@@ -153,7 +145,6 @@ export function RollCard({ request, name, edge, error, send }: Props) {
             <label className="inline">Extra dice for 6s, if rolled by hand <input className="wide" aria-label="extra dice for 6s" placeholder="Leave empty to let the app roll them" value={extra} onChange={(e) => setExtra(e.target.value)} /></label>
           )}
           {(local ?? error) && <p className="problem" role="alert">{local ?? error}</p>}
-          {holdOption}
           <div className="btns">
             <button className="pri" onClick={count}>Count these dice</button>
             <button onClick={() => { setMode("choose"); setLocal(null); }}>Back</button>
@@ -162,7 +153,6 @@ export function RollCard({ request, name, edge, error, send }: Props) {
       ) : (
         <>
           {error && <p className="problem" role="alert">{error}</p>}
-          {holdOption}
           <div className="btns">
             <button className="pri" onClick={() => send({ type: "roll.app", requestId: request.id, ...edgeFields() })}>🎲 Roll with the app</button>
             <button onClick={() => setMode("dice")}>✎ Enter my dice</button>

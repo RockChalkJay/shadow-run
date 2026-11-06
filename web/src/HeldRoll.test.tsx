@@ -22,7 +22,7 @@ const die = (side: "your" | "their", n: number, face: number) => screen.getByRol
 describe("a roll that is held", () => {
   it("shows the counted dice and the hits, and no longer offers to roll", () => {
     show(held());
-    expect(screen.getByText(/Counted, not committed: 1 hit/)).toBeTruthy();
+    expect(screen.getByText(/Your roll: 1 hit/)).toBeTruthy();
     expect(screen.getByRole("group", { name: "your dice" }).textContent).toBe("6331");
     expect(screen.queryByRole("button", { name: /Roll with the app/ })).toBeNull();
   });
@@ -31,6 +31,14 @@ describe("a roll that is held", () => {
     show(held({}, true));
     expect(screen.getByText(/1 hit against 2/)).toBeTruthy();
     expect(screen.getByRole("group", { name: "their dice" })).toBeTruthy();
+  });
+
+  it("leads with keeping the roll, before any way to spend Edge, and mentions no holding", () => {
+    show(held());
+    const keep = screen.getByRole("button", { name: "Keep it as it stands" });
+    const firstWayToSpend = screen.getByRole("radio", { name: /Reroll dice/ });
+    expect(keep.compareDocumentPosition(firstWayToSpend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/hold|committed/i)).toBeNull();
   });
 
   it("keeps the roll as it stands", async () => {
@@ -113,12 +121,14 @@ describe("a roll that is held", () => {
 
   it("asks the player to pick dice before offering to spend anything on them", () => {
     show(held());
-    expect(screen.getByRole("alert").textContent).toBe("Pick the dice by clicking them.");
+    expect(screen.getByText("Pick the dice by clicking them.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", { name: /Reroll 0 dice/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows what the server refused", () => {
     show(held(), edge, "Kira has already spent Edge this round.");
-    expect(screen.getAllByRole("alert").map((a) => a.textContent)).toContain("Pick the dice by clicking them.");
+    expect(screen.getByRole("alert").textContent).toBe("Kira has already spent Edge this round.");
   });
 
   it("refuses to spend anything when Edge is already spent this round", async () => {

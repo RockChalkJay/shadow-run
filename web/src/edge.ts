@@ -1,7 +1,7 @@
 import type { EdgeView, RollRequest } from "@shadow-run/shared";
 
 /** What each way of spending Edge on a roll costs in the core rules (PDF pp. 47-48). The server charges and checks; these are for showing the player. */
-export const COST = { dice: 4, widen: 5, reroll: 1, bump: 2, buyHit: 3, rerollMissed: 4, hold: 1 } as const;
+export const COST = { dice: 4, widen: 5, reroll: 1, bump: 2, buyHit: 3, rerollMissed: 4 } as const;
 
 /** Why this character cannot spend this much Edge now, or null if they can. */
 export function cannotSpend(edge: EdgeView | undefined, cost: number): string | null {
@@ -24,4 +24,13 @@ export function actionTakesTheEdge(request: RollRequest, edge: EdgeView | undefi
 /** Splits what was typed into faces: spaces, commas or nothing at all between single digits. */
 export function facesFrom(text: string): number[] {
   return (text.match(/[1-6]/g) ?? []).map(Number);
+}
+
+/**
+ * Whether a roll should be kept back for the player to see its dice before it counts: when Edge could actually be spent on
+ * it. With nothing to spend, or Edge already chosen before the roll, or a declared Edge Action taking the round's one
+ * expenditure, there is nothing to decide, and the server would refuse to keep it back, so it counts at once.
+ */
+export function shouldKeepBack(request: RollRequest, edge: EdgeView | undefined, before: "none" | "dice" | "widen"): boolean {
+  return before === "none" && actionTakesTheEdge(request, edge) === null && cannotSpend(edge, 1) === null;
 }

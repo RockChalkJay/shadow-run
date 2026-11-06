@@ -54,8 +54,9 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
   const blocked =
     tool === "missed"
       ? held.roll.glitch ? "Rerolling the misses cannot be done after a glitch." : misses === 0 ? "Every die is a hit." : null
-      : tool === "buy" ? null : picked.size === 0 ? "Pick the dice by clicking them." : tool === "bump" && mine.length === 0 ? "Only your own dice can be raised." : tool === "bump" && mine.some((i) => held.roll.dice[i] === 6) ? "A 6 cannot be raised." : null;
-  const poor = cannotSpend(edge, cost);
+      : tool === "buy" ? null : tool === "bump" && mine.length === 0 ? "Only your own dice can be raised." : tool === "bump" && mine.some((i) => held.roll.dice[i] === 6) ? "A 6 cannot be raised." : null;
+  const needsPick = (tool === "reroll" || tool === "bump") && picked.size === 0;
+  const poor = needsPick ? null : cannotSpend(edge, cost);
   const reason = blocked ?? poor;
   const diceText = byHand && typed.trim() !== "" ? typed.trim() : undefined;
 
@@ -73,11 +74,15 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
 
   return (
     <div className="held">
-      <p className="hint">Counted, not committed: {held.roll.hits} {held.roll.hits === 1 ? "hit" : "hits"}{held.opponent ? ` against ${held.opponent.hits}` : ""}. Spend Edge on it, or keep it as it stands.</p>
+      <p className="hint">Your roll: {held.roll.hits} {held.roll.hits === 1 ? "hit" : "hits"}{held.opponent ? ` against ${held.opponent.hits}` : ""}. Keep it, or spend Edge on it.</p>
       <PickableDice roll={held.roll} side="mine" on={picked} toggle={tool === "reroll" || tool === "bump" ? toggle : null} />
       {held.opponent && (
         <p className="dim">{request.opposed?.by ?? "Opposition"}: <PickableDice roll={held.opponent} side="theirs" on={picked} toggle={tool === "reroll" ? toggle : null} /> {held.opponent.hits} {held.opponent.hits === 1 ? "hit" : "hits"}</p>
       )}
+      <div className="btns">
+        <button className="pri" onClick={() => send({ type: "roll.keep", requestId: request.id })}>Keep it as it stands</button>
+      </div>
+      <h4 className="spend">Or spend Edge on it</h4>
       <div className="tools" role="radiogroup" aria-label="What to spend Edge on">
         {([["reroll", `Reroll dice · ${COST.reroll} each`], ["bump", `Add 1 to a die · ${COST.bump} each`], ["buy", `Buy a hit · ${COST.buyHit} each`], ["missed", `Reroll the misses · ${COST.rerollMissed}`]] as [Tool, string][]).map(([t, text]) => (
           <button key={t} role="radio" aria-checked={tool === t} className={tool === t ? "pri" : ""} onClick={() => choose(t)}>{text}</button>
@@ -94,10 +99,10 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
           {byHand && <input className="wide" aria-label="new dice" placeholder={tool === "reroll" ? "New values in order: yours first, then theirs" : "New values for each die that missed, in order"} value={typed} onChange={(e) => setTyped(e.target.value)} />}
         </>
       )}
+      {needsPick && <p className="hint">Pick the dice by clicking them.</p>}
       {(reason ?? error) && <p className="problem" role="alert">{reason ?? error}</p>}
       <div className="btns">
-        <button className="pri" disabled={reason !== null} onClick={confirm}>{label} · {cost} Edge</button>
-        <button onClick={() => send({ type: "roll.keep", requestId: request.id })}>Keep it as it stands</button>
+        <button disabled={reason !== null || needsPick} onClick={confirm}>{label} · {cost} Edge</button>
       </div>
     </div>
   );
