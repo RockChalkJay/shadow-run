@@ -63,6 +63,8 @@ Keep your copy of the rulebook in `docs/rules/`. Git ignores that folder, so the
 
 ## Development
 
+Known bugs and ideas for future functionality are tracked in `docs/TODO.md`.
+
 Requires Node 24+ and the `claude` CLI logged in to your Claude account.
 
 ```
