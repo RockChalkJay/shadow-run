@@ -138,3 +138,4 @@ h4.spend{margin:14px 0 0;font:800 11px var(--hud);letter-spacing:.15em;color:var
 .use-main{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .use small{display:block;color:var(--dim);font-size:13px;margin-top:2px}.use.off .use-main span{opacity:.6}
 .use .wide{margin-top:6px;width:100%}
+.nde{margin:12px 0;padding:10px 12px;border:1px solid #7a2a45;border-radius:10px;background:#1a1014}.nde .problem{margin:0 0 8px}.nde small{display:block;color:var(--dim);font-size:13px;margin-top:6px}.nde .dng{margin-left:0}

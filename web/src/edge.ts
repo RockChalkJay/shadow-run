@@ -32,5 +32,9 @@ export function facesFrom(text: string): number[] {
  * expenditure, there is nothing to decide, and the server would refuse to keep it back, so it counts at once.
  */
 export function shouldKeepBack(request: RollRequest, edge: EdgeView | undefined, before: "none" | "dice" | "widen"): boolean {
-  return before === "none" && actionTakesTheEdge(request, edge) === null && cannotSpend(edge, 1) === null;
+  if (before !== "none") return false;
+  // A roll to resist damage is also kept back with no Edge to spend, if there is rank left to burn: that is how a character
+  // sees the dice and burns Not Dead Yet to survive a killing blow, which works even in a round Edge was spent.
+  if (request.soak && edge && edge.rank > 0) return true;
+  return actionTakesTheEdge(request, edge) === null && cannotSpend(edge, 1) === null;
 }

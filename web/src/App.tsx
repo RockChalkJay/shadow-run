@@ -69,7 +69,7 @@ export function App({ url }: { url: string }) {
         <div className="story">
           <Story transcript={state.transcript} streaming={state.streaming?.blocks ?? []} fresh={state.fresh} nameOf={nameOf} />
           {state.pending.map((request) => (
-            <RollCard key={request.id} request={request} name={nameOf(request.characterId)} edge={state.edge.find((e) => e.id === request.characterId)} error={state.error} send={send} />
+            <RollCard key={request.id} request={request} name={nameOf(request.characterId)} character={state.characters.find((c) => c.kind === "pc" && c.id === request.characterId)} edge={state.edge.find((e) => e.id === request.characterId)} error={state.error} send={send} />
           ))}
           <div ref={end} />
         </div>

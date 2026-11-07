@@ -1,4 +1,4 @@
-import type { ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
 import { useState } from "react";
 import { actionTakesTheEdge, cannotSpend, COST, facesFrom, shouldKeepBack } from "./edge";
 import { HeldRoll } from "./HeldRoll";
@@ -9,6 +9,8 @@ interface Props {
   request: RollRequest;
   name: string;
   edge: EdgeView | undefined;
+  /** The character rolling, for how hurt they are. */
+  character?: CharacterView | undefined;
   /** What the server last refused, shown while the player is answering. */
   error: string | null;
   send: (message: ClientMessage) => void;
@@ -32,7 +34,7 @@ export function cannotSmackdown(request: RollRequest, edge: EdgeView | undefined
 
 const pluralDice = (n: number) => `${n} ${n === 1 ? "die" : "dice"}`;
 
-export function RollCard({ request, name, edge, error, send }: Props) {
+export function RollCard({ request, name, character, edge, error, send }: Props) {
   const [open, setOpen] = useState<{ happens: boolean; edge: boolean }>({ happens: false, edge: false });
   const [mode, setMode] = useState<"choose" | "dice" | "burn">("choose");
   const size = request.pool.total;
@@ -132,7 +134,7 @@ export function RollCard({ request, name, edge, error, send }: Props) {
       )}
 
       {held ? (
-        <HeldRoll request={request} edge={edge} error={error} send={send} />
+        <HeldRoll request={request} name={name} character={character} edge={edge} error={error} send={send} />
       ) : mode === "dice" ? (
         <>
           <p className="hint">Your {pluralDice(total)}{withEdge > 0 ? ` (${size} plus ${withEdge} Edge ${withEdge === 1 ? "die" : "dice"})` : ""}. Type each face, or type them all in the first box.</p>
