@@ -1,5 +1,5 @@
 import type { CharacterSheet, CharacterView, ClientMessage, CombatState, EdgeView, RollRequest } from "@shadow-run/shared";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { actionTakesTheEdge, cannotSpend } from "./edge";
 
 /** What every Edge menu on the side panel needs to know about the table. */
@@ -51,14 +51,19 @@ export function EdgeMenu({ sheet, view, edge }: { sheet: CharacterSheet; view: C
   const [effect, setEffect] = useState("");
   const [sent, setSent] = useState(false);
 
-  // A use that went through spends Edge, so the menu closes on its own; one that was refused stays to show why.
-  const points = edge?.points;
-  const spent = edge?.spentThisRound;
+  // A use that went through spends Edge, so the menu closes on its own when the points go down. Edge going up (a rating gap,
+  // a GM award, a gift) leaves it alone, and so does a refusal, which stays to show why.
+  const points = edge?.points ?? 0;
+  const before = useRef(points);
   useEffect(() => {
-    setOpen(false);
-    setSent(false);
-    setEffect("");
-  }, [points, spent]);
+    const was = before.current;
+    before.current = points;
+    if (points < was) {
+      setOpen(false);
+      setSent(false);
+      setEffect("");
+    }
+  }, [points]);
 
   if (!table || !edge) return null;
   const { send, combat } = table;

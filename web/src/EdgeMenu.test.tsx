@@ -137,6 +137,24 @@ describe("the Edge menu on a party card", () => {
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
+  it("keeps the menu and a half-written special effect when Edge goes up meanwhile", async () => {
+    const { user, rerender } = show();
+    await open(user);
+    await user.type(screen.getByLabelText("Describe the special effect"), "A fire alarm");
+    rerender({ edge: [{ id: "kira", points: 6, rank: 3, spentThisRound: false }, rich[1]!] });
+    expect((screen.getByLabelText("Describe the special effect") as HTMLInputElement).value).toBe("A fire alarm");
+  });
+
+  it("closes itself, outside a fight too, when the points go down because the Edge was spent", async () => {
+    const { user, rerender } = show();
+    await open(user);
+    await user.type(screen.getByLabelText("Describe the special effect"), "A fire alarm");
+    rerender({ edge: [{ id: "kira", points: 0, rank: 3, spentThisRound: false }, rich[1]!] });
+    expect(screen.queryByLabelText("Describe the special effect")).toBeNull();
+    await open(user);
+    expect((screen.getByLabelText("Describe the special effect") as HTMLInputElement).value).toBe("");
+  });
+
   it("closes itself once the Edge was spent", async () => {
     const hurt = [view("kira", "Kira", { monitor: { ...monitor, stun: 1 } }), view("doc", "Doc")];
     const { user, rerender } = show({ characters: hurt });
