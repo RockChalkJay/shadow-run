@@ -21,6 +21,7 @@ export function App({ url }: { url: string }) {
   const [text, setText] = useState("");
   const [begun, setBegun] = useState(false);
   const end = useRef<HTMLDivElement>(null);
+  const sayBox = useRef<HTMLInputElement>(null);
 
   const who = speaker ?? state.party[0]?.id;
   const nameOf = (id: string) => state.party.find((p) => p.id === id)?.name ?? id;
@@ -62,6 +63,7 @@ export function App({ url }: { url: string }) {
 
   return (
     <div className="app">
+      <a className="skip" href="#say" onClick={(e) => { e.preventDefault(); sayBox.current?.focus(); }}>Skip to the typing box</a>
       <Top state={state} send={send} />
       <div className="main">
         <div className="story">
@@ -77,7 +79,7 @@ export function App({ url }: { url: string }) {
         <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>
           {state.party.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <input aria-label="Say or do something" placeholder="Say or do something…" value={text} onChange={(e) => setText(e.target.value)} />
+        <input id="say" ref={sayBox} aria-label="Say or do something" placeholder="Say or do something…" value={text} onChange={(e) => setText(e.target.value)} />
         <button className="pri" type="submit" disabled={!state.connected || text.trim() === ""}>Send</button>
       </form>
     </div>

@@ -2,7 +2,7 @@ import type { RollResult } from "@shadow-run/shared";
 import { useEffect, useState } from "react";
 
 /** Faces this high or higher count as hits in the core rules; the totals shown always come from the server. */
-const HIT = 5;
+export const HIT = 5;
 
 /** How long the app's dice tumble before the faces are shown. The server has already rolled them. */
 export const TUMBLE_MS = 900;
