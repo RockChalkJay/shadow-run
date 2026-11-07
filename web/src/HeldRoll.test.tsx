@@ -1,4 +1,4 @@
-import type { ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, EdgeView, RollRequest } from "@shadow-run/shared";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,9 +13,9 @@ const base = {
 const held = (over: object = {}, opposed = false) => ({ ...base, ...(opposed && { opposed: { by: "Guard", pool: 4, role: "acting" as const } }), held: { source: "physical" as const, roll: roll([6, 3, 3, 1]), ...(opposed && { opponent: roll([5, 5, 2, 1]) }), ...over } }) as RollRequest;
 const edge: EdgeView = { id: "kira", points: 4, rank: 3, spentThisRound: false };
 
-function show(request: RollRequest, e: EdgeView | undefined = edge, error: string | null = null) {
+function show(request: RollRequest, e: EdgeView | undefined = edge, error: string | null = null, character?: CharacterView) {
   const send = vi.fn<(m: ClientMessage) => void>();
-  render(<RollCard request={request} name="Kira" edge={e} error={error} send={send} />);
+  render(<RollCard request={request} name="Kira" character={character} edge={e} error={error} send={send} />);
   return { send, user: userEvent.setup() };
 }
 const die = (side: "your" | "their", n: number, face: number) => screen.getByRole("button", { name: `${side} die ${n}, showing ${face}` });
@@ -161,5 +161,71 @@ describe("a roll that is held", () => {
     const { user } = show(held(), { ...edge, spentThisRound: true });
     await user.click(screen.getByRole("radio", { name: /Buy a hit/ }));
     expect(screen.getByRole("alert").textContent).toBe("Edge is already spent this round: only one expenditure a round.");
+  });
+});
+
+
+describe("Not Dead Yet", () => {
+  const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 0, stun: 0, overflow: 0 };
+  const kira = (over: object = {}): CharacterView => ({ id: "kira", kind: "pc", name: "Kira", monitor: { ...monitor, ...over }, status: "active", woundModifier: 0 });
+  // 25 physical against Kira's 11 + 10 boxes leaves 4 over; hits take points off.
+  const blow = (dice: number[], damageValue = 25) => ({ ...held({ roll: roll(dice) }), soak: { damageValue, damageType: "physical" as const, source: "A fall" } }) as RollRequest;
+  const burn = (name = "Burn Edge: Not Dead Yet") => screen.getByRole("button", { name: new RegExp(name) });
+
+  it("is offered when the blow, as the dice stand, would kill, and says what survives", () => {
+    show(blow([1, 1, 1, 1, 1]), edge, null, kira());
+    expect(screen.getByText("As it stands, this blow kills Kira.")).toBeTruthy();
+    expect(burn()).toBeTruthy();
+    expect(screen.getByText("They survive it, unconscious and dying. It costs a point of Edge rank for good and all their Edge.")).toBeTruthy();
+  });
+
+  it("is not offered for a blow that would not kill, including one the hits bring down", () => {
+    // Nine hits leave 16 damage, which the track holds with room to spare.
+    show(blow([6, 6, 6, 6, 6, 6, 6, 6, 6]), edge, null, kira());
+    expect(screen.queryByRole("button", { name: /Not Dead Yet/ })).toBeNull();
+    expect(screen.queryByText(/kills Kira/)).toBeNull();
+  });
+
+  it("counts how hurt the character already is", () => {
+    show(blow([1, 1, 1, 1, 1], 8), edge, null, kira({ physical: 11, overflow: 4 }));
+    expect(burn()).toBeTruthy();
+  });
+
+  it("is not offered on a roll that is not resisting damage", () => {
+    show(held(), edge, null, kira());
+    expect(screen.queryByRole("button", { name: /Not Dead Yet/ })).toBeNull();
+  });
+
+  it("says no Edge rank is left to burn, and offers nothing, when the rank is gone", () => {
+    show(blow([1, 1, 1, 1, 1]), { ...edge, points: 0, rank: 0 }, null, kira());
+    expect(screen.getByText("As it stands, this blow kills Kira.")).toBeTruthy();
+    expect(screen.getByText("No Edge rank is left to burn.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Not Dead Yet/ })).toBeNull();
+  });
+
+  it("asks first, says the cost for good and that the blow still lands, and sends nothing if cancelled", async () => {
+    const { send, user } = show(blow([1, 1, 1, 1, 1]), edge, null, kira());
+    await user.click(burn());
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("The blow still lands, but Kira survives it");
+    expect(dialog.textContent).toContain("(3 → 2) and the 4 Edge points Kira holds now");
+    expect(dialog.textContent).toContain("It cannot be undone.");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(send).not.toHaveBeenCalled();
+    await user.click(burn());
+    await user.click(screen.getByRole("button", { name: "Burn it" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.edge", requestId: "r1", boost: "not_dead_yet" });
+  });
+
+  it("can be burned with no Edge points to spend, as long as there is rank", async () => {
+    const { send, user } = show(blow([1, 1, 1, 1, 1]), { ...edge, points: 0, spentThisRound: true }, null, kira());
+    await user.click(burn());
+    await user.click(screen.getByRole("button", { name: "Burn it" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.edge", requestId: "r1", boost: "not_dead_yet" });
+  });
+
+  it("shows what the server refused", () => {
+    show(blow([1, 1, 1, 1, 1]), edge, "Kira would survive this as the roll stands.", kira());
+    expect(screen.getByRole("alert").textContent).toContain("would survive this");
   });
 });

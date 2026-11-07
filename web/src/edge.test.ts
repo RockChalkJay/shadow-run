@@ -1,6 +1,6 @@
 import type { EdgeView, RollRequest } from "@shadow-run/shared";
 import { describe, expect, it } from "vitest";
-import { actionTakesTheEdge, cannotSpend, facesFrom } from "./edge";
+import { actionTakesTheEdge, cannotSpend, facesFrom, shouldKeepBack } from "./edge";
 
 const edge = (over: Partial<EdgeView> = {}): EdgeView => ({ id: "kira", points: 3, rank: 3, spentThisRound: false, ...over });
 
@@ -35,5 +35,20 @@ describe("facesFrom", () => {
     expect(facesFrom("6,5,3")).toEqual([6, 5, 3]);
     expect(facesFrom("6531")).toEqual([6, 5, 3, 1]);
     expect(facesFrom("x 7 0 9")).toEqual([]);
+  });
+});
+
+describe("whether a roll is kept back to show its dice", () => {
+  const soak = { soak: { damageValue: 5, damageType: "physical", source: "A fall" } } as RollRequest;
+  it("is for any roll with Edge to spend, and not otherwise", () => {
+    expect(shouldKeepBack({} as RollRequest, edge(), "none")).toBe(true);
+    expect(shouldKeepBack({} as RollRequest, edge({ points: 0 }), "none")).toBe(false);
+    expect(shouldKeepBack({} as RollRequest, edge({ spentThisRound: true }), "none")).toBe(false);
+    expect(shouldKeepBack({} as RollRequest, edge(), "dice")).toBe(false);
+  });
+  it("is for a roll to resist damage with no Edge to spend, while there is rank to burn", () => {
+    expect(shouldKeepBack(soak, edge({ points: 0, spentThisRound: true }), "none")).toBe(true);
+    expect(shouldKeepBack(soak, edge({ points: 0, rank: 0 }), "none")).toBe(false);
+    expect(shouldKeepBack(soak, edge(), "dice")).toBe(false);
   });
 });

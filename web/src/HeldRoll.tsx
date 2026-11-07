@@ -1,6 +1,7 @@
-import type { ClientMessage, EdgeView, RollRequest, RollResult } from "@shadow-run/shared";
+import type { CharacterView, ClientMessage, EdgeView, RollRequest, RollResult } from "@shadow-run/shared";
 import { useEffect, useState } from "react";
 import { Dice, HIT, TUMBLE_MS } from "./Dice";
+import { damageAfterResistance, wouldKill } from "./damage";
 import { cannotSpend, COST } from "./edge";
 
 type Tool = "reroll" | "bump" | "buy" | "missed";
@@ -26,8 +27,11 @@ function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "min
 }
 
 /** A roll the player has counted but not committed: its dice, and what Edge can do to them. */
-export function HeldRoll({ request, edge, error, send }: { request: RollRequest; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void }) {
+export function HeldRoll({ request, name, character, edge, error, send }: { request: RollRequest; name: string; character?: CharacterView | undefined; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void }) {
   const held = request.held!;
+  const [burning, setBurning] = useState(false);
+  // A roll to resist damage that, as the dice stand, would kill: the one moment Not Dead Yet can be burned.
+  const lethal = request.soak !== undefined && character !== undefined && wouldKill(character.monitor, request.soak.damageType, damageAfterResistance(request.soak.damageValue, held.roll.hits));
   // The app's dice tumble when they first show. The screen cannot tell a fresh roll from one restored after a reload, so a reload plays it again.
   const [tumbling, setTumbling] = useState(held.source === "app");
   useEffect(() => {
@@ -94,6 +98,19 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
       <div className="btns">
         <button className="pri" onClick={() => send({ type: "roll.keep", requestId: request.id })}>Keep it as it stands</button>
       </div>
+      {lethal && (
+        <div className="nde">
+          <p className="problem">As it stands, this blow kills {name}.</p>
+          {edge && edge.rank > 0 ? (
+            <>
+              <button className="dng" onClick={() => setBurning(true)}>🔥 Burn Edge: Not Dead Yet</button>
+              <small>They survive it, unconscious and dying. It costs a point of Edge rank for good and all their Edge.</small>
+            </>
+          ) : (
+            <small>No Edge rank is left to burn.</small>
+          )}
+        </div>
+      )}
       <h4 className="spend">Or spend Edge on it</h4>
       <div className="tools" role="radiogroup" aria-label="What to spend Edge on">
         {([["reroll", `Reroll dice · ${COST.reroll} each`], ["bump", `Add 1 to a die · ${COST.bump} each`], ["buy", `Buy a hit · ${COST.buyHit} each`], ["missed", `Reroll the misses · ${COST.rerollMissed}`]] as [Tool, string][]).map(([t, text]) => (
@@ -116,6 +133,22 @@ export function HeldRoll({ request, edge, error, send }: { request: RollRequest;
       <div className="btns">
         <button disabled={reason !== null || needsPick} onClick={confirm}>{label}{priced}</button>
       </div>
+      {burning && (
+        <div className="modal" role="dialog" aria-label="Burn Edge for Not Dead Yet">
+          <div className="card burn">
+            <h3>BURN EDGE FOR NOT DEAD YET?</h3>
+            <p>The blow still lands, but {name} survives it: unconscious and dying, one box short of dead. It does not take them out of the danger they are in.</p>
+            <p>
+              This costs a point of Edge rank <b>for good</b>
+              {edge ? ` (${edge.rank} → ${edge.rank - 1}) and the ${edge.points} Edge ${edge.points === 1 ? "point" : "points"} ${name} holds now` : ""}. It cannot be undone.
+            </p>
+            <div className="btns">
+              <button className="dng" onClick={() => { setBurning(false); send({ type: "roll.edge", requestId: request.id, boost: "not_dead_yet" }); }}>Burn it</button>
+              <button className="pri" onClick={() => setBurning(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

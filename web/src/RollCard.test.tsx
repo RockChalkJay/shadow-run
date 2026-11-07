@@ -241,6 +241,20 @@ describe("Edge before the roll", () => {
     expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1" });
   });
 
+  it("keeps a roll to resist damage back even with no Edge to spend, so Not Dead Yet can be burned after seeing the dice", async () => {
+    const soak = { ...base, soak: { damageValue: 9, damageType: "physical" as const, source: "A fall" } };
+    const { send, user } = await card(soak, { id: "kira", points: 0, rank: 3, spentThisRound: true }, false);
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", hold: true });
+  });
+
+  it("counts a roll to resist damage at once when there is neither Edge to spend nor rank to burn", async () => {
+    const soak = { ...base, soak: { damageValue: 9, damageType: "physical" as const, source: "A fall" } };
+    const { send, user } = await card(soak, { id: "kira", points: 0, rank: 0, spentThisRound: false }, false);
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1" });
+  });
+
   it("counts the roll at once when Edge is spent before it, since the round's Edge is taken", async () => {
     const { send, user } = await card(base);
     await user.click(screen.getByLabelText(/Edge dice · 4 Edge/));
