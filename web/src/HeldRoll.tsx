@@ -122,13 +122,13 @@ export function HeldRoll({ request, name, character, edge, error, send }: { requ
           How many <select value={times} onChange={(e) => setTimes(Number(e.target.value))} className="num">{[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}</select>
         </label>
       )}
+      {needsPick && <p className="hint">Pick the dice above by clicking them.</p>}
       {needsDice && (
         <>
           <label className="inline"><input type="checkbox" checked={byHand} onChange={(e) => setByHand(e.target.checked)} /> I rolled the new dice myself</label>
           {byHand && <input className="wide" aria-label="new dice" placeholder={tool === "reroll" ? "New values in order: yours first, then theirs" : "New values for each die that missed, in order"} value={typed} onChange={(e) => setTyped(e.target.value)} />}
         </>
       )}
-      {needsPick && <p className="hint">Pick the dice by clicking them.</p>}
       {(reason ?? error) && <p className="problem" role="alert">{reason ?? error}</p>}
       <div className="btns">
         <button disabled={reason !== null || needsPick} onClick={confirm}>{label}{priced}</button>

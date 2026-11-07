@@ -147,9 +147,16 @@ describe("a roll that is held", () => {
 
   it("asks the player to pick dice before offering to spend anything on them", () => {
     show(held());
-    expect(screen.getByText("Pick the dice by clicking them.")).toBeTruthy();
+    expect(screen.getByText("Pick the dice above by clicking them.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect((screen.getByRole("button", { name: /^Reroll dice$/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("puts the prompt to pick dice before the checkbox for dice rolled by hand, so clicking the dice reads as how to choose", () => {
+    show(held());
+    const prompt = screen.getByText("Pick the dice above by clicking them.");
+    const checkbox = screen.getByLabelText("I rolled the new dice myself");
+    expect(prompt.compareDocumentPosition(checkbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("shows what the server refused", () => {
