@@ -73,7 +73,7 @@ export function App({ url }: { url: string }) {
           ))}
           <div ref={end} />
         </div>
-        <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} />
+        <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} send={send} pending={state.pending} error={state.error} />
       </div>
       <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>

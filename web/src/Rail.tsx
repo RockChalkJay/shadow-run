@@ -1,5 +1,6 @@
-import type { CharacterSheet, CharacterView, CombatState, ConditionMonitor, EdgeView } from "@shadow-run/shared";
+import type { CharacterSheet, CharacterView, ClientMessage, CombatState, ConditionMonitor, EdgeView, RollRequest } from "@shadow-run/shared";
 import { useEffect, useId, useRef, useState } from "react";
+import { EdgeMenu, EdgeTableContext } from "./EdgeMenu";
 
 // ---- small pieces ----------------------------------------------------------------------------
 
@@ -129,7 +130,9 @@ export function PartyCard({ sheet, view, edge, speaking, onSpeak, place }: { she
           </Tip>
         )}
         <BonusTag place={place} />
+        {edge?.spentThisRound && <Tip className="tag" text="Edge is already spent this round: only one expenditure a round.">spent this round</Tip>}
       </div>
+      <EdgeMenu sheet={sheet} view={view} edge={edge} />
     </div>
   );
 }
@@ -293,8 +296,9 @@ function Announcer({ characters }: { characters: CharacterView[] }) {
 
 // ---- the whole rail --------------------------------------------------------------------------
 
-export function Rail({ combat, ...props }: Props & { combat: CombatState | null }) {
+export function Rail({ combat, send = () => {}, pending = [], error = null, ...props }: Props & { combat: CombatState | null; send?: (message: ClientMessage) => void; pending?: RollRequest[]; error?: string | null }) {
   return (
+    <EdgeTableContext.Provider value={{ party: props.party, characters: props.characters, edge: props.edge, combat, pending, error, send }}>
     <aside className="rail" aria-label="The table's status">
       {combat ? (
         <FightList combat={combat} {...props} />
@@ -306,5 +310,6 @@ export function Rail({ combat, ...props }: Props & { combat: CombatState | null 
       )}
       <Announcer characters={props.characters} />
     </aside>
+    </EdgeTableContext.Provider>
   );
 }
