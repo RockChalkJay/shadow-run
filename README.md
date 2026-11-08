@@ -31,7 +31,7 @@ Settings, all optional:
 | `SHADOWRUN_CAMPAIGN` | `default` | which campaign folder to use |
 | `PORT` | `8787` | where the table listens |
 
-`npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage.
+`npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage. It runs the GM at `low` effort unless `SHADOWRUN_GM_EFFORT` says otherwise (the server itself uses the CLI's own default).
 
 The table keeps count of everyone's health using the rulebook's condition monitors: physical, stun and overflow, with a die lost on every roll except resisting damage for each filled row of three boxes. When the GM hurts someone, the system takes the damage, the player rolls their own Body to resist it (or the system does for a non-player character), and only what gets through is applied. Skipping that roll is not allowed, and a character whose monitor is full cannot act.
 

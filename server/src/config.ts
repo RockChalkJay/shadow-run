@@ -19,6 +19,14 @@ export interface Config {
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
+/** The effort level named by `SHADOWRUN_GM_EFFORT`, or undefined when it is not set. */
+export function parseEffort(value: string | undefined): Effort | undefined {
+  if (value !== undefined && !EFFORTS.includes(value as Effort)) {
+    throw new Error(`SHADOWRUN_GM_EFFORT must be one of ${EFFORTS.join(", ")}, got "${value}"`);
+  }
+  return value as Effort | undefined;
+}
+
 function port(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const n = Number(value);
@@ -31,14 +39,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!/^[a-z0-9_-]+$/i.test(campaign)) throw new Error(`SHADOWRUN_CAMPAIGN may use letters, digits, - and _ only, got "${campaign}"`);
   const gm = env.SHADOWRUN_GM ?? "claude";
   if (gm !== "claude" && gm !== "scripted") throw new Error(`SHADOWRUN_GM must be "claude" or "scripted", got "${gm}"`);
-  const effort = env.SHADOWRUN_GM_EFFORT;
-  if (effort !== undefined && !EFFORTS.includes(effort as Effort)) {
-    throw new Error(`SHADOWRUN_GM_EFFORT must be one of ${EFFORTS.join(", ")}, got "${effort}"`);
-  }
+  const effort = parseEffort(env.SHADOWRUN_GM_EFFORT);
   return {
     gm,
     gmModel: env.SHADOWRUN_GM_MODEL ?? "sonnet",
-    ...(effort !== undefined && { gmEffort: effort as Effort }),
+    ...(effort !== undefined && { gmEffort: effort }),
     ...(env.CLAUDE_BIN !== undefined && { claudeBin: env.CLAUDE_BIN }),
     port: port("PORT", env.PORT, 8787),
     devPort: port("WEB_PORT", env.WEB_PORT, 5173),
