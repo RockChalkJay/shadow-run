@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_NPCS, Roster } from "../../src/game/roster.js";
-import { newMonitor } from "../../src/rules/index.js";
+import { defaultRuleset, newMonitor } from "../../src/rules/index.js";
 import { party } from "../helpers.js";
 
 // Kira: Body 5, Willpower 3 -> Physical 11, Stun 10, Overflow 10. Doc: Body 3, Willpower 5 -> Physical 10, Stun 11, Overflow 6.
@@ -192,5 +192,32 @@ describe("Roster: damage and healing", () => {
     const view = roster.view("pc", "kira")!;
     view.monitor.physical = 9;
     expect(roster.view("pc", "kira")?.monitor.physical).toBe(0);
+  });
+});
+
+describe("Roster: whether a blow would kill", () => {
+  const twoToABox = { ...defaultRuleset, conditionMonitor: { ...defaultRuleset.conditionMonitor, stunOverflowPerPhysical: 2 } };
+
+  it("applies the shared rule to a player character as they stand", () => {
+    const roster = fresh();
+    expect(roster.wouldKill("pc", "kira", "physical", 21)).toBe(true);
+    expect(roster.wouldKill("pc", "kira", "physical", 20)).toBe(false);
+    roster.damage("pc", "kira", "physical", 5);
+    expect(roster.wouldKill("pc", "kira", "physical", 16)).toBe(true);
+    expect(roster.wouldKill("pc", "kira", "physical", 15)).toBe(false);
+  });
+
+  it("uses the carry-over rate of the ruleset the table is running", () => {
+    // 52 stun: 10 fill the stun track, and the 42 past it are 42 physical at one to a box, or 21 at two.
+    expect(fresh().wouldKill("pc", "kira", "stun", 10 + 21 + 10)).toBe(true);
+    expect(new Roster(party, undefined, twoToABox).wouldKill("pc", "kira", "stun", 10 + 21 + 10)).toBe(false);
+    expect(new Roster(party, undefined, twoToABox).wouldKill("pc", "kira", "stun", 10 + 42 + 10)).toBe(true);
+  });
+
+  it("is never true for a grunt or someone who is not there", () => {
+    const roster = fresh();
+    roster.resolve({ kind: "npc", id: "g1", name: "Guard", body: 2, willpower: 2, professionalRating: 3, charisma: 2 });
+    expect(roster.wouldKill("npc", "g1", "physical", 99)).toBe(false);
+    expect(roster.wouldKill("pc", "nobody", "physical", 99)).toBe(false);
   });
 });
