@@ -1,6 +1,6 @@
 import { DEFAULT_SCREEN_RULES } from "@shadow-run/shared";
 import { describe, expect, it } from "vitest";
-import { defaultRuleset } from "../../src/rules/index.js";
+import { defaultRuleset, screenRules } from "../../src/rules/index.js";
 import type { GmDriver } from "../../src/gm/driver.js";
 import { newSession } from "../helpers.js";
 
@@ -18,7 +18,13 @@ describe("the rules the snapshot carries for the screen", () => {
     expect(session.snapshot().rules).toEqual({ hitMinimum: 4, stunOverflowPerPhysical: 2 });
   });
 
+  it("come from one function that names every value the screen reads, so one added to the type cannot be forgotten", () => {
+    const rules: Record<keyof ReturnType<typeof screenRules>, true> = { hitMinimum: true, stunOverflowPerPhysical: true };
+    expect(Object.keys(screenRules()).sort()).toEqual(Object.keys(rules).sort());
+    expect(Object.keys(DEFAULT_SCREEN_RULES).sort()).toEqual(Object.keys(screenRules()).sort());
+  });
+
   it("match what the screen assumes before it hears from the server, so the two cannot drift apart unnoticed", () => {
-    expect(DEFAULT_SCREEN_RULES).toEqual({ hitMinimum: defaultRuleset.hitMinimum, stunOverflowPerPhysical: defaultRuleset.conditionMonitor.stunOverflowPerPhysical });
+    expect(DEFAULT_SCREEN_RULES).toEqual(screenRules(defaultRuleset));
   });
 });
