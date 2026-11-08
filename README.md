@@ -30,6 +30,7 @@ Settings, all optional:
 | `SHADOWRUN_GM_EFFORT` | the CLI's own | `low`, `medium`, `high`, `xhigh` or `max` |
 | `SHADOWRUN_CAMPAIGN` | `default` | which campaign folder to use |
 | `PORT` | `8787` | where the table listens |
+| `SHADOWRUN_DICE` | random | for testing: the faces the first dice come up as, in order (`6,6,1,3`), then random once they run out. Every die the table rolls counts, including extra dice from exploding 6s, rerolls and initiative; the coin that breaks initiative ties stays random. Dice you roll by hand are not affected |
 
 `npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage. It runs the GM at `low` effort unless `SHADOWRUN_GM_EFFORT` says otherwise (the server itself uses the CLI's own default).
 

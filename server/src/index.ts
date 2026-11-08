@@ -11,6 +11,7 @@ import type { GmDriver } from "./gm/driver.js";
 import { demoScript, ScriptedGmDriver } from "./gm/scriptedDriver.js";
 import { Hub } from "./net/hub.js";
 import { allowedOrigins } from "./net/origin.js";
+import { scriptedThenRandom } from "./rules/index.js";
 
 async function main() {
   const config = loadConfig();
@@ -42,7 +43,11 @@ async function main() {
   }
 
   const hub = new Hub({ port: config.port, allowedOrigins: (port) => allowedOrigins(port, config.devPort) });
-  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event) });
+  const d6 =
+    config.dice &&
+    scriptedThenRandom(config.dice, () => console.log("The scripted dice have run out; the dice are random from here."));
+  if (config.dice) console.log(`The first ${config.dice.length} dice are scripted: ${config.dice.join(" ")}. Testing only.`);
+  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event), ...(d6 && { d6 }) });
   hub.attach(session);
   const port = await hub.listen();
   session.resume();
