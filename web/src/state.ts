@@ -1,4 +1,4 @@
-import type { CharacterView, CombatState, EdgeView, GmStatus, RollRequest, ServerEvent, TranscriptEntry } from "@shadow-run/shared";
+import { DEFAULT_SCREEN_RULES, type CharacterView, type CombatState, type EdgeView, type GmStatus, type RollRequest, type ScreenRules, type ServerEvent, type TranscriptEntry } from "@shadow-run/shared";
 import type { CharacterSheet } from "@shadow-run/shared";
 
 /** The GM's narration as it streams in, before the finished entry arrives. */
@@ -26,6 +26,8 @@ export interface TableState {
   fresh: number[];
   /** The last message the server refused with, until the player does something else. */
   error: string | null;
+  /** The rules the screen reads, as the server has them. */
+  rules: ScreenRules;
 }
 
 export const initialState: TableState = {
@@ -42,6 +44,7 @@ export const initialState: TableState = {
   streaming: null,
   fresh: [],
   error: null,
+  rules: DEFAULT_SCREEN_RULES,
 };
 
 export type Action =
@@ -59,7 +62,7 @@ export function reduce(state: TableState, action: Action): TableState {
   const event = action.event;
   switch (event.type) {
     case "snapshot":
-      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null };
+      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null, rules: event.rules };
     case "gm.status":
       return { ...state, gm: event.status };
     case "gm.block":

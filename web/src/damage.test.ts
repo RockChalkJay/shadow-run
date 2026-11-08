@@ -27,6 +27,14 @@ describe("whether a blow would kill", () => {
     expect(wouldKill(m, "stun", 10 + 11 + 10)).toBe(true);
     expect(wouldKill({ ...m, stun: 4 }, "stun", 6 + 11 + 10)).toBe(true);
   });
+  it("carries stun at the rate the ruleset gives, which the server sends", () => {
+    // Two stun per box of physical: 10 stun fills the track, and 22 past it makes 11 physical, which is not yet overflow.
+    expect(wouldKill(m, "stun", 10 + 22 + 18, { hitMinimum: 5, stunOverflowPerPhysical: 2 })).toBe(false);
+    expect(wouldKill(m, "stun", 10 + 22 + 20, { hitMinimum: 5, stunOverflowPerPhysical: 2 })).toBe(true);
+    // At the default rate that same blow kills long before.
+    expect(wouldKill(m, "stun", 10 + 22 + 18)).toBe(true);
+  });
+
   it("does nothing for no damage", () => {
     expect(wouldKill(m, "physical", 0)).toBe(false);
   });

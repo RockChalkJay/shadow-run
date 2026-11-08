@@ -275,6 +275,7 @@ export class GameSession {
       transcript: [...this.recent],
       gm: this.status,
       usage: this.usage,
+      rules: { hitMinimum: (this.rules ?? defaultRuleset).hitMinimum, stunOverflowPerPhysical: (this.rules ?? defaultRuleset).conditionMonitor.stunOverflowPerPhysical },
     };
   }
 

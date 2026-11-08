@@ -145,6 +145,17 @@ export interface Usage {
   resetsAt: number;
 }
 
+/** The few ruleset values the screen reads itself, so an edited ruleset cannot make the screen disagree with the server. */
+export interface ScreenRules {
+  /** The lowest face on a die that counts as a hit. */
+  hitMinimum: number;
+  /** Stun past the last stun box that makes one box of physical damage. */
+  stunOverflowPerPhysical: number;
+}
+
+/** What the screen assumes until the server says otherwise: the core rulebook's numbers. */
+export const DEFAULT_SCREEN_RULES: ScreenRules = { hitMinimum: 5, stunOverflowPerPhysical: 1 };
+
 export interface Snapshot {
   type: "snapshot";
   party: CharacterSheet[];
@@ -159,6 +170,7 @@ export interface Snapshot {
   transcript: TranscriptEntry[];
   gm: GmStatus;
   usage: Usage | null;
+  rules: ScreenRules;
 }
 
 /**

@@ -12,8 +12,13 @@ const rollEntry = (id: number): TranscriptEntry =>
 describe("the table's state", () => {
   it("takes a snapshot whole, replacing what it had", () => {
     const before = apply(initialState, { type: "roll.requested", request });
-    const after = apply(before, { type: "snapshot", party: [], characters: [], pendingRolls: [], edge: [], combat: null, transcript: [gmEntry(1, "Hi")], gm: { phase: "idle" }, usage: null });
+    const after = apply(before, { type: "snapshot", party: [], characters: [], pendingRolls: [], edge: [], combat: null, transcript: [gmEntry(1, "Hi")], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 4, stunOverflowPerPhysical: 2 } });
+    expect(after.rules).toEqual({ hitMinimum: 4, stunOverflowPerPhysical: 2 });
     expect(after).toMatchObject({ ready: true, pending: [], transcript: [{ id: 1 }] });
+  });
+
+  it("assumes the book's rules until a snapshot says otherwise", () => {
+    expect(initialState.rules).toEqual({ hitMinimum: 5, stunOverflowPerPhysical: 1 });
   });
 
   it("streams narration into blocks, and drops them when the finished entry arrives", () => {

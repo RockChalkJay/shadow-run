@@ -1,14 +1,13 @@
 import type { RollResult } from "@shadow-run/shared";
 import { useEffect, useState } from "react";
-
-/** Faces this high or higher count as hits in the core rules; the totals shown always come from the server. */
-export const HIT = 5;
+import { useRules } from "./rules";
 
 /** How long the app's dice tumble before the faces are shown. The server has already rolled them. */
 export const TUMBLE_MS = 900;
 
 export function Die({ face, small = false, rolling = false }: { face: number; small?: boolean; rolling?: boolean }) {
-  const kind = rolling ? "roll" : face >= HIT ? "hit" : face === 1 ? "one" : "";
+  const { hitMinimum } = useRules();
+  const kind = rolling ? "roll" : face >= hitMinimum ? "hit" : face === 1 ? "one" : "";
   return <span className={`die ${kind} ${small ? "small" : ""}`}>{rolling ? "" : face}</span>;
 }
 
