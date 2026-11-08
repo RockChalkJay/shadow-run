@@ -1,18 +1,20 @@
 import type { CharacterView, ClientMessage, EdgeView, RollRequest, RollResult } from "@shadow-run/shared";
 import { useEffect, useState } from "react";
-import { Dice, HIT, TUMBLE_MS } from "./Dice";
+import { Dice, TUMBLE_MS } from "./Dice";
 import { damageAfterResistance, wouldKill } from "./damage";
 import { cannotSpend, COST } from "./edge";
+import { useRules } from "./rules";
 
 type Tool = "reroll" | "bump" | "buy" | "missed";
 
 const key = (side: "mine" | "theirs", index: number) => `${side}:${index}`;
 
 function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "mine" | "theirs"; on: Set<string>; toggle: ((side: "mine" | "theirs", i: number) => void) | null }) {
+  const { hitMinimum } = useRules();
   return (
     <span className="dice" role="group" aria-label={side === "mine" ? "your dice" : "their dice"}>
       {roll.dice.map((face, i) => {
-        const kind = face >= HIT ? "hit" : face === 1 ? "one" : "";
+        const kind = face >= hitMinimum ? "hit" : face === 1 ? "one" : "";
         const picked = on.has(key(side, i));
         return toggle ? (
           <button key={i} className={`die pick ${kind} ${picked ? "on" : ""} ${side === "theirs" ? "small" : ""}`} aria-pressed={picked} aria-label={`${side === "mine" ? "your" : "their"} die ${i + 1}, showing ${face}`} onClick={() => toggle(side, i)}>{face}</button>
@@ -20,7 +22,7 @@ function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "min
           <span key={i} className={`die ${kind} ${side === "theirs" ? "small" : ""}`}>{face}</span>
         );
       })}
-      {(roll.explosions ?? []).map((face, i) => <span key={`x${i}`} className={`die ${face >= HIT ? "hit" : ""} ${side === "theirs" ? "small" : ""}`}>{face}</span>)}
+      {(roll.explosions ?? []).map((face, i) => <span key={`x${i}`} className={`die ${face >= hitMinimum ? "hit" : ""} ${side === "theirs" ? "small" : ""}`}>{face}</span>)}
       {roll.bonusHits ? <span className="bought">+{roll.bonusHits} bought</span> : null}
     </span>
   );
@@ -29,9 +31,10 @@ function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "min
 /** A roll the player has counted but not committed: its dice, and what Edge can do to them. */
 export function HeldRoll({ request, name, character, edge, error, send }: { request: RollRequest; name: string; character?: CharacterView | undefined; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void }) {
   const held = request.held!;
+  const rules = useRules();
   const [burning, setBurning] = useState(false);
   // A roll to resist damage that, as the dice stand, would kill: the one moment Not Dead Yet can be burned.
-  const lethal = request.soak !== undefined && character !== undefined && wouldKill(character.monitor, request.soak.damageType, damageAfterResistance(request.soak.damageValue, held.roll.hits));
+  const lethal = request.soak !== undefined && character !== undefined && wouldKill(character.monitor, request.soak.damageType, damageAfterResistance(request.soak.damageValue, held.roll.hits), rules);
   // The app's dice tumble when they first show. The screen cannot tell a fresh roll from one restored after a reload, so a reload plays it again.
   const [tumbling, setTumbling] = useState(held.source === "app");
   useEffect(() => {
@@ -47,7 +50,7 @@ export function HeldRoll({ request, name, character, edge, error, send }: { requ
 
   const mine = [...picked].filter((k) => k.startsWith("mine:")).map((k) => Number(k.slice(5)));
   const theirs = [...picked].filter((k) => k.startsWith("theirs:")).map((k) => Number(k.slice(7)));
-  const misses = held.roll.dice.filter((d) => d < HIT).length;
+  const misses = held.roll.dice.filter((d) => d < rules.hitMinimum).length;
 
   const toggle = (side: "mine" | "theirs", i: number) => {
     setPicked((p) => {

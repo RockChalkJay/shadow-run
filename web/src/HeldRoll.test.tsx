@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TUMBLE_MS } from "./Dice";
+import { RulesContext } from "./rules";
 import { RollCard } from "./RollCard";
 
 const roll = (dice: number[], extra: object = {}) => ({ dice, hits: dice.filter((d) => d >= 5).length, ones: dice.filter((d) => d === 1).length, glitch: false, criticalGlitch: false, ...extra });
@@ -234,5 +235,40 @@ describe("Not Dead Yet", () => {
   it("shows what the server refused", () => {
     show(blow([1, 1, 1, 1, 1]), edge, "Kira would survive this as the roll stands.", kira());
     expect(screen.getByRole("alert").textContent).toContain("would survive this");
+  });
+});
+
+
+describe("the rules the server gives the screen", () => {
+  const rules = { hitMinimum: 4, stunOverflowPerPhysical: 2 };
+  const withRules = (request: RollRequest, character?: CharacterView) => {
+    const send = vi.fn<(m: ClientMessage) => void>();
+    render(<RulesContext.Provider value={rules}><RollCard request={request} name="Kira" character={character} edge={edge} error={null} send={send} /></RulesContext.Provider>);
+    return { send, user: userEvent.setup() };
+  };
+  const monitor = { physicalBoxes: 11, stunBoxes: 10, overflowBoxes: 10, physical: 0, stun: 0, overflow: 0 };
+
+  it("light the dice that are hits, and count the dice that missed, from the minimum it sends", async () => {
+    const { user } = withRules(held({ roll: roll([4, 4, 3, 1]) }));
+    expect(screen.getByRole("button", { name: "your die 1, showing 4" }).className).toContain("hit");
+    expect(screen.getByRole("button", { name: "your die 3, showing 3" }).className).not.toContain("hit");
+    await user.click(screen.getByRole("radio", { name: /Reroll the misses/ }));
+    expect(screen.getByRole("button", { name: "Reroll the 2 that missed · 4 Edge" })).toBeTruthy();
+  });
+
+  it("decide whether Not Dead Yet is offered from the stun carry-over rate it sends", () => {
+    const character: CharacterView = { id: "kira", kind: "pc", name: "Kira", monitor, status: "active", woundModifier: 0 };
+    const stun = { ...held({ roll: roll([1, 1, 1, 1, 1]) }), soak: { damageValue: 52, damageType: "stun" as const, source: "A shock" } } as RollRequest;
+    // 52 stun: 10 fill the stun track, 42 more at two a box makes 21 physical, which fills 11 and leaves 10 in overflow: dead.
+    withRules(stun, character);
+    expect(screen.getByRole("button", { name: /Not Dead Yet/ })).toBeTruthy();
+  });
+
+  it("do not offer it for a stun blow the rate keeps short of killing", () => {
+    const character: CharacterView = { id: "kira", kind: "pc", name: "Kira", monitor, status: "active", woundModifier: 0 };
+    const stun = { ...held({ roll: roll([1, 1, 1, 1, 1]) }), soak: { damageValue: 50, damageType: "stun" as const, source: "A shock" } } as RollRequest;
+    // 50 stun at two a box: 40 past the track makes 20 physical, 9 into overflow: alive. At the default rate it would kill.
+    withRules(stun, character);
+    expect(screen.queryByRole("button", { name: /Not Dead Yet/ })).toBeNull();
   });
 });

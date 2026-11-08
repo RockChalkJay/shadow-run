@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { ScreenRules } from "@shadow-run/shared";
 import { z } from "zod";
 
 /** The numbers the engine plays by. Kept in a JSON file so a table can correct any of them. */
@@ -46,3 +47,8 @@ export function loadRuleset(file = new URL("../data/sr6/ruleset.json", import.me
 }
 
 export const defaultRuleset: Ruleset = loadRuleset();
+
+/** The ruleset values the screen reads itself, which the snapshot sends so an edited ruleset cannot make the screen disagree. */
+export function screenRules(rules: Ruleset = defaultRuleset): ScreenRules {
+  return { hitMinimum: rules.hitMinimum, stunOverflowPerPhysical: rules.conditionMonitor.stunOverflowPerPhysical };
+}

@@ -31,7 +31,7 @@ import {
 import { z } from "zod";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
-import { attackDamage, burnEdge, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
+import { attackDamage, burnEdge, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, screenRules, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
 import { afterWounds, attackerRequest, damageCode, defenderRequest, FALLBACK_EDGE_ADVICE } from "./attack.js";
 import { calledShotOf, edgeActionSummary, type CalledShot } from "./edgeAction.js";
 import { inInitiativeOrder, rollEntries, type Candidate } from "./combat.js";
@@ -275,6 +275,7 @@ export class GameSession {
       transcript: [...this.recent],
       gm: this.status,
       usage: this.usage,
+      rules: screenRules(this.rules),
     };
   }
 

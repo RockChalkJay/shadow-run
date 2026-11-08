@@ -2,6 +2,7 @@ import type { GmStatus } from "@shadow-run/shared";
 import { useEffect, useRef, useState } from "react";
 import { useTable } from "./connection";
 import { Rail } from "./Rail";
+import { RulesContext } from "./rules";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
 
@@ -62,27 +63,29 @@ export function App({ url }: { url: string }) {
   };
 
   return (
-    <div className="app">
-      <a className="skip" href="#say" onClick={(e) => { e.preventDefault(); sayBox.current?.focus(); }}>Skip to the typing box</a>
-      <Top state={state} send={send} />
-      <div className="main">
-        <div className="story">
-          <Story transcript={state.transcript} streaming={state.streaming?.blocks ?? []} fresh={state.fresh} nameOf={nameOf} />
-          {state.pending.map((request) => (
-            <RollCard key={request.id} request={request} name={nameOf(request.characterId)} character={state.characters.find((c) => c.kind === "pc" && c.id === request.characterId)} edge={state.edge.find((e) => e.id === request.characterId)} error={state.error} send={send} />
-          ))}
-          <div ref={end} />
+    <RulesContext.Provider value={state.rules}>
+      <div className="app">
+        <a className="skip" href="#say" onClick={(e) => { e.preventDefault(); sayBox.current?.focus(); }}>Skip to the typing box</a>
+        <Top state={state} send={send} />
+        <div className="main">
+          <div className="story">
+            <Story transcript={state.transcript} streaming={state.streaming?.blocks ?? []} fresh={state.fresh} nameOf={nameOf} />
+            {state.pending.map((request) => (
+              <RollCard key={request.id} request={request} name={nameOf(request.characterId)} character={state.characters.find((c) => c.kind === "pc" && c.id === request.characterId)} edge={state.edge.find((e) => e.id === request.characterId)} error={state.error} send={send} />
+            ))}
+            <div ref={end} />
+          </div>
+          <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} send={send} pending={state.pending} error={state.error} />
         </div>
-        <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} send={send} pending={state.pending} error={state.error} />
+        <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>
+            {state.party.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input id="say" ref={sayBox} aria-label="Say or do something" placeholder="Say or do something…" value={text} onChange={(e) => setText(e.target.value)} />
+          <button className="pri" type="submit" disabled={!state.connected || text.trim() === ""}>Send</button>
+        </form>
       </div>
-      <form className="input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-        <select aria-label="Speaking as" value={who} onChange={(e) => setSpeaker(e.target.value)}>
-          {state.party.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <input id="say" ref={sayBox} aria-label="Say or do something" placeholder="Say or do something…" value={text} onChange={(e) => setText(e.target.value)} />
-        <button className="pri" type="submit" disabled={!state.connected || text.trim() === ""}>Send</button>
-      </form>
-    </div>
+    </RulesContext.Provider>
   );
 }
 
