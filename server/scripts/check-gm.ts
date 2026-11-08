@@ -9,7 +9,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CharacterSheet, ServerEvent } from "@shadow-run/shared";
-import { EFFORTS, type Effort } from "../src/config.js";
+import { parseEffort } from "../src/config.js";
 import { demoParty } from "../src/game/demoParty.js";
 import { GameSession } from "../src/game/session.js";
 import { CampaignStore } from "../src/game/store.js";
@@ -17,10 +17,7 @@ import { ClaudeGmDriver } from "../src/gm/claudeDriver.js";
 import type { GmDriver } from "../src/gm/driver.js";
 
 const model = process.env.SHADOWRUN_GM_MODEL ?? "sonnet";
-const effort = process.env.SHADOWRUN_GM_EFFORT ?? "low";
-if (!EFFORTS.includes(effort as Effort)) {
-  throw new Error(`SHADOWRUN_GM_EFFORT must be one of ${EFFORTS.join(", ")}, got "${effort}"`);
-}
+const effort = parseEffort(process.env.SHADOWRUN_GM_EFFORT) ?? "low";
 const checks: { name: string; ok: boolean; detail?: string }[] = [];
 const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
 const note = (text: string) => console.log(`  ${text}`);
@@ -44,7 +41,7 @@ const tap = (inner: GmDriver): GmDriver => ({
 });
 
 async function open(store: CampaignStore, party: CharacterSheet[]) {
-  const real = await ClaudeGmDriver.start({ party, model, effort: effort as Effort });
+  const real = await ClaudeGmDriver.start({ party, model, effort });
   const session = await GameSession.create({ store, party, driver: tap(real), emit: (e) => events.push(e) });
   return { session, close: async () => (await session.close(), await real.close()) };
 }
@@ -95,7 +92,7 @@ async function main() {
 
   const opening = await turn("the opening scene", store, session, () => session.start());
   check("the GM opens the scene", opening.length > 40);
-  // A few paragraphs of scene-setting is fine; 1600 failed an opening that was still short enough to read aloud.
+  // A few paragraphs of scene-setting, about a minute aloud; the point is to catch a wall of text.
   check("the opening is short enough to read aloud", opening.length < 2000, `${opening.length} characters`);
   const firstSession = session.gmSessionId;
   check("a session id was captured", !!firstSession, firstSession);
