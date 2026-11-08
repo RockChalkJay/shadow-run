@@ -29,8 +29,12 @@ Settings, all optional:
 | `SHADOWRUN_GM_MODEL` | `sonnet` | the model that plays the GM |
 | `SHADOWRUN_GM_EFFORT` | the CLI's own | `low`, `medium`, `high`, `xhigh` or `max` |
 | `SHADOWRUN_CAMPAIGN` | `default` | which campaign folder to use |
+| `SHADOWRUN_SCENARIO` | none | for testing: start from a saved scenario (see below) in a fresh folder of its own, `scenario-<name>`, wiped on every start. Cannot be combined with `SHADOWRUN_CAMPAIGN` |
+| `SHADOWRUN_SCENARIOS` | `scenarios` in the repo | where scenarios are saved |
 | `PORT` | `8787` | where the table listens |
 | `SHADOWRUN_DICE` | random | for testing: the faces the first dice come up as, in order (`6,6,1,3`), then random once they run out. Every die the table rolls counts, including extra dice from exploding 6s, rerolls and initiative; the coin that breaks initiative ties stays random. Dice you roll by hand are not affected. The script starts over each time the server starts, so a restart replays it from the first face |
+
+**Scenarios, for testing.** A scenario is a saved game: the character sheets, the state, the transcript and the premise of a campaign, kept in `scenarios/<name>/`. `npm run scenario:save -- ambush` saves the `default` campaign as `ambush` (add `--campaign night-one` for another campaign, `--force` to replace one that exists), best while the table is idle. `SHADOWRUN_SCENARIO=ambush npm run dev:server` then starts from it, in a campaign folder named `scenario-ambush` that is deleted and copied afresh each time, so you can play it, throw it away and play it again, and no real campaign is ever touched. The same works with sheets alone: put `characters/<id>.json` files in `scenarios/<name>/` and edit the attributes and gear by hand. The GM does not resume the Claude session that was running when a scenario was saved; it starts over and is given the transcript, as it does when a session is lost. Combine it with `SHADOWRUN_DICE` and `SHADOWRUN_GM=scripted` for a run that is the same every time and costs nothing. The `scenarios/` folder is not kept in git, like `campaigns/`.
 
 `npm run check:gm` plays a short scene with the real GM and checks it behaves: it asks for rolls with real stakes, keeps to the consequences it declared, refuses to be told what the dice said, and recovers when its session is lost. It uses a little of your plan's usage. It runs the GM at `low` effort unless `SHADOWRUN_GM_EFFORT` says otherwise (the server itself uses the CLI's own default).
 

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SCENARIO_NAME, scenarioCampaign } from "./game/scenario.js";
 import { parseDice } from "./rules/dice.js";
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -10,7 +11,11 @@ export interface Config {
   /** Port of the web app's dev server, whose pages may connect. */
   devPort: number;
   campaignsDir: string;
+  scenariosDir: string;
+  /** The folder under `campaignsDir` the table plays in. A scenario's is its own, wiped and refilled on every start. */
   campaign: string;
+  /** Start from this saved scenario, for testing. */
+  scenario?: string;
   /** Who plays the GM: Claude through the CLI, or a script that spends nothing. */
   gm: "claude" | "scripted";
   gmModel: string;
@@ -48,7 +53,14 @@ function port(name: string, value: string | undefined, fallback: number): number
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const campaign = env.SHADOWRUN_CAMPAIGN ?? "default";
+  const scenario = env.SHADOWRUN_SCENARIO;
+  if (scenario !== undefined && !SCENARIO_NAME.test(scenario)) {
+    throw new Error(`SHADOWRUN_SCENARIO may use letters, digits, - and _ only, got "${scenario}"`);
+  }
+  if (scenario !== undefined && env.SHADOWRUN_CAMPAIGN !== undefined) {
+    throw new Error("SHADOWRUN_SCENARIO and SHADOWRUN_CAMPAIGN cannot both be set: a scenario plays in a folder of its own, so a campaign is never touched");
+  }
+  const campaign = scenario !== undefined ? scenarioCampaign(scenario) : (env.SHADOWRUN_CAMPAIGN ?? "default");
   if (!/^[a-z0-9_-]+$/i.test(campaign)) throw new Error(`SHADOWRUN_CAMPAIGN may use letters, digits, - and _ only, got "${campaign}"`);
   const gm = env.SHADOWRUN_GM ?? "claude";
   if (gm !== "claude" && gm !== "scripted") throw new Error(`SHADOWRUN_GM must be "claude" or "scripted", got "${gm}"`);
@@ -63,6 +75,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: port("PORT", env.PORT, 8787),
     devPort: port("WEB_PORT", env.WEB_PORT, 5173),
     campaignsDir: env.SHADOWRUN_CAMPAIGNS ?? join(repoRoot, "campaigns"),
+    scenariosDir: env.SHADOWRUN_SCENARIOS ?? join(repoRoot, "scenarios"),
     campaign,
+    ...(scenario !== undefined && { scenario }),
   };
 }

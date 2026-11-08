@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { demoParty } from "./game/demoParty.js";
+import { loadScenario } from "./game/scenario.js";
 import { GameSession } from "./game/session.js";
 import { CampaignStore } from "./game/store.js";
 import { ClaudeGmDriver } from "./gm/claudeDriver.js";
@@ -16,6 +17,10 @@ import { scriptedThenRandom } from "./rules/index.js";
 async function main() {
   const config = loadConfig();
   const store = new CampaignStore(join(config.campaignsDir, config.campaign));
+  if (config.scenario) {
+    await loadScenario({ scenariosDir: config.scenariosDir, name: config.scenario, into: store.dir });
+    console.log(`Started from the scenario "${config.scenario}" in a fresh copy, ${store.dir}. Nothing played here is kept for next time.`);
+  }
 
   const { party, created } = await store.loadOrCreateParty(demoParty);
   if (created) {

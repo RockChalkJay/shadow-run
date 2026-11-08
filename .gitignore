@@ -11,5 +11,8 @@ coverage/
 # Saved campaigns: characters, NPCs, mission logs, generated images
 campaigns/
 
+# Saved test scenarios, which hold the same things
+scenarios/
+
 # Local copies of rulebooks and notes
 docs/rules/

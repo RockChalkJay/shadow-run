@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClaudeGmDriver, type ClaudeDriverOptions } from "../../src/gm/claudeDriver.js";
-import type { GameSession } from "../../src/game/session.js";
+import type { GameSession, SessionOptions } from "../../src/game/session.js";
 import { always, newSession, party, rollInput } from "../helpers.js";
 
 const FAKE_GM = fileURLToPath(new URL("../fake-claude-gm.mjs", import.meta.url));
@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 /** A session whose GM is the real driver talking to a scripted stand-in for the `claude` CLI. */
-async function table(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}) {
+async function table(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}, sessionExtra: Partial<SessionOptions> = {}) {
   const dir = await mkdtemp(join(tmpdir(), "sr-gm-"));
   const scriptFile = join(dir, "script.json");
   const logFile = join(dir, "log.jsonl");
@@ -33,7 +33,7 @@ async function table(script: Turn[], extra: Partial<ClaudeDriverOptions> = {}) {
   const workDir = join(dir, "work");
   const driver = await ClaudeGmDriver.start({ party, claudeBin: FAKE_GM, workDir, ...extra });
   // The system's dice are fixed (no hits, no glitch) so replies that quote them have one shape.
-  const made = await newSession(driver, { d6: always(3) });
+  const made = await newSession(driver, { d6: always(3), ...sessionExtra });
   open.push(driver, made.session);
 
   const records = async (): Promise<Array<Record<string, any>>> => {
@@ -203,6 +203,35 @@ describe("a turn with the CLI", () => {
     expect(reply).toMatchObject({ tool: "roll_npc", isError: false });
     expect(reply?.text).toMatch(/^NPC ROLL\. Ganger fires: 5 dice: [1-6 ]+ = \d hits?\.\nThreshold 2: (SUCCESS|FAILURE)\.$/);
     expect((await t.store.recentEntries(10)).some((e) => e.kind === "npc")).toBe(true);
+  });
+});
+
+describe("when the game has a transcript but no GM session to resume", () => {
+  it("tells the GM the story so far, which a new campaign has none of", async () => {
+    const first = await table([{ steps: [{ say: "Rain falls." }] }]);
+    await first.session.start();
+    await first.session.whenIdle();
+    expect((await first.starts())[0]?.stdin).not.toContain("Carry on from it");
+
+    // The state a saved scenario starts from: everything but the GM's session.
+    const { claudeSessionId, ...state } = (await first.store.loadState())!;
+    expect(claudeSessionId).toBeDefined();
+    await first.store.saveState(state);
+
+    const second = await table([{ steps: [{ say: "Back again." }] }, { steps: [{ say: "Still here." }] }], {}, { store: first.store });
+    await second.session.say("kira", "hello");
+    await second.session.whenIdle();
+    await second.session.say("kira", "and now?");
+    await second.session.whenIdle();
+
+    const [run, later] = await second.starts();
+    expect(run?.resume).toBeUndefined();
+    expect(run?.stdin).toContain("GM: Rain falls.");
+    expect(run?.stdin).toContain("Carry on from it");
+    expect(run?.stdin.match(/Kira: hello/g)).toHaveLength(1);
+    // Once the GM has a session again it is resumed, and the story is not repeated to it.
+    expect(later?.resume).toBe("fake-session-1");
+    expect(later?.stdin).not.toContain("Carry on from it");
   });
 });
 
