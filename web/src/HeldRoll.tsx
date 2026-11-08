@@ -1,7 +1,6 @@
-import type { CharacterView, ClientMessage, EdgeView, RollRequest, RollResult } from "@shadow-run/shared";
+import { damageAfterResistance, wouldKill, type CharacterView, type ClientMessage, type EdgeView, type RollRequest, type RollResult } from "@shadow-run/shared";
 import { useEffect, useState } from "react";
 import { Dice, TUMBLE_MS } from "./Dice";
-import { damageAfterResistance, wouldKill } from "./damage";
 import { cannotSpend, COST } from "./edge";
 import { useRules } from "./rules";
 
