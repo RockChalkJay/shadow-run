@@ -1,3 +1,4 @@
+import { wouldKill as wouldKillWith } from "@shadow-run/shared";
 import type { CharacterRef, CharacterView, ConditionMonitor, DamageType, HealType, CharacterSheet } from "@shadow-run/shared";
 import { applyDamage, defaultRuleset, gruntBoxes, gruntStatus, gruntWoundModifier, healDamage, newMonitor, statusOf, woundModifier, type Ruleset, type Treatment } from "../rules/index.js";
 import type { Fail } from "./rollManager.js";
@@ -158,7 +159,7 @@ export class Roster {
   /** Whether this much damage, already resisted, would kill a player character as they stand. */
   wouldKill(kind: "pc" | "npc", id: string, type: DamageType, amount: number): boolean {
     const entry = this.entry(kind, id);
-    return entry !== undefined && !entry.grunt && statusOf(applyDamage(entry.monitor, type, amount, this.rules)) === "dead";
+    return entry !== undefined && !entry.grunt && wouldKillWith(entry.monitor, type, amount, { stunOverflowPerPhysical: this.rules.conditionMonitor.stunOverflowPerPhysical });
   }
 
   /**
