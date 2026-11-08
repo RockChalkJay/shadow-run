@@ -59,6 +59,18 @@ describe("saveScenario", () => {
     expect(await names(target)).not.toContain("stale.txt");
   });
 
+  it("leaves the scenario that was there as it was when the new one cannot be saved", async () => {
+    const d = await dirs();
+    const dir = join(d.campaigns, "default");
+    await campaign(dir);
+    const target = await saveScenario({ campaignDir: dir, scenariosDir: d.scenarios, name: "ambush" });
+    await writeFile(join(dir, "state.json"), "{ not json");
+
+    await expect(saveScenario({ campaignDir: dir, scenariosDir: d.scenarios, name: "ambush", force: true })).rejects.toThrow(/could not be read/);
+    expect(JSON.parse(await readFile(join(target, "state.json"), "utf8"))).toEqual({ version: 1, turnCounter: 7 });
+    expect(await names(d.scenarios)).toEqual(["ambush"]);
+  });
+
   it("refuses a campaign with no sheets, and a name that is not safe", async () => {
     const d = await dirs();
     await mkdir(join(d.campaigns, "empty"), { recursive: true });
@@ -79,7 +91,7 @@ describe("loadScenario", () => {
     await writeFile(join(into, "extra.txt"), "from the last run");
     await loadScenario({ scenariosDir: d.scenarios, name: "ambush", into });
 
-    expect(await names(into)).toEqual(["characters", "premise.md", "state.json", "transcript.jsonl"]);
+    expect(await names(into)).toEqual([".made-from-scenario", "characters", "premise.md", "state.json", "transcript.jsonl"]);
     expect(JSON.parse(await readFile(join(into, "state.json"), "utf8"))).toEqual({ version: 1, turnCounter: 7 });
   });
 
@@ -106,7 +118,7 @@ describe("loadScenario", () => {
     await writeFile(join(d.scenarios, "bare", "characters", "kira.json"), '{"id":"kira"}');
     const into = join(d.campaigns, "scenario-bare");
     await loadScenario({ scenariosDir: d.scenarios, name: "bare", into });
-    expect(await names(into)).toEqual(["characters"]);
+    expect(await names(into)).toEqual([".made-from-scenario", "characters"]);
   });
 
   it("says which scenarios there are when the name is wrong", async () => {
@@ -118,12 +130,34 @@ describe("loadScenario", () => {
     await expect(loadScenario({ scenariosDir: join(d.scenarios, "nowhere"), name: "x", into: join(d.campaigns, "scenario-x") })).rejects.toThrow(/none saved/);
   });
 
-  it("never wipes a folder that is not a scenario's", async () => {
+  it("never wipes a folder that was not made from a scenario, whatever it is called", async () => {
     const d = await dirs();
     await campaign(join(d.scenarios, "ambush"));
-    await campaign(join(d.campaigns, "default"));
-    await expect(loadScenario({ scenariosDir: d.scenarios, name: "ambush", into: join(d.campaigns, "default") })).rejects.toThrow(/not a scenario's folder/);
-    expect(await names(join(d.campaigns, "default", "characters"))).toContain("kira.json");
+    for (const folder of ["default", "scenario-ambush"]) {
+      await campaign(join(d.campaigns, folder));
+      await expect(loadScenario({ scenariosDir: d.scenarios, name: "ambush", into: join(d.campaigns, folder) })).rejects.toThrow(/not made from a scenario/);
+      expect(await names(join(d.campaigns, folder, "characters"))).toContain("kira.json");
+    }
+  });
+
+  it("starts in a folder that exists but is empty", async () => {
+    const d = await dirs();
+    await campaign(join(d.scenarios, "ambush"));
+    const into = join(d.campaigns, "scenario-ambush");
+    await mkdir(into, { recursive: true });
+    await loadScenario({ scenariosDir: d.scenarios, name: "ambush", into });
+    expect(await names(into)).toContain("characters");
+  });
+
+  it("wipes a folder from an earlier run even if that run stopped partway", async () => {
+    const d = await dirs();
+    await campaign(join(d.scenarios, "ambush"));
+    const into = join(d.campaigns, "scenario-ambush");
+    await mkdir(into, { recursive: true });
+    await writeFile(join(into, ".made-from-scenario"), "ambush\n");
+    await writeFile(join(into, "half.txt"), "left by a crash");
+    await loadScenario({ scenariosDir: d.scenarios, name: "ambush", into });
+    expect(await names(into)).not.toContain("half.txt");
   });
 });
 

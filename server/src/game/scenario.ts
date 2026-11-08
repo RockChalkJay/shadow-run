@@ -1,5 +1,5 @@
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { sheetFiles } from "./store.js";
 
 /** Reads `<name> [--campaign <campaign>] [--force]`, or returns undefined when the words do not fit that. */
@@ -24,6 +24,9 @@ export const SCENARIO_NAME = /^[a-z0-9_-]+$/i;
 
 /** A scenario started from `name` plays in a campaign folder of this name, which is wiped on every start. */
 export const scenarioCampaign = (name: string) => `scenario-${name}`;
+
+/** Written into a folder this code made from a scenario, so it knows which folders it may wipe. */
+const MADE_FROM_SCENARIO = ".made-from-scenario";
 
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
@@ -79,23 +82,37 @@ export async function saveScenario(opts: { campaignDir: string; scenariosDir: st
   }
   const sheets = await readdir(join(opts.campaignDir, "characters")).catch((err) => (isMissing(err) ? [] : Promise.reject(err)));
   if (sheetFiles(sheets).length === 0) throw new Error(`${opts.campaignDir} has no character sheets, so there is nothing to save`);
+  // Built beside the scenario and swapped in, so a copy that fails leaves any scenario already there as it was.
+  const building = `${target}.saving`;
+  await rm(building, { recursive: true, force: true });
+  try {
+    await copyGame(opts.campaignDir, building);
+  } catch (err) {
+    await rm(building, { recursive: true, force: true });
+    throw err;
+  }
   await rm(target, { recursive: true, force: true });
-  await copyGame(opts.campaignDir, target);
+  await rename(building, target);
   return target;
 }
 
 /**
- * Starts `into` as a fresh copy of the scenario `name`, so every start is the same. Only a folder named for a
- * scenario is ever wiped, so a real campaign cannot be lost to a mistyped setting.
+ * Starts `into` as a fresh copy of the scenario `name`, so every start is the same. A folder is wiped only if it
+ * was made from a scenario in the first place, so a real campaign cannot be lost to a mistyped setting.
  */
 export async function loadScenario(opts: { scenariosDir: string; name: string; into: string }) {
   checkName(opts.name);
-  if (!basename(opts.into).startsWith("scenario-")) throw new Error(`Refusing to wipe ${opts.into}: it is not a scenario's folder`);
   const names = await listScenarios(opts.scenariosDir);
   if (!names.includes(opts.name)) {
     const have = names.length > 0 ? `Saved scenarios: ${names.join(", ")}.` : `There are none saved in ${opts.scenariosDir}.`;
     throw new Error(`There is no scenario "${opts.name}". ${have}`);
   }
+  const there = await readdir(opts.into).catch((err) => (isMissing(err) ? null : Promise.reject(err)));
+  if (there && there.length > 0 && !there.includes(MADE_FROM_SCENARIO)) {
+    throw new Error(`Refusing to wipe ${opts.into}: it was not made from a scenario, so it may be a real campaign`);
+  }
   await rm(opts.into, { recursive: true, force: true });
+  await mkdir(opts.into, { recursive: true });
+  await writeFile(join(opts.into, MADE_FROM_SCENARIO), `${opts.name}\n`);
   await copyGame(join(opts.scenariosDir, opts.name), opts.into);
 }
