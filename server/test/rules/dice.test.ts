@@ -14,7 +14,6 @@ import {
   rollPool,
   rollWithEdgeDice,
   scriptedD6,
-  scriptedThenRandom,
   seededD6,
   widenGlitch,
   type Ruleset,
@@ -142,28 +141,6 @@ describe("dice sources", () => {
     const d6 = scriptedD6([3]);
     expect(d6()).toBe(3);
     expect(() => d6()).toThrow("ran out");
-  });
-});
-
-describe("scriptedThenRandom", () => {
-  it("gives the scripted faces in order, then hands over to the random dice", () => {
-    const d6 = scriptedThenRandom([6, 1], undefined, () => 4);
-    expect([d6(), d6(), d6(), d6()]).toEqual([6, 1, 4, 4]);
-  });
-
-  it("says so once, as the first random die is rolled, not as the last scripted one is used", () => {
-    let told = 0;
-    const d6 = scriptedThenRandom([2, 3], () => told++, () => 5);
-    d6();
-    d6();
-    expect(told).toBe(0);
-    d6();
-    d6();
-    expect(told).toBe(1);
-  });
-
-  it("is random from the start when there is no script", () => {
-    expect(scriptedThenRandom([], undefined, () => 5)()).toBe(5);
   });
 });
 
