@@ -9,7 +9,9 @@
     "play": "tsx scripts/play-cli.ts",
     "check:gm": "tsx scripts/check-gm.ts",
     "scenario:save": "tsx scripts/save-scenario.ts",
-    "character:schema": "tsx scripts/character-schema.ts"
+    "character:schema": "tsx scripts/character-schema.ts",
+    "character:export": "tsx scripts/character-export.ts",
+    "character:import": "tsx scripts/character-import.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",

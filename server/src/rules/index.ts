@@ -1,4 +1,5 @@
 export * from "./damage.js";
+export * from "./derived.js";
 export * from "./dice.js";
 export * from "./edge.js";
 export * from "./edgeCatalog.js";
