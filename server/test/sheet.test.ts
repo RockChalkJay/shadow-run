@@ -105,6 +105,23 @@ describe("what the GM is told", () => {
     for (const word of ["Contacts", "Personal", "Matrix", "Money and IDs", "Spells"]) expect(text, word).not.toContain(word);
   });
 
+  it("trims a long note, wherever it is written, so one sheet cannot swamp the prompt", () => {
+    const long = "x".repeat(300);
+    const text = describeCharacter({
+      ...kira,
+      contacts: [{ name: "A", loyalty: 1, connection: 1, notes: long }],
+      armor: [{ name: "B", rating: 1, notes: long }],
+      rangedWeapons: [{ name: "C", damage: { value: 1, type: "physical" }, notes: long }],
+      abilities: [{ name: "D", notes: long }],
+      personal: { misc: long },
+      lifestyle: { licenses: long, fakeIds: [long] },
+      gear: [{ name: "E", notes: long }],
+    });
+    expect(text).not.toContain("x".repeat(121));
+    expect(text).toContain(`${"x".repeat(119)}…`);
+    expect(text.length).toBeLessThan(1800);
+  });
+
   it("ends a line with one full stop, whether or not the last note was written with one", () => {
     const text = describeCharacter({ ...kira, contacts: [{ name: "Fixer", loyalty: 1, connection: 1, notes: "Sells her jobs." }], personal: { misc: "Scarred." } });
     expect(text).toContain("Personal: Scarred. Contacts: Fixer (Loyalty 1, Connection 1): Sells her jobs. Demo character.");

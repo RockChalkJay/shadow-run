@@ -41,7 +41,7 @@ The boxes the sheet works out from the numbers (Initiative, Composure, Judge Int
 
 ## Limits
 
-A list holds at most 50 entries and a note at most 300 characters. The GM is told about the first 15 entries of each list and how many more there are, so a long list does not crowd out the rest of the prompt. These sections tell the GM about the character; they do not change how dice, damage or combat are worked out.
+A list holds at most 50 entries and a note at most 300 characters. The GM is told about the first 15 entries of each list and how many more there are, with each note cut to 120 characters, so a long list does not crowd out the rest of the prompt. These sections tell the GM about the character; they do not change how dice, damage or combat are worked out.
 
 ## Checking a file as you type
 

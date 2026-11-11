@@ -6,6 +6,10 @@ const cap = (word: string) => word[0]!.toUpperCase() + word.slice(1);
 /** The most entries of one list the GM is told about; the rest are counted, so a long list cannot swamp the prompt. */
 const MAX_TOLD = 15;
 
+/** The longest a note is when the GM is told it, so a sheet full of long notes cannot swamp the prompt. */
+const MAX_NOTE = 120;
+const short = (text: string) => (text.length > MAX_NOTE ? `${text.slice(0, MAX_NOTE - 1)}…` : text);
+
 /** Ends a line with one full stop, whether or not what was written already did. */
 const sentence = (text: string) => `${text.replace(/\.+$/, "")}.`;
 
@@ -19,7 +23,7 @@ function listed<T>(label: string, items: readonly T[] | undefined, show: (item: 
 
 /** A name with its rating and notes: "Name 3 (notes)". */
 const named = (item: { name: string; rating?: number | undefined; notes?: string | undefined }) =>
-  `${item.name}${item.rating !== undefined ? ` ${item.rating}` : ""}${item.notes ? ` (${item.notes})` : ""}`;
+  `${item.name}${item.rating !== undefined ? ` ${item.rating}` : ""}${item.notes ? ` (${short(item.notes)})` : ""}`;
 
 const damage = (d: WeaponDamage) => `DV ${d.value}${d.type === "physical" ? "P" : "S"}`;
 
@@ -61,15 +65,15 @@ export function describeCharacter(sheet: CharacterSheet): string {
   }
   parts.push(...personal(sheet));
   parts.push(...listed("Knowledge and languages", sheet.knowledge, (k) => `${k.name} ${k.rating}${k.type === "language" ? " (language)" : ""}`));
-  parts.push(...listed("Ranged weapons", sheet.rangedWeapons, (w) => [`${w.name}${w.primary ? " (primary)" : ""} ${damage(w.damage)}`, w.mode, w.ranges ? `Attack Rating ${ranges(w.ranges)}` : undefined, w.ammo ? `ammo ${w.ammo}` : undefined, w.notes].filter(Boolean).join(", ")));
-  parts.push(...listed("Melee weapons", sheet.meleeWeapons, (w) => [`${w.name}${w.primary ? " (primary)" : ""} ${damage(w.damage)}`, w.close !== undefined ? `Attack Rating ${w.close}` : undefined, w.notes].filter(Boolean).join(", ")));
-  parts.push(...listed("Armor", sheet.armor, (a) => `${a.name}${a.primary ? " (primary)" : ""} ${a.rating}${a.notes ? ` (${a.notes})` : ""}`));
+  parts.push(...listed("Ranged weapons", sheet.rangedWeapons, (w) => [`${w.name}${w.primary ? " (primary)" : ""} ${damage(w.damage)}`, w.mode, w.ranges ? `Attack Rating ${ranges(w.ranges)}` : undefined, w.ammo ? `ammo ${w.ammo}` : undefined, w.notes ? short(w.notes) : undefined].filter(Boolean).join(", ")));
+  parts.push(...listed("Melee weapons", sheet.meleeWeapons, (w) => [`${w.name}${w.primary ? " (primary)" : ""} ${damage(w.damage)}`, w.close !== undefined ? `Attack Rating ${w.close}` : undefined, w.notes ? short(w.notes) : undefined].filter(Boolean).join(", ")));
+  parts.push(...listed("Armor", sheet.armor, (a) => `${a.name}${a.primary ? " (primary)" : ""} ${a.rating}${a.notes ? ` (${short(a.notes)})` : ""}`));
   parts.push(...listed("Augmentations", sheet.augmentations, (a) => `${named(a)}${a.essence !== undefined ? `, Essence ${a.essence}` : ""}`));
   parts.push(...listed("Spells and complex forms", sheet.spells, (sp) => `${sp.name} (${[sp.kind, sp.typeTarget, sp.range, sp.duration, sp.drain ? `drain ${sp.drain}` : undefined].filter(Boolean).join(", ")})`));
-  parts.push(...listed("Abilities", sheet.abilities, (a) => `${a.name}${a.level !== undefined ? ` ${a.level}` : ""}${a.notes ? ` (${a.notes})` : ""}`));
+  parts.push(...listed("Abilities", sheet.abilities, (a) => `${a.name}${a.level !== undefined ? ` ${a.level}` : ""}${a.notes ? ` (${short(a.notes)})` : ""}`));
   parts.push(...matrix(sheet));
   parts.push(...listed("Vehicles", sheet.vehicles, (v) => `${v.name} (${[["Handling", v.handling], ["Speed", v.topSpeed], ["Body", v.body], ["Armor", v.armor], ["Pilot", v.pilot], ["Seats", v.seats]].filter(([, value]) => value).map(([stat, value]) => `${stat} ${value}`).join(", ")})`));
-  parts.push(...listed("Contacts", sheet.contacts, (c) => `${c.name} (Loyalty ${c.loyalty}, Connection ${c.connection})${c.notes ? `: ${c.notes}` : ""}`));
+  parts.push(...listed("Contacts", sheet.contacts, (c) => `${c.name} (Loyalty ${c.loyalty}, Connection ${c.connection})${c.notes ? `: ${short(c.notes)}` : ""}`));
   parts.push(...lifestyle(sheet));
   if (sheet.notes) parts.push(sheet.notes);
   return parts.join(" ");
@@ -82,7 +86,7 @@ function personal(sheet: CharacterSheet): string[] {
     ["ethnicity", p.ethnicity], ["age", p.age], ["sex", p.sex], ["height", p.height], ["weight", p.weight],
     ["reputation", p.reputation], ["heat", p.heat], ["karma", p.karma], ["total karma", p.totalKarma], ["", p.misc],
   ] as const;
-  const told = fields.filter(([, value]) => value !== undefined && value !== "").map(([name, value]) => (name ? `${name} ${value}` : String(value)));
+  const told = fields.filter(([, value]) => value !== undefined && value !== "").map(([name, value]) => (name ? `${name} ${short(String(value))}` : short(String(value))));
   return told.length > 0 ? [sentence(`Personal: ${told.join(", ")}`)] : [];
 }
 
@@ -101,6 +105,6 @@ function matrix(sheet: CharacterSheet): string[] {
 function lifestyle(sheet: CharacterSheet): string[] {
   const l = sheet.lifestyle;
   if (!l) return [];
-  const told = [l.primary ? `${l.primary} lifestyle` : "", l.nuyen !== undefined ? `${l.nuyen} nuyen` : "", l.licenses ? `licenses: ${l.licenses}` : "", l.fakeIds && l.fakeIds.length > 0 ? `fake IDs: ${l.fakeIds.slice(0, MAX_TOLD).join("; ")}` : ""].filter(Boolean);
+  const told = [l.primary ? `${l.primary} lifestyle` : "", l.nuyen !== undefined ? `${l.nuyen} nuyen` : "", l.licenses ? `licenses: ${short(l.licenses)}` : "", l.fakeIds && l.fakeIds.length > 0 ? `fake IDs: ${l.fakeIds.slice(0, MAX_TOLD).map(short).join("; ")}` : ""].filter(Boolean);
   return told.length > 0 ? [sentence(`Money and IDs: ${told.join(", ")}`)] : [];
 }
