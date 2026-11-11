@@ -29,10 +29,12 @@ export function facesFrom(text: string): number[] {
 /**
  * Whether a roll should be kept back for the player to see its dice before it counts: when Edge could actually be spent on
  * it. With nothing to spend, or Edge already chosen before the roll, or a declared Edge Action taking the round's one
- * expenditure, there is nothing to decide, and the server would refuse to keep it back, so it counts at once.
+ * expenditure, there is nothing to decide, and the server would refuse to keep it back, so it counts at once. In test mode every
+ * roll is kept back, so it can be rolled again, except one where Edge is spent as it counts.
  */
-export function shouldKeepBack(request: RollRequest, edge: EdgeView | undefined, before: "none" | "dice" | "widen"): boolean {
+export function shouldKeepBack(request: RollRequest, edge: EdgeView | undefined, before: "none" | "dice" | "widen", testMode = false): boolean {
   if (before !== "none") return false;
+  if (testMode) return actionTakesTheEdge(request, edge) === null;
   // A roll to resist damage is also kept back with no Edge to spend, if there is rank left to burn: that is how a character
   // sees the dice and burns Not Dead Yet to survive a killing blow, which works even in a round Edge was spent.
   if (request.soak && edge && edge.rank > 0) return true;

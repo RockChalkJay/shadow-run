@@ -24,7 +24,7 @@ class FakeSocket {
 }
 
 const sheet = (id: string, name: string) => ({ id, name, metatype: "human" }) as never;
-const snapshot = (over: object = {}): ServerEvent => ({ type: "snapshot", party: [sheet("kira", "Kira"), sheet("doc", "Doc")], characters: [], pendingRolls: [], edge: [{ id: "kira", points: 3, rank: 3, spentThisRound: false }], combat: null, transcript: [], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 5, stunOverflowPerPhysical: 1 }, ...over }) as ServerEvent;
+const snapshot = (over: object = {}): ServerEvent => ({ type: "snapshot", party: [sheet("kira", "Kira"), sheet("doc", "Doc")], characters: [], pendingRolls: [], edge: [{ id: "kira", points: 3, rank: 3, spentThisRound: false }], combat: null, transcript: [], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 5, stunOverflowPerPhysical: 1 }, testMode: false, ...over }) as ServerEvent;
 const socket = () => FakeSocket.all.at(-1)!;
 
 beforeEach(() => {
@@ -60,6 +60,21 @@ describe("the table screen", () => {
     socket().push({ type: "gm.block", turnId: 1 });
     socket().push({ type: "gm.text", turnId: 1, text: "A guard turns" });
     expect(screen.getByText("A guard turns")).toBeTruthy();
+  });
+
+  it("offers Roll again on a held roll only when the server says it is in test mode, and asks for it over the connection", async () => {
+    const roll = (dice: number[]) => ({ dice, hits: 0, ones: 0, glitch: false, criticalGlitch: false });
+    const request = { id: "r1", characterId: "kira", label: "Sneak", pool: { total: 4, breakdown: "x" }, threshold: 2, stakes: "Reach the door.", goodRoll: "g", badRoll: "b", consequences: { success: "s", failure: "f", glitch: "g", criticalGlitch: "c" }, edgeAdvice: "e", held: { source: "physical", roll: roll([1, 2, 3, 4]) } };
+    render(<App url="ws://x" />);
+    await act(async () => {});
+    const begun = { transcript: [{ id: 1, ts: "t", kind: "gm", text: "Rain falls." }], pendingRolls: [request] };
+    socket().push(snapshot(begun));
+    expect(screen.getByRole("button", { name: "Keep it as it stands" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Roll again/ })).toBeNull();
+
+    socket().push(snapshot({ ...begun, testMode: true }));
+    await userEvent.click(screen.getByRole("button", { name: /Roll again/ }));
+    expect(socket().sent).toContainEqual({ type: "roll.redo", requestId: "r1" });
   });
 
   it("has a link at the top that jumps to the typing box", async () => {

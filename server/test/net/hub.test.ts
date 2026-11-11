@@ -57,7 +57,7 @@ class SlowStore extends CampaignStore {
   }
 }
 
-async function startTable(script: ScriptedTurn[], faces: number[] = [], store?: CampaignStore) {
+async function startTable(script: ScriptedTurn[], faces: number[] = [], store?: CampaignStore, testMode = false) {
   const hub = new Hub({ port: 0, allowedOrigins: (p) => allowedOrigins(p, 5173) });
   const session = await GameSession.create({
     store: store ?? (await tempStore()),
@@ -65,6 +65,7 @@ async function startTable(script: ScriptedTurn[], faces: number[] = [], store?: 
     party,
     emit: (event) => hub.broadcast(event),
     d6: scriptedD6(faces),
+    testMode,
   });
   hub.attach(session);
   const port = await hub.listen();
@@ -248,6 +249,27 @@ describe("playing", () => {
     expect(await client.until((e) => e.type === "error" && e.message.includes("has not been counted"))).toBeDefined();
     client.send({ type: "roll.edge", requestId: asked.request.id, boost: "reroll", targets: Array.from({ length: 21 }, () => ({ side: "mine", index: 0 })) } as never);
     expect(await client.until((e) => e.type === "error" && e.message.includes("Message not understood"))).toBeDefined();
+  });
+
+  it("routes a roll to be rolled again, in test mode, and refuses it otherwise", async () => {
+    const asHeld = (e: ServerEvent, held: boolean) => e.type === "roll.updated" && (e.request.held !== undefined) === held;
+    const testing = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }], [], undefined, true);
+    const client = await connect(testing.port);
+    await client.until((e) => e.type === "snapshot");
+    client.send({ type: "session.start" });
+    const asked = await client.until(isRoll);
+    client.send({ type: "roll.physical", requestId: asked.request.id, dice: "1 1 1 1", hold: true });
+    await client.until((e) => asHeld(e, true));
+    client.send({ type: "roll.redo", requestId: asked.request.id });
+    expect(await client.until((e) => asHeld(e, false))).toBeDefined();
+
+    const plain = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }], []);
+    const other = await connect(plain.port);
+    await other.until((e) => e.type === "snapshot");
+    other.send({ type: "session.start" });
+    const waiting = await other.until(isRoll);
+    other.send({ type: "roll.redo", requestId: waiting.request.id });
+    expect(await other.until((e) => e.type === "error" && e.message.includes("SHADOWRUN_TEST_MODE=1"))).toBeDefined();
   });
 
   it("routes each way of spending Edge off the roll, and refuses a mistake with an error, over the wire", async () => {

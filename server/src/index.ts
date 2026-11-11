@@ -47,7 +47,8 @@ async function main() {
   }
 
   const hub = new Hub({ port: config.port, allowedOrigins: (port) => allowedOrigins(port, config.devPort) });
-  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event) });
+  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event), testMode: config.testMode });
+  if (config.testMode) console.log("Test mode is on: every roll waits to be kept, and can be rolled again until then.");
   hub.attach(session);
   const port = await hub.listen();
   session.resume();

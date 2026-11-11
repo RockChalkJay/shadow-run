@@ -3,7 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TUMBLE_MS } from "./Dice";
-import { RulesContext } from "./rules";
+import { RulesContext, TestModeContext } from "./rules";
 import { RollCard } from "./RollCard";
 
 const roll = (dice: number[], extra: object = {}) => ({ dice, hits: dice.filter((d) => d >= 5).length, ones: dice.filter((d) => d === 1).length, glitch: false, criticalGlitch: false, ...extra });
@@ -270,5 +270,61 @@ describe("the rules the server gives the screen", () => {
     // 50 stun at two a box: 40 past the track makes 20 physical, 9 into overflow: alive. At the default rate it would kill.
     withRules(stun, character);
     expect(screen.queryByRole("button", { name: /Not Dead Yet/ })).toBeNull();
+  });
+});
+
+describe("in test mode", () => {
+  const testing = (request: RollRequest, e: EdgeView | undefined = edge) => {
+    const send = vi.fn<(m: ClientMessage) => void>();
+    const ui = (r: RollRequest) => (
+      <TestModeContext.Provider value>
+        <RollCard request={r} name="Kira" edge={e} error={null} send={send} />
+      </TestModeContext.Provider>
+    );
+    const view = render(ui(request));
+    return { send, user: userEvent.setup(), again: (r: RollRequest) => view.rerender(ui(r)) };
+  };
+
+  it("offers Roll again beside Keep on a held roll, and sends the roll back for dice", async () => {
+    const { send, user } = testing(held());
+    expect(screen.getByRole("button", { name: "Keep it as it stands" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Roll again/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.redo", requestId: "r1" });
+  });
+
+  it("does not offer it when the server is not in test mode", () => {
+    show(held());
+    expect(screen.queryByRole("button", { name: /Roll again/ })).toBeNull();
+  });
+
+  it("holds every roll to show its dice, even with no Edge to spend", async () => {
+    const { send, user } = testing(base, { ...edge, points: 0 });
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", hold: true });
+  });
+
+  it("does not hold a roll that has Edge chosen first", async () => {
+    const { send, user } = testing(base);
+    await user.click(screen.getByRole("button", { name: /^▸ Edge/ }));
+    await user.click(screen.getByRole("radio", { name: /Edge dice/ }));
+    await user.click(screen.getByRole("button", { name: /Roll with the app/ }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.app", requestId: "r1", edge: "dice" });
+  });
+
+  it("goes back to the choice of how to roll once the dice are thrown away, with no old dice left in the boxes", async () => {
+    const { send, user, again } = testing(base);
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    await user.click(screen.getByLabelText("die 1"));
+    await user.paste("3333");
+    await user.click(screen.getByRole("button", { name: "Count these dice" }));
+    expect(send).toHaveBeenCalledWith({ type: "roll.physical", requestId: "r1", dice: "3 3 3 3", hold: true });
+
+    again(held());
+    await user.click(screen.getByRole("button", { name: /Roll again/ }));
+    again(base);
+    expect(screen.getByRole("button", { name: /Roll with the app/ })).toBeTruthy();
+    expect(screen.queryByLabelText("die 1")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Enter my dice/ }));
+    expect((screen.getByLabelText("die 1") as HTMLInputElement).value).toBe("");
   });
 });

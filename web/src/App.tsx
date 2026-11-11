@@ -2,7 +2,7 @@ import type { GmStatus } from "@shadow-run/shared";
 import { useEffect, useRef, useState } from "react";
 import { useTable } from "./connection";
 import { Rail } from "./Rail";
-import { RulesContext } from "./rules";
+import { RulesContext, TestModeContext } from "./rules";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
 
@@ -64,6 +64,7 @@ export function App({ url }: { url: string }) {
 
   return (
     <RulesContext.Provider value={state.rules}>
+      <TestModeContext.Provider value={state.testMode}>
       <div className="app">
         <a className="skip" href="#say" onClick={(e) => { e.preventDefault(); sayBox.current?.focus(); }}>Skip to the typing box</a>
         <Top state={state} send={send} />
@@ -85,6 +86,7 @@ export function App({ url }: { url: string }) {
           <button className="pri" type="submit" disabled={!state.connected || text.trim() === ""}>Send</button>
         </form>
       </div>
+      </TestModeContext.Provider>
     </RulesContext.Provider>
   );
 }

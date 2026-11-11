@@ -2,7 +2,7 @@ import { damageAfterResistance, wouldKill, type CharacterView, type ClientMessag
 import { useEffect, useState } from "react";
 import { Dice, TUMBLE_MS } from "./Dice";
 import { cannotSpend, COST } from "./edge";
-import { useRules } from "./rules";
+import { useRules, useTestMode } from "./rules";
 
 type Tool = "reroll" | "bump" | "buy" | "missed";
 
@@ -28,9 +28,10 @@ function PickableDice({ roll, side, on, toggle }: { roll: RollResult; side: "min
 }
 
 /** A roll the player has counted but not committed: its dice, and what Edge can do to them. */
-export function HeldRoll({ request, name, character, edge, error, send }: { request: RollRequest; name: string; character?: CharacterView | undefined; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void }) {
+export function HeldRoll({ request, name, character, edge, error, send, onRedo }: { request: RollRequest; name: string; character?: CharacterView | undefined; edge: EdgeView | undefined; error: string | null; send: (m: ClientMessage) => void; onRedo: () => void }) {
   const held = request.held!;
   const rules = useRules();
+  const testMode = useTestMode();
   const [burning, setBurning] = useState(false);
   // A roll to resist damage that, as the dice stand, would kill: the one moment Not Dead Yet can be burned.
   const lethal = request.soak !== undefined && character !== undefined && wouldKill(character.monitor, request.soak.damageType, damageAfterResistance(request.soak.damageValue, held.roll.hits), rules);
@@ -99,6 +100,7 @@ export function HeldRoll({ request, name, character, edge, error, send }: { requ
       )}
       <div className="btns">
         <button className="pri" onClick={() => send({ type: "roll.keep", requestId: request.id })}>Keep it as it stands</button>
+        {testMode && <button className="redo" title="For testing: throw these dice away and roll again. It costs nothing." onClick={onRedo}>↺ Roll again <small>test</small></button>}
       </div>
       {lethal && (
         <div className="nde">

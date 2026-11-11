@@ -2,6 +2,7 @@ import type { CharacterView, ClientMessage, EdgeView, RollRequest } from "@shado
 import { useState } from "react";
 import { actionTakesTheEdge, cannotSpend, COST, facesFrom, shouldKeepBack } from "./edge";
 import { HeldRoll } from "./HeldRoll";
+import { useTestMode } from "./rules";
 
 export { facesFrom };
 
@@ -40,6 +41,7 @@ export function RollCard({ request, name, character, edge, error, send }: Props)
   const size = request.pool.total;
   const [faces, setFaces] = useState<string[]>([]);
   const [local, setLocal] = useState<string | null>(null);
+  const testMode = useTestMode();
 
   const skip = cannotSkip(request);
   const smack = cannotSmackdown(request, edge);
@@ -69,7 +71,7 @@ export function RollCard({ request, name, character, edge, error, send }: Props)
   const edgeFields = () => ({
     ...(before === "dice" && { edge: "dice" as const }),
     ...(before === "widen" && { edge: "widen_glitch" as const }),
-    ...(shouldKeepBack(request, edge, before) && { hold: true }),
+    ...(shouldKeepBack(request, edge, before, testMode) && { hold: true }),
   });
   const count = () => {
     const entered = Array.from({ length: total }, (_, i) => face(i));
@@ -134,7 +136,7 @@ export function RollCard({ request, name, character, edge, error, send }: Props)
       )}
 
       {held ? (
-        <HeldRoll request={request} name={name} character={character} edge={edge} error={error} send={send} />
+        <HeldRoll request={request} name={name} character={character} edge={edge} error={error} send={send} onRedo={() => { setMode("choose"); setFaces([]); setLocal(null); send({ type: "roll.redo", requestId: request.id }); }} />
       ) : mode === "dice" ? (
         <>
           <p className="hint">Your {pluralDice(total)}{withEdge > 0 ? ` (${size} plus ${withEdge} Edge ${withEdge === 1 ? "die" : "dice"})` : ""}. Type each face, or type them all in the first box.</p>

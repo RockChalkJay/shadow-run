@@ -112,6 +112,8 @@ export interface SessionOptions {
   /** Settles a tie in the initiative order that nothing else does; a number in [0, 1). */
   flip?: Flip;
   rules?: Ruleset;
+  /** For testing: every roll is held until it is kept, and a held roll can be rolled again. */
+  testMode?: boolean;
   /** Longest a GM turn may take before it is stopped. */
   turnTimeoutMs?: number;
   now?: () => Date;
@@ -276,6 +278,7 @@ export class GameSession {
       gm: this.status,
       usage: this.usage,
       rules: screenRules(this.rules),
+      testMode: this.opts.testMode ?? false,
     };
   }
 
@@ -430,7 +433,8 @@ export class GameSession {
         widenGlitch = true;
       }
     }
-    if (waiting && answer.hold) {
+    // In test mode every roll is held, with Edge to spend or not, so that it can be rolled again.
+    if (waiting && answer.hold && !this.opts.testMode) {
       // A roll to resist damage may be held with no Edge to spend, since a player with some rank left can burn it to survive a killing blow.
       const problem = this.edgeProblem(waiting.characterId, 1);
       if (problem && !(waiting.soak && this.burnProblem(waiting.characterId) === null)) return { ok: false, error: `${problem} Roll without holding.` };
@@ -445,8 +449,9 @@ export class GameSession {
     if (answer.hold) {
       const held = this.rolls.hold(requestId, entry);
       if (!held.ok) return held;
-      // Rolling the attack, even to wait on Edge, is making it.
-      this.edgeForAttack.delete(requestId);
+      // Rolling the attack, even to wait on Edge, is making it. In test mode a held roll can still be rolled again, and
+      // the Edge given for the attack must go back if it is then skipped, so it stays until the roll counts.
+      if (!this.opts.testMode) this.edgeForAttack.delete(requestId);
       this.opts.emit({ type: "roll.updated", request: held.request });
       await this.persist();
       return { ok: true };
@@ -636,6 +641,18 @@ export class GameSession {
     const finished = this.rolls.finish(requestId);
     if (!finished.ok) return finished;
     return this.completeRoll(finished.resolved);
+  }
+
+  /** In test mode, throws away a held roll's dice so it can be rolled again. Nothing was paid or told to the GM while it was held. */
+  async redoRoll(requestId: string): Promise<Ack> {
+    if (!this.opts.testMode) return { ok: false, error: "Rolling again is for testing. Start the server with SHADOWRUN_TEST_MODE=1 to use it." };
+    const waiting = this.rolls.list().find((r) => r.id === requestId);
+    if (waiting && !this.member(waiting.characterId)) return this.dropOrphanedRoll(waiting);
+    const redone = this.rolls.redo(requestId);
+    if (!redone.ok) return redone;
+    this.opts.emit({ type: "roll.updated", request: redone.request });
+    await this.persist();
+    return { ok: true };
   }
 
   /** A roll has counted: apply what follows from it and tell the GM. */

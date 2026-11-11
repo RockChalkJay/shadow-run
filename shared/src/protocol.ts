@@ -66,6 +66,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("roll.smackdown"), requestId: z.string() }),
   /** Let a held roll count as it stands, spending no Edge. */
   z.object({ type: z.literal("roll.keep"), requestId: z.string() }),
+  /** In test mode: throw away a held roll's dice, so the roll can be made again. Costs nothing. */
+  z.object({ type: z.literal("roll.redo"), requestId: z.string() }),
   /** Skip a pending roll. */
   z.object({ type: z.literal("roll.cancel"), requestId: z.string() }),
   /** Stop the GM mid-turn. */
@@ -171,6 +173,8 @@ export interface Snapshot {
   gm: GmStatus;
   usage: Usage | null;
   rules: ScreenRules;
+  /** Whether the server was started for testing, which lets a held roll be rolled again. */
+  testMode: boolean;
 }
 
 /**

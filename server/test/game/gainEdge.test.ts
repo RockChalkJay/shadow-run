@@ -152,6 +152,19 @@ describe("Edge for an attack that is then skipped", () => {
     );
   });
 
+  it("is still taken back when the attack is rolled, held and rolled again in test mode, and then skipped", async () => {
+    const t = await fight({ testMode: true });
+    await t.gm((tools) => tools.attack(kiraShoots(9, 5)));
+    expect(t.edgeOf("kira").points).toBe(4);
+    const id = t.session.snapshot().pendingRolls[0]!.id;
+    await t.session.submitRoll(id, { mode: "physical", dice: "1 1 1 1 1 1", hold: true });
+    await t.session.redoRoll(id);
+    t.jobs.push(async () => undefined);
+    await t.session.cancelRoll(id);
+    await t.session.whenIdle();
+    expect(t.edgeOf("kira").points).toBe(3);
+  });
+
   it("cannot be used to farm Edge: skipping uses up the round's limit, and nothing is kept", async () => {
     const t = await fight();
     for (let i = 0; i < 2; i++) {
