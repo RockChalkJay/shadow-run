@@ -28,6 +28,8 @@ export interface TableState {
   error: string | null;
   /** The rules the screen reads, as the server has them. */
   rules: ScreenRules;
+  /** Whether the server is in test mode, where a held roll can be rolled again. */
+  testMode: boolean;
 }
 
 export const initialState: TableState = {
@@ -45,6 +47,7 @@ export const initialState: TableState = {
   fresh: [],
   error: null,
   rules: DEFAULT_SCREEN_RULES,
+  testMode: false,
 };
 
 export type Action =
@@ -62,7 +65,7 @@ export function reduce(state: TableState, action: Action): TableState {
   const event = action.event;
   switch (event.type) {
     case "snapshot":
-      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null, rules: event.rules };
+      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null, rules: event.rules, testMode: event.testMode };
     case "gm.status":
       return { ...state, gm: event.status };
     case "gm.block":

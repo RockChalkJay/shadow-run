@@ -237,6 +237,16 @@ export class RollManager {
     return { ok: true, request: updated };
   }
 
+  /** Throws away a held roll's dice and puts the roll back to waiting for dice, as if it had not been rolled. */
+  redo(requestId: string): { ok: true; request: RollRequest } | Fail {
+    const request = this.pending.get(requestId);
+    if (!request) return { ok: false, error: "That roll is not waiting; it may already have counted or been skipped." };
+    if (!request.held) return { ok: false, error: "That roll has not been rolled yet, so there is nothing to roll again." };
+    const { held: _held, ...fresh } = request;
+    this.pending.set(requestId, fresh);
+    return { ok: true, request: fresh };
+  }
+
   /** Changes a held roll the way an Edge boost does, and says what it did. Nothing changes if it is refused. */
   boost(requestId: string, boost: EdgeBoost): { ok: true; summary: string } | Fail {
     const request = this.pending.get(requestId);

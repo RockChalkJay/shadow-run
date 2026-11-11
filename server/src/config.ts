@@ -15,6 +15,8 @@ export interface Config {
   campaign: string;
   /** Start from this saved scenario, for testing. */
   scenario?: string;
+  /** For testing: every roll is held until it is kept, and a held roll can be rolled again. A scenario turns it on. */
+  testMode: boolean;
   /** Who plays the GM: Claude through the CLI, or a script that spends nothing. */
   gm: "claude" | "scripted";
   gmModel: string;
@@ -30,6 +32,14 @@ export function parseEffort(value: string | undefined): Effort | undefined {
     throw new Error(`SHADOWRUN_GM_EFFORT must be one of ${EFFORTS.join(", ")}, got "${value}"`);
   }
   return value as Effort | undefined;
+}
+
+/** Whether `SHADOWRUN_TEST_MODE` is on: 1 or true, or 0 or false; undefined when it is not set. */
+function testModeSetting(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === "1" || value === "true") return true;
+  if (value === "0" || value === "false") return false;
+  throw new Error(`SHADOWRUN_TEST_MODE must be 1 or 0 (or true or false), got "${value}"`);
 }
 
 function port(name: string, value: string | undefined, fallback: number): number {
@@ -63,5 +73,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     scenariosDir: env.SHADOWRUN_SCENARIOS ?? join(repoRoot, "scenarios"),
     campaign,
     ...(scenario !== undefined && { scenario }),
+    testMode: (testModeSetting(env.SHADOWRUN_TEST_MODE) ?? false) || scenario !== undefined,
   };
 }

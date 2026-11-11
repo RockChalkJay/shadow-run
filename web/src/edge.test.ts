@@ -46,6 +46,21 @@ describe("whether a roll is kept back to show its dice", () => {
     expect(shouldKeepBack({} as RollRequest, edge({ spentThisRound: true }), "none")).toBe(false);
     expect(shouldKeepBack({} as RollRequest, edge(), "dice")).toBe(false);
   });
+  it("is for every roll in test mode, so it can be rolled again, with Edge to spend or not", () => {
+    expect(shouldKeepBack({} as RollRequest, edge({ points: 0 }), "none", true)).toBe(true);
+    expect(shouldKeepBack({} as RollRequest, edge({ spentThisRound: true }), "none", true)).toBe(true);
+    expect(shouldKeepBack({} as RollRequest, undefined, "none", true)).toBe(true);
+    expect(shouldKeepBack({} as RollRequest, edge(), "none", false)).toBe(true);
+    expect(shouldKeepBack({} as RollRequest, edge({ points: 0 }), "none", false)).toBe(false);
+  });
+  it("is not for a roll that spends Edge as it counts, even in test mode", () => {
+    const action = (cost: number) => ({ edgeAction: { id: "x", name: "Called Shot", cost } }) as RollRequest;
+    expect(shouldKeepBack({} as RollRequest, edge(), "dice", true)).toBe(false);
+    expect(shouldKeepBack({} as RollRequest, edge(), "widen", true)).toBe(false);
+    expect(shouldKeepBack(action(5), edge({ points: 7 }), "none", true)).toBe(false);
+    // A player who cannot pay for the declared action rolls without it, so that roll can be held.
+    expect(shouldKeepBack(action(5), edge({ points: 2 }), "none", true)).toBe(true);
+  });
   it("is for a roll to resist damage with no Edge to spend, while there is rank to burn", () => {
     expect(shouldKeepBack(soak, edge({ points: 0, spentThisRound: true }), "none")).toBe(true);
     expect(shouldKeepBack(soak, edge({ points: 0, rank: 0 }), "none")).toBe(false);

@@ -6,6 +6,16 @@ describe("loadConfig", () => {
     expect(loadConfig({})).toMatchObject({ gm: "claude", gmModel: "sonnet", port: 8787, devPort: 5173, campaign: "default" });
     expect(loadConfig({})).not.toHaveProperty("gmEffort");
     expect(loadConfig({})).not.toHaveProperty("claudeBin");
+    expect(loadConfig({}).testMode).toBe(false);
+  });
+
+  it("is in test mode when asked, or when it starts from a scenario", () => {
+    expect(loadConfig({ SHADOWRUN_TEST_MODE: "1" }).testMode).toBe(true);
+    expect(loadConfig({ SHADOWRUN_TEST_MODE: "true" }).testMode).toBe(true);
+    expect(loadConfig({ SHADOWRUN_TEST_MODE: "0" }).testMode).toBe(false);
+    expect(loadConfig({ SHADOWRUN_TEST_MODE: "false" }).testMode).toBe(false);
+    expect(loadConfig({ SHADOWRUN_SCENARIO: "ambush" }).testMode).toBe(true);
+    expect(loadConfig({ SHADOWRUN_SCENARIO: "ambush", SHADOWRUN_TEST_MODE: "0" }).testMode).toBe(true);
   });
 
   it("plays a scenario in a folder of its own, which no campaign shares", () => {
@@ -47,6 +57,7 @@ describe("loadConfig", () => {
     [{ SHADOWRUN_CAMPAIGN: "../etc" }, /SHADOWRUN_CAMPAIGN may use/],
     [{ SHADOWRUN_SCENARIO: "../x" }, /SHADOWRUN_SCENARIO may use/],
     [{ SHADOWRUN_SCENARIO: "ambush", SHADOWRUN_CAMPAIGN: "default" }, /cannot both be set/],
+    [{ SHADOWRUN_TEST_MODE: "yes" }, /SHADOWRUN_TEST_MODE must be 1 or 0/],
     [{ PORT: "0" }, /PORT must be a port number/],
     [{ PORT: "eighty" }, /PORT must be a port number/],
     [{ WEB_PORT: "70000" }, /WEB_PORT must be a port number/],
