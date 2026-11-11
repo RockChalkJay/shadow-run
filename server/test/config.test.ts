@@ -15,7 +15,8 @@ describe("loadConfig", () => {
     expect(loadConfig({ SHADOWRUN_TEST_MODE: "0" }).testMode).toBe(false);
     expect(loadConfig({ SHADOWRUN_TEST_MODE: "false" }).testMode).toBe(false);
     expect(loadConfig({ SHADOWRUN_SCENARIO: "ambush" }).testMode).toBe(true);
-    expect(loadConfig({ SHADOWRUN_SCENARIO: "ambush", SHADOWRUN_TEST_MODE: "0" }).testMode).toBe(true);
+    // Said outright, the setting wins over the scenario's default.
+    expect(loadConfig({ SHADOWRUN_SCENARIO: "ambush", SHADOWRUN_TEST_MODE: "0" }).testMode).toBe(false);
   });
 
   it("plays a scenario in a folder of its own, which no campaign shares", () => {
