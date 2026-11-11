@@ -4,7 +4,10 @@ import {
   DealDamageInput,
   HealInput,
   JoinCombatInput,
+  NoteNpcInput,
+  NoteThreadInput,
   NpcRollInput,
+  RecallInput,
   StartCombatInput,
   RollRequestInput,
   type CharacterRef,
@@ -29,6 +32,7 @@ import {
   type Weapon,
 } from "@shadow-run/shared";
 import { z } from "zod";
+import { CampaignMemory, memoryBrief, npcLine, recallText } from "./campaignMemory.js";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
 import { attackDamage, burnEdge, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, screenRules, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
@@ -112,12 +116,17 @@ export interface SessionOptions {
   /** Settles a tie in the initiative order that nothing else does; a number in [0, 1). */
   flip?: Flip;
   rules?: Ruleset;
+  /** The campaign's notes, which the GM writes and reads; by default the files in the store's folder. */
+  memory?: CampaignMemory;
   /** For testing: every roll is held until it is kept, and a held roll can be rolled again. */
   testMode?: boolean;
   /** Longest a GM turn may take before it is stopped. */
   turnTimeoutMs?: number;
   now?: () => Date;
 }
+
+/** What the GM is told when the notes cannot be read or saved: not why, and not to speak of it. */
+const NOTES_UNAVAILABLE = "The campaign notes cannot be used just now, so carry on without them. Do not mention this to the players.";
 
 /** How many transcript entries a client receives when it connects. */
 const SNAPSHOT_ENTRIES = 100;
@@ -131,6 +140,7 @@ export class GameSession {
   private readonly roster: Roster;
   private readonly d6: D6;
   private readonly flip: Flip;
+  private readonly memory: CampaignMemory;
   /** The fight in progress, if any. */
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
@@ -184,6 +194,9 @@ export class GameSession {
     for (const sheet of this.sheets) this.edge.set(sheet.id, startSession(sheet.attributes.edge));
     this.rules = opts.rules;
     this.roster = new Roster(opts.party, saved ?? undefined, this.rules);
+    this.memory = opts.memory ?? new CampaignMemory(opts.store.dir);
+    // A named character the GM brings in is listed in the notes at once, so they can be found when they return even if the GM never writes them up.
+    this.roster.onNewNpc = (npc) => void this.memory.ensureNpc({ name: npc.name, stats: `Body ${npc.body}, Willpower ${npc.willpower}` }).catch((err) => this.memoryProblem(err));
     this.rolls = new RollManager(
       {
         knownCharacter: (id) => this.member(id) !== undefined,
@@ -767,7 +780,56 @@ export class GameSession {
       nextRound: () => whileCurrent(() => this.nextRound()),
       endCombat: () => whileCurrent(() => this.endCombat()),
       heal: (input) => whileCurrent(() => this.heal(input)),
+      noteNpc: (input) => whileCurrent(() => this.noteNpc(input)),
+      noteThread: (input) => whileCurrent(() => this.noteThread(input)),
+      recall: (input) => whileCurrent(() => this.recall(input)),
     };
+  }
+
+  /** The notes could not be read or saved: the table is told, and the GM is told only that this one did not go in. */
+  private async memoryProblem(err: unknown): Promise<void> {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`The campaign notes could not be used: ${message}`);
+    await this.record({ kind: "system", text: `The campaign notes could not be saved: ${message}` });
+  }
+
+  private async noteNpc(input: unknown): Promise<ToolReply> {
+    const parsed = NoteNpcInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
+    const { name, role, status, stats, notes } = parsed.data;
+    try {
+      await this.memory.setNpc({ name, ...(role !== undefined && { role }), ...(status !== undefined && { status }), ...(stats !== undefined && { stats }), ...(notes !== undefined && { notes }) });
+      const saved = (await this.memory.npcs()).find((n) => n.name.toLowerCase() === name.toLowerCase());
+      return { ok: true, text: `Noted. ${saved ? npcLine(saved) : name}` };
+    } catch (err) {
+      await this.memoryProblem(err);
+      return { ok: false, text: NOTES_UNAVAILABLE };
+    }
+  }
+
+  private async noteThread(input: unknown): Promise<ToolReply> {
+    const parsed = NoteThreadInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
+    const { title, status, summary } = parsed.data;
+    try {
+      await this.memory.setThread({ title, text: `${status.replace(/\.+$/, "")}. ${summary}` });
+      return { ok: true, text: `Noted the thread "${title}".` };
+    } catch (err) {
+      await this.memoryProblem(err);
+      return { ok: false, text: NOTES_UNAVAILABLE };
+    }
+  }
+
+  private async recall(input: unknown): Promise<ToolReply> {
+    const parsed = RecallInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
+    try {
+      const [threads, npcs, sessions] = await Promise.all([this.memory.threads(), this.memory.npcs(), this.memory.sessions()]);
+      return recallText(parsed.data, { threads, npcs, sessions });
+    } catch (err) {
+      await this.memoryProblem(err);
+      return { ok: false, text: NOTES_UNAVAILABLE };
+    }
   }
 
   /** Works out the patient and difficulty of a healing roll, or says why it cannot be asked for. */
@@ -1474,6 +1536,7 @@ export class GameSession {
         tools: this.toolsFor(turnId, signal),
         ...(this.claudeSessionId !== undefined && { resumeId: this.claudeSessionId }),
         recap: () => this.recapBeforeThisTurn(),
+        brief: () => memoryBrief(this.memory).catch((err) => (void this.memoryProblem(err), "")),
       });
       failure = reportedError;
     } catch (err) {
