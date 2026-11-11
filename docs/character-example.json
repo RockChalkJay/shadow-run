@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "razor",
+  "name": "Razor",
+  "player": "Sam",
+  "metatype": "ork",
+  "attributes": { "body": 6, "agility": 5, "reaction": 4, "strength": 5, "willpower": 3, "logic": 2, "intuition": 4, "charisma": 2, "edge": 3, "essence": 5.8, "magic": 3, "resonance": 0 },
+  "initiativeDice": 2,
+  "skills": { "firearms": 6, "closeCombat": 5, "athletics": 4, "perception": 3, "stealth": 2 },
+  "specializations": [{ "skill": "firearms", "name": "Pistols", "expertise": false }],
+  "knowledge": [
+    { "name": "Seattle gangs", "rating": 3, "type": "knowledge" },
+    { "name": "Or'zet", "rating": 2, "type": "language" }
+  ],
+  "personal": { "ethnicity": "Salish", "age": "29", "sex": "male", "height": "2.0 m", "weight": "110 kg", "reputation": 2, "heat": 1, "karma": 6, "totalKarma": 24, "misc": "Scar over the left eye" },
+  "qualities": [
+    { "name": "Ambidextrous", "type": "positive" },
+    { "name": "Distinctive Style", "rating": 1, "notes": "Easy to remember", "type": "negative" }
+  ],
+  "lifestyle": { "primary": "Low", "nuyen": 2300, "licenses": "Firearms, concealed carry", "fakeIds": ["Rating 3 SIN: Dale Hart"] },
+  "contacts": [
+    { "name": "Mama Rose", "loyalty": 3, "connection": 2, "notes": "Runs the noodle stand; hears everything" }
+  ],
+  "rangedWeapons": [
+    { "name": "Ares Predator VI", "damage": { "value": 8, "type": "physical" }, "mode": "SA", "ranges": { "close": 10, "near": 9, "far": 6, "extreme": 3 }, "ammo": "15(c)", "primary": true },
+    { "name": "Defiance EX Shocker", "damage": { "value": 7, "type": "stun" }, "mode": "SS", "ranges": { "close": 8, "near": 6 }, "ammo": "4(m)" }
+  ],
+  "meleeWeapons": [{ "name": "Combat axe", "damage": { "value": 7, "type": "physical" }, "close": 9, "primary": true }],
+  "armor": [{ "name": "Armor jacket", "rating": 12, "primary": true }, { "name": "Helmet", "rating": 1, "notes": "Adds to the jacket" }],
+  "augmentations": [{ "name": "Cybereyes", "rating": 2, "notes": "Low-light, flare compensation", "essence": 0.2 }],
+  "gear": [{ "name": "Commlink", "rating": 3 }, { "name": "Medkit", "rating": 3, "notes": "Half used" }],
+  "matrix": { "attack": 0, "sleaze": 1, "dataProcessing": 3, "firewall": 3, "devices": [{ "name": "Commlink", "rating": 3 }], "programs": ["Encryption"] },
+  "vehicles": [{ "name": "Americar", "handling": "4/4", "acceleration": "6", "speedInterval": "20", "topSpeed": "140", "body": "10", "armor": "6", "pilot": "1", "sensor": "2", "seats": "4" }],
+  "spells": [],
+  "abilities": [{ "name": "Killing Hands", "level": 1, "notes": "Adept power" }],
+  "notes": "Example character used by the tests and the docs."
+}

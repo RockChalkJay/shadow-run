@@ -75,7 +75,7 @@
     "Edge is gained only while a confrontation is under way, and the system counts a confrontation as a fight started with start_combat, which the GM uses for hacks and social contests too",
     "Edge gained by an opponent's side of a rating gap is dropped, because non-player characters do not use Edge",
     "a GM award is 1 Edge a time with a reason, counts toward the same limit of two gained a round, and goes only to a player character who is still active",
-    "the Attack Rating and Defense Rating are the GM's numbers, worked out from gear, since a sheet's gear is free text",
+    "the Attack Rating and Defense Rating are the GM's numbers, worked out from gear, since the rules do not read a sheet's gear or weapons: they are only told to the GM",
     "Edge can be given to an ally only in a confrontation, since that is the only time Edge is gained, and the ally must be on their feet and able to gain it",
     "healing a box with Edge works for an unconscious character, who has a second wind, but not a dead one; it is not a treatment, so overflow does not have to be healed first",
     "Edge added to initiative takes effect when the next round begins, which is where the book's 'next Initiative Cycle' lands in this game",

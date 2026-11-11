@@ -14,6 +14,7 @@
     "play": "npm run play --workspace server",
     "check:gm": "npm run check:gm --workspace server",
     "scenario:save": "npm run scenario:save --workspace server --",
+    "character:schema": "npm run character:schema --workspace server",
     "dev:web": "npm run dev --workspace web"
   }
 }
