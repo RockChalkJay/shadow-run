@@ -8,7 +8,8 @@
     "dev": "tsx src/index.ts",
     "play": "tsx scripts/play-cli.ts",
     "check:gm": "tsx scripts/check-gm.ts",
-    "scenario:save": "tsx scripts/save-scenario.ts"
+    "scenario:save": "tsx scripts/save-scenario.ts",
+    "character:schema": "tsx scripts/character-schema.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",

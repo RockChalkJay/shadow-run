@@ -1,0 +1,820 @@
+{
+  "title": "Shadow Run character sheet",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,32}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "metatype": {
+      "type": "string",
+      "enum": [
+        "human",
+        "elf",
+        "dwarf",
+        "ork",
+        "troll"
+      ]
+    },
+    "attributes": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "agility": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "reaction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "strength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "willpower": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "logic": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "intuition": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "charisma": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "edge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "essence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "magic": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "resonance": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "body",
+        "agility",
+        "reaction",
+        "strength",
+        "willpower",
+        "logic",
+        "intuition",
+        "charisma",
+        "edge",
+        "essence"
+      ],
+      "additionalProperties": false
+    },
+    "initiativeDice": {
+      "default": 1,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "skills": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "astral",
+          "athletics",
+          "biotech",
+          "closeCombat",
+          "con",
+          "conjuring",
+          "cracking",
+          "electronics",
+          "enchanting",
+          "engineering",
+          "exoticWeapons",
+          "firearms",
+          "influence",
+          "outdoors",
+          "perception",
+          "piloting",
+          "sorcery",
+          "stealth",
+          "tasking"
+        ]
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12
+      }
+    },
+    "specializations": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string",
+            "enum": [
+              "astral",
+              "athletics",
+              "biotech",
+              "closeCombat",
+              "con",
+              "conjuring",
+              "cracking",
+              "electronics",
+              "enchanting",
+              "engineering",
+              "exoticWeapons",
+              "firearms",
+              "influence",
+              "outdoors",
+              "perception",
+              "piloting",
+              "sorcery",
+              "stealth",
+              "tasking"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "expertise": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "skill",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "gear": {
+      "default": "",
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 4000
+        },
+        {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "qualities": {
+      "default": "",
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative"
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "notes": {
+      "default": "",
+      "type": "string",
+      "maxLength": 4000
+    },
+    "player": {
+      "type": "string",
+      "maxLength": 60
+    },
+    "personal": {
+      "type": "object",
+      "properties": {
+        "ethnicity": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "age": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "sex": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "height": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "weight": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "reputation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99
+        },
+        "heat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99
+        },
+        "karma": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "totalKarma": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "misc": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "additionalProperties": false
+    },
+    "knowledge": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "type": {
+            "default": "knowledge",
+            "type": "string",
+            "enum": [
+              "knowledge",
+              "language"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "rating"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "contacts": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "loyalty": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "connection": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "name",
+          "loyalty",
+          "connection"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lifestyle": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "nuyen": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "licenses": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "fakeIds": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "rangedWeapons": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "damage": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "physical",
+                  "stun"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "mode": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "ranges": {
+            "type": "object",
+            "properties": {
+              "close": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              },
+              "near": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              },
+              "far": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              },
+              "extreme": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              }
+            },
+            "additionalProperties": false
+          },
+          "ammo": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "damage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "meleeWeapons": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "damage": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 40
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "physical",
+                  "stun"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "close": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "damage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "armor": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "rating"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "augmentations": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "essence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 6
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "properties": {
+        "attack": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "sleaze": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "dataProcessing": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "firewall": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "devices": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "rating": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 99
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "programs": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vehicles": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "handling": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "acceleration": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "speedInterval": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "topSpeed": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "armor": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "pilot": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "sensor": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "seats": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "spells": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "spell",
+              "preparation",
+              "ritual",
+              "complexForm"
+            ]
+          },
+          "typeTarget": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "range": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "duration": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "drain": {
+            "type": "string",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "abilities": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "name",
+    "metatype",
+    "attributes"
+  ],
+  "additionalProperties": false
+}
