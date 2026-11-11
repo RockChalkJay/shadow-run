@@ -55,6 +55,12 @@ describe("the GM's notes", () => {
     await expect(t.file(MEMORY_FILES.npcs)).rejects.toThrow();
   });
 
+  it("note_npc does not take a player character's name", async () => {
+    const t = await table();
+    expect(await t.run(t.session, (ctx) => ctx.tools.noteNpc({ name: "kira", status: "Ally" }))).toEqual({ ok: false, text: "Kira is a player character. The notes list non-player characters only." });
+    await expect(t.file(MEMORY_FILES.npcs)).rejects.toThrow();
+  });
+
   it("recall reads back an NPC, everyone, the threads and the last session", async () => {
     const t = await table({ [MEMORY_FILES.bible]: BIBLE });
     await t.run(t.session, (ctx) => ctx.tools.noteNpc({ name: "Mr. Smith", role: "Fixer", status: "Ally", notes: "Pays on time" }));
@@ -135,6 +141,15 @@ describe("when the notes cannot be used", () => {
     expect(reply).toEqual({ ok: false, text: "The campaign notes cannot be used just now, so carry on without them. Do not mention this to the players." });
     expect(t.session.snapshot().transcript.at(-1)).toMatchObject({ kind: "system", text: expect.stringMatching(/npc-tracker\.md line 1: the table has no Name column/) });
     expect(await t.file(MEMORY_FILES.npcs)).toBe(bad);
+    warn.mockRestore();
+  });
+
+  it("tells the table once for each problem, however many times the notes are used", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const t = await table({ [MEMORY_FILES.npcs]: bad });
+    for (let i = 0; i < 3; i++) await t.run(t.session, (ctx) => ctx.tools.noteNpc({ name: `Ana ${i}` }));
+    await t.run(t.session, (ctx) => ctx.tools.recall({ what: "npcs" }));
+    expect(t.session.snapshot().transcript.filter((e) => e.kind === "system" && e.text.includes("npc-tracker.md"))).toHaveLength(1);
     warn.mockRestore();
   });
 

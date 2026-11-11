@@ -141,6 +141,8 @@ export class GameSession {
   private readonly d6: D6;
   private readonly flip: Flip;
   private readonly memory: CampaignMemory;
+  /** The problems with the notes the table has been told of. */
+  private readonly reportedMemoryProblems = new Set<string>();
   /** The fight in progress, if any. */
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
@@ -790,6 +792,9 @@ export class GameSession {
   private async memoryProblem(err: unknown): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`The campaign notes could not be used: ${message}`);
+    // Once for each problem, so a notes file that stays broken does not fill the story with the same line.
+    if (this.reportedMemoryProblems.has(message)) return;
+    this.reportedMemoryProblems.add(message);
     await this.record({ kind: "system", text: `The campaign notes could not be saved: ${message}` });
   }
 
@@ -797,6 +802,8 @@ export class GameSession {
     const parsed = NoteNpcInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
     const { name, role, status, stats, notes } = parsed.data;
+    const player = this.sheets.find((sheet) => sheet.name.toLowerCase() === name.toLowerCase());
+    if (player) return { ok: false, text: `${player.name} is a player character. The notes list non-player characters only.` };
     try {
       await this.memory.setNpc({ name, ...(role !== undefined && { role }), ...(status !== undefined && { status }), ...(stats !== undefined && { stats }), ...(notes !== undefined && { notes }) });
       const saved = (await this.memory.npcs()).find((n) => n.name.toLowerCase() === name.toLowerCase());
