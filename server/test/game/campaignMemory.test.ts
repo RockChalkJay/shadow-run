@@ -96,6 +96,14 @@ describe("the standing plot threads", () => {
     expect(parseThreads(after)).toHaveLength(2);
   });
 
+  it("keep a title that had ** in it readable, and find it again to update", () => {
+    const once = withThread(BIBLE, { title: "A **b** c", text: "x" });
+    expect(parseThreads(once).at(-1)).toMatchObject({ title: "A b c", text: "x" });
+    const twice = withThread(once, { title: "a **b** C", text: "y" });
+    expect(parseThreads(twice)).toHaveLength(3);
+    expect(parseThreads(twice).at(-1)?.text).toBe("y");
+  });
+
   it("are written on one line, whatever lines the text came in", () => {
     const after = withThread(BIBLE, { title: "Two\nlines", text: "a\n\nb   c" });
     expect(after).toContain("3. **Two lines** — a b c");
@@ -165,6 +173,19 @@ describe("the NPC tracker", () => {
     expect(parseNpcs(FILE, after)[0]?.notes).toBe("owes a|b");
   });
 
+  it("is the first table with a Name column, whatever other tables the file has", () => {
+    const file = "| Faction | Reach |\n| --- | --- |\n| Ares | global |\n\nPeople:\n\n| Name | Status |\n| --- | --- |\n| Ana | Ally |\n";
+    expect(parseNpcs(FILE, file).map((n) => n.name)).toEqual(["Ana"]);
+    const after = withNpc(FILE, file, { name: "Bo" });
+    expect(after.startsWith("| Faction | Reach |\n| --- | --- |\n| Ares | global |\n\nPeople:")).toBe(true);
+    expect(parseNpcs(FILE, after).map((n) => n.name)).toEqual(["Ana", "Bo"]);
+  });
+
+  it("does not trip over another table's odd rows", () => {
+    const file = "| A | B |\n| --- | --- |\n| 1 | 2 | 3 |\n\n| Name |\n| --- |\n| Ana |\n";
+    expect(parseNpcs(FILE, file).map((n) => n.name)).toEqual(["Ana"]);
+  });
+
   it("starts the table when the file has none, and the file when there is none", () => {
     const prose = withNpc(FILE, "# NPC Tracker\n\nNobody yet.\n", { name: "Ana" });
     expect(prose).toContain("Nobody yet.");
@@ -179,6 +200,7 @@ describe("the NPC tracker", () => {
     expect(() => withNpc(FILE, wide, { name: "Bo" })).toThrow(/npc-tracker\.md line 3 has 3 columns, and the table has 2/);
     expect(() => parseNpcs(FILE, wide)).toThrow(/line 3/);
     expect(() => withNpc(FILE, "| Who | Status |\n| --- | --- |\n| Ana | Ally |\n", { name: "Bo" })).toThrow(/npc-tracker\.md line 1: the table has no Name column/);
+    expect(() => withNpc(FILE, "Intro\n\n| Who | Status |\n| --- | --- |\n| Ana | Ally |\n", { name: "Bo" })).toThrow(/npc-tracker\.md line 3: the table has no Name column/);
   });
 });
 
@@ -212,6 +234,17 @@ describe("the session log", () => {
   it("does not count the rule between entries as part of one", () => {
     const ruled = "## Session 1 — 2026-11-12\n\nOne.\n\n---\n\n## Session 2 — 2026-11-19\n\nTwo.\n\n---\n";
     expect(parseSessions(ruled).map((s) => s.body)).toEqual(["One.", "Two."]);
+  });
+
+  it("cannot be given another session by what is written in it", () => {
+    const sneaky = withSession(LOG, { date: "2026-11-12", summary: "Before.\n## Session 9 — fake\nAfter.", rolls: "# Session 8", consequences: "ok\n## Session 7" });
+    expect(parseSessions(sneaky.text).map((s) => s.number)).toEqual([1]);
+    expect(sneaky.text).toContain("\\## Session 9 — fake");
+    expect(withSession(sneaky.text, { date: "2026-11-19", summary: "Next." }).number).toBe(2);
+  });
+
+  it("puts the date on one line", () => {
+    expect(withSession("", { date: "2026-11-12\n## Session 5", summary: "s" }).text).toContain("## Session 1 — 2026-11-12 ## Session 5\n");
   });
 
   it("will not use a number twice, since it only ever adds", () => {

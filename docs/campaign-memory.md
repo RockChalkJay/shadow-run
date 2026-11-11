@@ -10,7 +10,7 @@ A campaign remembers what happened between sessions in three markdown files in i
 
 ## The bible
 
-Threads are numbered items under a heading called `Standing Plot Threads`:
+Threads are numbered items under a heading called `Standing Plot Threads`, each with its title in bold (a numbered line without bold is left alone, and is not read as a thread):
 
 ```
 ## Standing Plot Threads
@@ -23,7 +23,7 @@ A thread with the same title (capitals do not matter) is rewritten in place and 
 
 ## The NPC tracker
 
-The first table in the file is the tracker. It needs a `Name` column; `Role/Affiliation`, `Status`, `Stats` and `Notes` are used when they are there, and any other column is kept. The status legend is the book-keeping you already use: Alive, Dead, Burned, Ally, Enemy or Unknown, and any words are kept. A `Stats` column ("PR 5, Body 5, Willpower 4") is added before `Notes` the first time one is needed, so that a returning character is rolled with the same numbers. A placeholder row such as `(none logged yet)` is replaced by the first real one. The table is written back tidy (one line to a row, `|` inside a cell escaped); the text around it is not touched.
+The first table in the file that has a `Name` column is the tracker (other tables are left alone). It needs that column; `Role/Affiliation`, `Status`, `Stats` and `Notes` are used when they are there, and any other column is kept. The status legend is the book-keeping you already use: Alive, Dead, Burned, Ally, Enemy or Unknown, and any words are kept. A `Stats` column ("PR 5, Body 5, Willpower 4") is added before `Notes` the first time one is needed, so that a returning character is rolled with the same numbers. A placeholder row such as `(none logged yet)` is replaced by the first real one. The table is written back tidy (one line to a row, `|` inside a cell escaped); the text around it is not touched.
 
 If the table cannot be rewritten safely (a row with more cells than the header, or no `Name` column), the game names the file and line, changes nothing, and waits for you to fix it.
 
@@ -41,7 +41,7 @@ What happened.
 **Consequences:** karma, nuyen, gear, condition, notoriety.
 ```
 
-The number is the next after the highest in the file, and a number is used once. A heading like `## Prior History` before the first session is kept and is not a session.
+The number is the next after the highest in the file, and a number is used once. A line in what is written that starts with `#` is escaped, so it cannot be read as another session. A heading like `## Prior History` before the first session is kept and is not a session.
 
 ## Scenarios
 

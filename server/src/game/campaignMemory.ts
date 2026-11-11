@@ -10,6 +10,8 @@ export const MEMORY_FILES = { bible: "campaign-bible.md", npcs: "npc-tracker.md"
 
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+/** A thread's title as it is written: on one line, and without the `**` that mark it out. */
+const titleText = (title: string) => oneLine(title).replace(/\*\*/g, "");
 
 // ---- standing plot threads --------------------------------------------------------------------------------------------------
 
@@ -56,7 +58,7 @@ export function parseThreads(text: string): Thread[] {
   return (section?.items ?? []).map(({ number, title, text: body }) => ({ number, title, text: body }));
 }
 
-const threadLine = (number: number, title: string, text: string) => `${number}. **${oneLine(title)}** — ${oneLine(text)}`;
+const threadLine = (number: number, title: string, text: string) => `${number}. **${titleText(title)}** — ${oneLine(text)}`;
 
 /** The file with a thread added, or the one of that title (any capitals) rewritten in place; nothing else in it changes. */
 export function withThread(file: string, thread: { title: string; text: string }): string {
@@ -66,7 +68,7 @@ export function withThread(file: string, thread: { title: string; text: string }
     const body = file.trim() === "" ? "# Campaign Bible\n" : file.replace(/\s*$/, "\n");
     return `${body}\n## Standing Plot Threads\n\n${threadLine(1, thread.title, thread.text)}\n`;
   }
-  const same = section.items.find((item) => item.title.toLowerCase() === oneLine(thread.title).toLowerCase());
+  const same = section.items.find((item) => item.title.toLowerCase() === titleText(thread.title).toLowerCase());
   if (same) {
     lines.splice(same.from, same.to - same.from + 1, threadLine(same.number, same.title, thread.text));
     return lines.join("\n");
@@ -116,20 +118,32 @@ const cells = (line: string) =>
 
 const isSeparator = (line: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
 
-/** The first table in the file: a header line, a separator line, and the rows after them. */
-function findTable(lines: readonly string[], file: string): Table | null {
-  const from = lines.findIndex((line, i) => line.trim().startsWith("|") && lines[i + 1] !== undefined && isSeparator(lines[i + 1]!));
-  if (from === -1) return null;
-  const header = cells(lines[from]!);
-  let to = from + 1;
-  const rows: string[][] = [];
-  while (to + 1 < lines.length && lines[to + 1]!.trim().startsWith("|")) {
-    to++;
-    const row = cells(lines[to]!);
-    if (row.length > header.length) throw new Error(`${file} line ${to + 1} has ${row.length} columns, and the table has ${header.length}; fix it by hand and try again`);
-    rows.push([...row, ...Array(header.length - row.length).fill("")]);
+/** The tables in the file: a header line, a separator line, and the rows after them. */
+function scanTables(lines: readonly string[]): Array<{ from: number; to: number; header: string[] }> {
+  const found: Array<{ from: number; to: number; header: string[] }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]!.trim().startsWith("|") || lines[i + 1] === undefined || !isSeparator(lines[i + 1]!)) continue;
+    let to = i + 1;
+    while (to + 1 < lines.length && lines[to + 1]!.trim().startsWith("|")) to++;
+    found.push({ from: i, to, header: cells(lines[i]!) });
+    i = to;
   }
-  return { from, to, header, rows };
+  return found;
+}
+
+/** The NPC table: the first table with a Name column. A file with tables and none like that is refused, with the line of the first. */
+function findTable(lines: readonly string[], file: string): Table | null {
+  const tables = scanTables(lines);
+  if (tables.length === 0) return null;
+  const table = tables.find((t) => column(t.header, "name") !== -1);
+  if (!table) throw new Error(`${file} line ${tables[0]!.from + 1}: the table has no Name column`);
+  const rows: string[][] = [];
+  for (let at = table.from + 2; at <= table.to; at++) {
+    const row = cells(lines[at]!);
+    if (row.length > table.header.length) throw new Error(`${file} line ${at + 1} has ${row.length} columns, and the table has ${table.header.length}; fix it by hand and try again`);
+    rows.push([...row, ...Array(table.header.length - row.length).fill("")]);
+  }
+  return { from: table.from, to: table.to, header: table.header, rows };
 }
 
 const column = (header: readonly string[], ...names: string[]) => header.findIndex((cell) => names.some((name) => cell.toLowerCase().startsWith(name)));
@@ -151,7 +165,6 @@ export function parseNpcs(file: string, text: string): Npc[] {
     stats: column(table.header, "stats"),
     notes: column(table.header, "notes"),
   };
-  if (at.name === -1) throw new Error(`${file} line ${table.from + 1}: the table has no Name column`);
   const get = (row: readonly string[], i: number) => (i === -1 ? "" : (row[i] ?? ""));
   return table.rows
     .filter((row) => !isPlaceholder(row))
@@ -173,7 +186,6 @@ export function withNpc(file: string, text: string, npc: Partial<Npc> & { name: 
     return `${body}\n${renderTable(NPC_HEADER, [npcRow(NPC_HEADER, npc)]).join("\n")}\n`;
   }
   let { header, rows } = table;
-  if (column(header, "name") === -1) throw new Error(`${file} line ${table.from + 1}: the table has no Name column`);
   if (column(header, "stats") === -1) {
     const before = column(header, "notes");
     const insertAt = before === -1 ? header.length : before;
@@ -250,17 +262,20 @@ export interface SessionEntry {
   consequences?: string;
 }
 
+/** Text for under a session's heading: a line that starts like a heading is escaped, so it cannot be read as another session. */
+const inBody = (text: string) => text.trim().replace(/^(#{1,6})(\s)/gm, "\\$1$2");
+
 /** The log with a session added at the end; the sessions already in it are never touched, and a number may be used once. */
 export function withSession(text: string, entry: SessionEntry): { text: string; number: number } {
   const existing = parseSessions(text);
   const number = entry.number ?? Math.max(0, ...existing.map((s) => s.number)) + 1;
   if (existing.some((s) => s.number === number)) throw new Error(`Session ${number} is already in the log, which is append-only`);
   const block = [
-    `## Session ${number} — ${entry.date}${entry.fictionDate ? ` (in fiction: ${oneLine(entry.fictionDate)})` : ""}`,
+    `## Session ${number} — ${oneLine(entry.date)}${entry.fictionDate ? ` (in fiction: ${oneLine(entry.fictionDate)})` : ""}`,
     "",
-    entry.summary.trim(),
-    ...(entry.rolls?.trim() ? ["", `**Key rolls:** ${entry.rolls.trim()}`] : []),
-    ...(entry.consequences?.trim() ? ["", `**Consequences:** ${entry.consequences.trim()}`] : []),
+    inBody(entry.summary),
+    ...(entry.rolls?.trim() ? ["", `**Key rolls:** ${inBody(entry.rolls)}`] : []),
+    ...(entry.consequences?.trim() ? ["", `**Consequences:** ${inBody(entry.consequences)}`] : []),
   ].join("\n");
   const start = text.trim() === "" ? "# Session Log\n\nAppend-only. Newest session at the bottom.\n\n---" : text.replace(/\s*$/, "");
   return { text: `${start}\n\n${block}\n`, number };
