@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCENARIO_NAME, scenarioCampaign } from "./game/scenario.js";
-import { parseDice } from "./rules/dice.js";
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
@@ -21,8 +20,6 @@ export interface Config {
   gmModel: string;
   gmEffort?: Effort;
   claudeBin?: string;
-  /** Faces for the first dice the table rolls, in order, for testing; random after they run out. */
-  dice?: number[];
 }
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -33,16 +30,6 @@ export function parseEffort(value: string | undefined): Effort | undefined {
     throw new Error(`SHADOWRUN_GM_EFFORT must be one of ${EFFORTS.join(", ")}, got "${value}"`);
   }
   return value as Effort | undefined;
-}
-
-/** The faces named by `SHADOWRUN_DICE`, or undefined when it is not set. */
-export function parseDiceSetting(value: string | undefined): number[] | undefined {
-  if (value === undefined) return undefined;
-  try {
-    return parseDice(value);
-  } catch (err) {
-    throw new Error(`SHADOWRUN_DICE: ${err instanceof Error ? err.message : err}`);
-  }
 }
 
 function port(name: string, value: string | undefined, fallback: number): number {
@@ -65,12 +52,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const gm = env.SHADOWRUN_GM ?? "claude";
   if (gm !== "claude" && gm !== "scripted") throw new Error(`SHADOWRUN_GM must be "claude" or "scripted", got "${gm}"`);
   const effort = parseEffort(env.SHADOWRUN_GM_EFFORT);
-  const dice = parseDiceSetting(env.SHADOWRUN_DICE);
   return {
     gm,
     gmModel: env.SHADOWRUN_GM_MODEL ?? "sonnet",
     ...(effort !== undefined && { gmEffort: effort }),
-    ...(dice !== undefined && { dice }),
     ...(env.CLAUDE_BIN !== undefined && { claudeBin: env.CLAUDE_BIN }),
     port: port("PORT", env.PORT, 8787),
     devPort: port("WEB_PORT", env.WEB_PORT, 5173),

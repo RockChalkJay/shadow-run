@@ -17,19 +17,6 @@ export function seededD6(seed: number): D6 {
   };
 }
 
-/** The given faces in order, then real random dice; `onRunOut` is called once, as the first random die is rolled. */
-export function scriptedThenRandom(faces: readonly number[], onRunOut?: () => void, after: D6 = cryptoD6): D6 {
-  let next = 0;
-  return () => {
-    if (next < faces.length) return faces[next++]!;
-    if (next === faces.length) {
-      next++;
-      onRunOut?.();
-    }
-    return after();
-  };
-}
-
 /** A d6 that returns the given faces in order and throws once they run out. */
 export function scriptedD6(faces: readonly number[]): D6 {
   let next = 0;
