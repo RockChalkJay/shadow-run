@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { demoParty } from "./game/demoParty.js";
+import { loadScenario } from "./game/scenario.js";
 import { GameSession } from "./game/session.js";
 import { CampaignStore } from "./game/store.js";
 import { ClaudeGmDriver } from "./gm/claudeDriver.js";
@@ -11,10 +12,15 @@ import type { GmDriver } from "./gm/driver.js";
 import { demoScript, ScriptedGmDriver } from "./gm/scriptedDriver.js";
 import { Hub } from "./net/hub.js";
 import { allowedOrigins } from "./net/origin.js";
+import { scriptedThenRandom } from "./rules/index.js";
 
 async function main() {
   const config = loadConfig();
   const store = new CampaignStore(join(config.campaignsDir, config.campaign));
+  if (config.scenario) {
+    await loadScenario({ scenariosDir: config.scenariosDir, name: config.scenario, into: store.dir });
+    console.log(`Started from the scenario "${config.scenario}" in a fresh copy, ${store.dir}. Nothing played here is kept for next time.`);
+  }
 
   const { party, created } = await store.loadOrCreateParty(demoParty);
   if (created) {
@@ -42,7 +48,11 @@ async function main() {
   }
 
   const hub = new Hub({ port: config.port, allowedOrigins: (port) => allowedOrigins(port, config.devPort) });
-  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event) });
+  const d6 =
+    config.dice &&
+    scriptedThenRandom(config.dice, () => console.log("The scripted dice have run out; the dice are random from here."));
+  if (config.dice) console.log(`The first ${config.dice.length} dice are scripted: ${config.dice.join(" ")}. Testing only.`);
+  const session = await GameSession.create({ store, party, driver, emit: (event) => hub.broadcast(event), ...(d6 && { d6 }) });
   hub.attach(session);
   const port = await hub.listen();
   session.resume();

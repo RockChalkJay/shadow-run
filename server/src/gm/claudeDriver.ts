@@ -73,7 +73,9 @@ export class ClaudeGmDriver implements GmDriver {
   async takeTurn(input: GmTurnInput, ctx: GmTurnContext): Promise<void> {
     this.current = ctx;
     try {
-      await this.attempt(input.text, ctx, ctx.resumeId);
+      // With no session to resume, such as a game started from a saved scenario, the GM is told what has happened so far.
+      const recap = ctx.resumeId === undefined ? ctx.recap() : "";
+      await this.attempt(recap ? startOverPrompt(recap, input.text) : input.text, ctx, ctx.resumeId);
     } finally {
       this.current = null;
     }

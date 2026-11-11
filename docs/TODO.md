@@ -8,7 +8,7 @@ Bugs found while testing and ideas for future functionality. Add an item under t
 
 ## Ideas / Future functionality
 
-- [ ] **Test mode for manual testing** — a configuration where every character's attributes and gear can be set, so scenarios can be set up and turns replayed over and over for extensive manual testing. A scenario is a saved snapshot that can be reloaded. The dice are scriptable. Open question: whether the GM should be scripted too.
+- [ ] **Test mode for manual testing** — a configuration where every character's attributes and gear can be set, so scenarios can be set up and turns replayed over and over for extensive manual testing. A scenario is a saved snapshot that can be reloaded. The dice are scriptable. Open question: whether the GM should be scripted too. Done so far: scriptable dice (`SHADOWRUN_DICE`) and saved scenarios (`SHADOWRUN_SCENARIO`, `npm run scenario:save`). Left: editing characters in the browser, and a GM whose replies you script.
 - [ ] **Restart a campaign and rewind to any point** — restart a campaign from the beginning. Eventually go back to any time in the campaign so any decision can be retried.
 
 ## Done

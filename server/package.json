@@ -7,7 +7,8 @@
     "typecheck": "tsc -p .",
     "dev": "tsx src/index.ts",
     "play": "tsx scripts/play-cli.ts",
-    "check:gm": "tsx scripts/check-gm.ts"
+    "check:gm": "tsx scripts/check-gm.ts",
+    "scenario:save": "tsx scripts/save-scenario.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
