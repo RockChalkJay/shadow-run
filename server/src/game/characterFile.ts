@@ -54,9 +54,9 @@ export interface ImportResult {
 }
 
 /**
- * Imports character files into a folder's `characters/`, all or none: if any file is wrong, two files name one character, or a
- * character is already there without `force`, nothing is written and every problem is listed. With `check` the files are
- * checked and nothing is written either way.
+ * Imports character files into a folder's `characters/`. If any file is wrong, two files name one character, or a character is
+ * already there without `force`, nothing is written and every problem is listed. With `check` the files are checked and nothing
+ * is written either way. The write itself is one file at a time, so a disk that fails partway leaves the files before it.
  */
 export async function importCharacters(opts: { sources: ImportSource[]; dir: string; force?: boolean; check?: boolean }): Promise<ImportResult> {
   const problems: string[] = [];
@@ -78,9 +78,10 @@ export async function importCharacters(opts: { sources: ImportSource[]; dir: str
 
   const store = new CampaignStore(opts.dir);
   if (!opts.force && sheets.length > 0) {
-    const there = (await store.loadParty().catch(() => null)) ?? [];
+    // By file name, so a character whose file is there but not a valid sheet is not replaced without `force` either.
+    const there = await readdir(join(opts.dir, "characters")).catch(() => [] as string[]);
     for (const sheet of sheets) {
-      if (there.some((existing) => existing.id === sheet.id)) problems.push(`${sheet.id} is already in ${opts.dir}; import over it with --force`);
+      if (there.includes(`${sheet.id}.json`)) problems.push(`${sheet.id} is already in ${opts.dir}; import over it with --force`);
     }
   }
   if (problems.length > 0 || opts.check) return { sheets, problems, written: false };

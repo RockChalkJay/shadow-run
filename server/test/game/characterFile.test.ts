@@ -118,6 +118,16 @@ describe("importing characters", () => {
     expect((await new CampaignStore(dir).loadParty())?.[0]?.name).toBe("Razor Two");
   });
 
+  it("will not replace a file that is there but is not a valid sheet, unless told to", async () => {
+    const dir = await folder();
+    await mkdir(join(dir, "characters"));
+    await writeFile(join(dir, "characters", "razor.json"), "{ half edited");
+    const refused = await importCharacters({ sources: [{ name: "razor.json", text: await example() }], dir });
+    expect(refused).toMatchObject({ written: false, problems: [expect.stringContaining("razor is already in")] });
+    expect(await readFile(join(dir, "characters", "razor.json"), "utf8")).toBe("{ half edited");
+    expect((await importCharacters({ sources: [{ name: "razor.json", text: await example() }], dir, force: true })).written).toBe(true);
+  });
+
   it("leaves the other characters in the folder alone", async () => {
     const dir = await campaignWith([...demoParty]);
     await importCharacters({ sources: [{ name: "razor.json", text: await example() }], dir });

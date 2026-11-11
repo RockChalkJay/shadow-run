@@ -50,7 +50,7 @@ npm run character:import -- kira.json --check              # check the files, wr
 
 An export is the same file the campaign keeps in `characters/`, read and written back in full. `--derived` adds a `derived` block for a person to read: Initiative, Composure, Judge Intentions, Memory, Lift/Carry, Defense Rating, unarmed Attack Rating and the three condition-monitor sizes, worked out from the attributes and the primary armor (core rulebook, printed pp. 67-68). Movement and the Matrix and astral initiatives are not worked out, because their formulas were not checked against the book. An import ignores `derived`, and the server does not accept it in a `characters/` file, so import such a file with the command rather than copying it in.
 
-An import is all or none: if any file is not valid JSON or not a valid sheet, two files name one character, or a character is already there without `--force`, nothing is written and every problem is listed. It will not write into the `scenario-<name>` folder a scenario run plays in, which is wiped on every start; import into the scenario with `--scenario`.
+An import writes nothing if it finds a problem first: if any file is not valid JSON or not a valid sheet, two files name one character, or a character's file is already there without `--force` (even if that file is not a valid sheet), every problem is listed and nothing is written. The files are then written one at a time. It will not write into the `scenario-<name>` folder a scenario run plays in, which is wiped on every start; import into the scenario with `--scenario`.
 
 ## What is not stored
 
