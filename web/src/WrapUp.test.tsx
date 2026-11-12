@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { SavedNote, SessionPill, WrapUpDialog, wrapUpBlock } from "./WrapUp";
+import { SessionOver, SessionPill, WrapUpDialog, wrapUpBlock } from "./WrapUp";
 
 const pill = (session: { number: number; phase: "idle" | "open" | "wrapping" | "ended" }, block: string | null = null, onAsk = vi.fn()) =>
   render(<SessionPill session={session} block={block} expanded={false} onAsk={onAsk} buttonRef={createRef()} />);
@@ -14,7 +14,7 @@ describe("wrapUpBlock", () => {
     expect(wrapUpBlock(true, idle, 0)).toBeNull();
     expect(wrapUpBlock(false, { phase: "thinking", turnId: 1 }, 2)).toMatch(/Reconnecting/);
     expect(wrapUpBlock(true, { phase: "waiting_for_rolls" }, 2)).toBe("Answer or skip the waiting rolls first.");
-    expect(wrapUpBlock(true, { phase: "thinking", turnId: 1 }, 0)).toBe("The GM is in the middle of a turn. Save when it has finished.");
+    expect(wrapUpBlock(true, { phase: "thinking", turnId: 1 }, 0)).toBe("The GM is in the middle of a turn. Wrap up when it has finished.");
   });
 });
 
@@ -27,11 +27,11 @@ describe("the session pill", () => {
   it("is a button that asks to wrap up while the session is open", async () => {
     const onAsk = vi.fn();
     pill({ number: 2, phase: "open" }, null, onAsk);
-    const button = screen.getByRole("button", { name: "Save progress" });
+    const button = screen.getByRole("button", { name: "Session 2" });
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
     expect(button.getAttribute("aria-disabled")).toBe("false");
     expect(button.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getByRole("tooltip").textContent).toBe("Save the story so far in the campaign log and on the sheets.");
+    expect(screen.getByRole("tooltip").textContent).toBe("Wrap up this session.");
     await userEvent.click(button);
     expect(onAsk).toHaveBeenCalledTimes(1);
   });
@@ -39,7 +39,7 @@ describe("the session pill", () => {
   it("stays focusable but does nothing when wrap-up is blocked, and gives the reason on focus and on click", async () => {
     const onAsk = vi.fn();
     pill({ number: 2, phase: "open" }, "Answer or skip the waiting rolls first.", onAsk);
-    const button = screen.getByRole("button", { name: "Save progress" });
+    const button = screen.getByRole("button", { name: "Session 2" });
     expect(button.getAttribute("aria-disabled")).toBe("true");
     expect(button.hasAttribute("disabled")).toBe(false);
     const reason = screen.getByRole("tooltip");
@@ -59,13 +59,13 @@ describe("the session pill", () => {
 
   it("says when the question is open", () => {
     render(<SessionPill session={{ number: 2, phase: "open" }} block={null} expanded onAsk={vi.fn()} buttonRef={createRef()} />);
-    expect(screen.getByRole("button", { name: "Save progress" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Session 2" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("shows the reason on a click even where a click does not focus a button", () => {
     const ref = createRef<HTMLButtonElement>();
     render(<SessionPill session={{ number: 2, phase: "open" }} block="Answer or skip the waiting rolls first." expanded={false} onAsk={vi.fn()} buttonRef={ref} />);
-    fireEvent.click(screen.getByRole("button", { name: "Save progress" }));
+    fireEvent.click(screen.getByRole("button", { name: "Session 2" }));
     expect(document.activeElement).toBe(ref.current);
     expect(screen.getByRole("tooltip").className).toContain("open");
   });
@@ -79,17 +79,17 @@ describe("the session pill", () => {
 
   it("is plain text, not a tab stop, while wrapping up and when over", () => {
     const { rerender } = pill({ number: 2, phase: "wrapping" });
-    expect(screen.getByText("Saving…").tagName).toBe("SPAN");
+    expect(screen.getByText("Session 2 · wrapping up…").tagName).toBe("SPAN");
     expect(screen.queryByRole("button")).toBeNull();
     rerender(<SessionPill session={{ number: 2, phase: "ended" }} block={null} expanded={false} onAsk={vi.fn()} buttonRef={createRef()} />);
-    expect(screen.getByText("Saved").tagName).toBe("SPAN");
+    expect(screen.getByText("Session 2 · over").tagName).toBe("SPAN");
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
 
 describe("the wrap-up question", () => {
   const open = (over: Partial<Parameters<typeof WrapUpDialog>[0]> = {}) => {
-    const props = { error: null, connected: true, onConfirm: vi.fn(), onClose: vi.fn(), ...over };
+    const props = { number: 2, error: null, connected: true, onConfirm: vi.fn(), onClose: vi.fn(), ...over };
     const view = render(
       <div>
         <button>Behind</button>
@@ -101,11 +101,10 @@ describe("the wrap-up question", () => {
 
   it("is a labelled modal dialog that starts on the safe answer", () => {
     open();
-    const dialog = screen.getByRole("dialog", { name: "SAVE PROGRESS?" });
+    const dialog = screen.getByRole("dialog", { name: "WRAP UP SESSION 2?" });
     expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep playing" }));
     expect(screen.getByText(/copy of the old sheet kept first/)).toBeTruthy();
-    expect(screen.getByText(/Everyone's Edge refreshes when it does/)).toBeTruthy();
   });
 
   it("makes the page behind inert while it is open, and gives it back and returns focus after", () => {
@@ -124,7 +123,7 @@ describe("the wrap-up question", () => {
     const view = (show: boolean) => (
       <div>
         <button>Behind</button>
-        {show && <WrapUpDialog error={null} connected onConfirm={vi.fn()} onClose={vi.fn()} />}
+        {show && <WrapUpDialog number={2} error={null} connected onConfirm={vi.fn()} onClose={vi.fn()} />}
       </div>
     );
     const { rerender } = render(view(true));
@@ -133,21 +132,21 @@ describe("the wrap-up question", () => {
     expect(screen.getByText("Behind").hasAttribute("inert")).toBe(false);
   });
 
-  it("closes on Escape and on Cancel, and saves only on Save progress", async () => {
+  it("closes on Escape and on Keep playing, and wraps up only on Wrap up", async () => {
     const a = open();
     await userEvent.keyboard("{Escape}");
     expect(a.onClose).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(screen.getByRole("button", { name: "Keep playing" }));
     expect(a.onClose).toHaveBeenCalledTimes(2);
     expect(a.onConfirm).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Save progress" }));
+    await userEvent.click(screen.getByRole("button", { name: "Wrap up" }));
     expect(a.onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Tab inside, both ways round", async () => {
     open();
-    const wrap = screen.getByRole("button", { name: "Save progress" });
-    const keep = screen.getByRole("button", { name: "Cancel" });
+    const wrap = screen.getByRole("button", { name: "Wrap up" });
+    const keep = screen.getByRole("button", { name: "Keep playing" });
     expect(document.activeElement).toBe(keep);
     await userEvent.tab();
     expect(document.activeElement).toBe(wrap);
@@ -157,28 +156,28 @@ describe("the wrap-up question", () => {
     expect(document.activeElement).toBe(wrap);
   });
 
-  it("waits for the server after Save progress, and shows a refusal and lets the table try again", async () => {
-    const props = { error: null as string | null, connected: true, onConfirm: vi.fn(), onClose: vi.fn() };
+  it("waits for the server after Wrap up, and shows a refusal and lets the table try again", async () => {
+    const props = { number: 2, error: null as string | null, connected: true, onConfirm: vi.fn(), onClose: vi.fn() };
     const { rerender } = render(<WrapUpDialog {...props} />);
-    await userEvent.click(screen.getByRole("button", { name: "Save progress" }));
-    expect(screen.getByRole("button", { name: "Save progress" }).hasAttribute("disabled")).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "Wrap up" }));
+    expect(screen.getByRole("button", { name: "Wrap up" }).hasAttribute("disabled")).toBe(true);
     rerender(<WrapUpDialog {...props} error="Answer or skip the waiting rolls first." />);
     expect(screen.getByRole("alert").textContent).toBe("Answer or skip the waiting rolls first.");
-    expect(screen.getByRole("button", { name: "Save progress" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Wrap up" }).hasAttribute("disabled")).toBe(false);
   });
 
-  it("does not show an old error that was there before Save progress was clicked", () => {
+  it("does not show an old error that was there before Wrap up was clicked", () => {
     open({ error: "Some earlier problem" });
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("cannot save while offline", () => {
+  it("cannot wrap up while offline", () => {
     open({ connected: false });
-    expect(screen.getByRole("button", { name: "Save progress" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Wrap up" }).hasAttribute("disabled")).toBe(true);
   });
 });
 
-describe("the saved note", () => {
+describe("the session-over card", () => {
   const end = (over: object = {}): Extract<TranscriptEntry, { kind: "session" }> => ({
     id: 9, ts: "t", kind: "session", event: "end", number: 2,
     summary: "The case changed hands.",
@@ -186,55 +185,69 @@ describe("the saved note", () => {
     changes: [{ name: "Kira", changes: ["Karma 0 → 4", "Nuyen 0 → 3,000"] }, { name: "Doc", changes: ["History: run 1 added"] }],
     ...over,
   });
-  const note = (marker = end(), mission = "", onMission = vi.fn()) => render(<SavedNote marker={marker} mission={mission} onMission={onMission} />);
 
-  it("shows the write-up, the date in the story and what changed on each sheet", () => {
-    note();
-    expect(screen.getByRole("region", { name: "Progress saved" })).toBeTruthy();
+  it("shows the write-up, the in-story date and what changed on each sheet", () => {
+    render(<SessionOver number={2} marker={end()} connected onBegin={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "Session over" })).toBeTruthy();
     expect(screen.getByText("The case changed hands.")).toBeTruthy();
-    expect(screen.getByText("In the story: Tue 14 Mar 2081, night")).toBeTruthy();
+    expect(screen.getByText(/Tue 14 Mar 2081, night · written to the campaign log as Session 2/)).toBeTruthy();
     expect(screen.getByText("Kira").nextSibling?.textContent).toBe("Karma 0 → 4 · Nuyen 0 → 3,000");
     expect(screen.getByText("Doc")).toBeTruthy();
   });
 
   it("leaves out the changes list when no sheet changed", () => {
-    note(end({ changes: [] }));
+    render(<SessionOver number={2} marker={end({ changes: [] })} connected onBegin={vi.fn()} />);
     expect(screen.queryByText("WHAT CHANGED")).toBeNull();
   });
 
-  it("still shows the note when the end marker is missing or bare", () => {
-    note(end({ summary: undefined, fictionDate: undefined, changes: undefined }));
-    expect(screen.getByText("PROGRESS SAVED")).toBeTruthy();
+  it("keeps the new line out of the mission when it is sent with Ctrl+Enter", () => {
+    render(<SessionOver number={2} marker={end()} connected onBegin={vi.fn()} />);
+    const box = screen.getByLabelText(/What should session 3 be about/);
+    expect(fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(box, { key: "Enter" })).toBe(true);
+  });
+
+  it("still lets the table go on when the end marker is missing or bare", () => {
+    render(<SessionOver number={2} marker={end({ summary: undefined, fictionDate: undefined, changes: undefined })} connected onBegin={vi.fn()} />);
+    expect(screen.getByText("SESSION 2 IS OVER")).toBeTruthy();
     expect(screen.queryByText("WHAT CHANGED")).toBeNull();
-    expect(screen.queryByText(/In the story/)).toBeNull();
-    expect(screen.getByLabelText(/What should the story pick up with/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Begin session 3" })).toBeTruthy();
   });
 
-  it("has no begin button: the story carries on when someone types", () => {
-    note();
-    expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText(/Type to carry on from here/)).toBeTruthy();
+  it("begins the next session with the trimmed mission, or none", async () => {
+    const onBegin = vi.fn();
+    render(<SessionOver number={2} marker={end()} connected onBegin={onBegin} />);
+    await userEvent.click(screen.getByRole("button", { name: "Begin session 3" }));
+    expect(onBegin).toHaveBeenLastCalledWith("");
+    await userEvent.type(screen.getByLabelText(/What should session 3 be about/), "  Follow Mr. Smith.  ");
+    await userEvent.click(screen.getByRole("button", { name: "Begin session 3" }));
+    expect(onBegin).toHaveBeenLastCalledWith("Follow Mr. Smith.");
   });
 
-  it("hands what is typed in the note up as it is typed, limited and counted", async () => {
-    const onMission = vi.fn();
-    note(end(), "", onMission);
-    const box = screen.getByLabelText(/What should the story pick up with/) as HTMLTextAreaElement;
+  it("begins on Ctrl+Enter and Cmd+Enter but not on plain Enter", async () => {
+    const onBegin = vi.fn();
+    render(<SessionOver number={2} marker={end()} connected onBegin={onBegin} />);
+    await userEvent.type(screen.getByLabelText(/What should session 3 be about/), "Heist{Enter}");
+    expect(onBegin).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(onBegin).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
+    expect(onBegin).toHaveBeenCalledTimes(2);
+  });
+
+  it("limits the mission and counts it", async () => {
+    render(<SessionOver number={2} marker={end()} connected onBegin={vi.fn()} />);
+    const box = screen.getByLabelText(/What should session 3 be about/) as HTMLTextAreaElement;
     expect(box.maxLength).toBe(1000);
-    await userEvent.type(box, "Hi");
-    expect(onMission).toHaveBeenLastCalledWith("i");
+    await userEvent.type(box, "abc");
+    expect(screen.getByText("3 / 1000")).toBeTruthy();
   });
 
-  it("shows the note's text and its count", () => {
-    note(end(), "Follow Mr. Smith.");
-    expect((screen.getByLabelText(/What should the story pick up with/) as HTMLTextAreaElement).value).toBe("Follow Mr. Smith.");
-    expect(screen.getByText("17 / 1000")).toBeTruthy();
-  });
-
-  it("does not begin anything on Ctrl+Enter", async () => {
-    const onMission = vi.fn();
-    note(end(), "", onMission);
-    const box = screen.getByLabelText(/What should the story pick up with/);
-    expect(fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })).toBe(true);
+  it("cannot begin while offline, by button or by keyboard", async () => {
+    const onBegin = vi.fn();
+    render(<SessionOver number={2} marker={end()} connected={false} onBegin={onBegin} />);
+    expect(screen.getByRole("button", { name: "Begin session 3" }).hasAttribute("disabled")).toBe(true);
+    await userEvent.type(screen.getByLabelText(/What should session 3 be about/), "x{Control>}{Enter}{/Control}");
+    expect(onBegin).not.toHaveBeenCalled();
   });
 });

@@ -148,7 +148,7 @@ const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pa
 /** What the GM is told when the table wraps the session up, with the system's own account of the session to write from. */
 function wrapUpText(digest: string): string {
   return [
-    "WRAP UP THE SESSION. The table is saving the story so far and will most likely carry straight on, so do not close, resolve or move the scene on, and do not start anything new: leave it exactly where it stands, and say nothing to the players. Call end_session once with the write-up, and end its summary with where the scene stands (who is where, and what is in progress). Update the notes with note_npc and note_thread first if anything changed that they do not yet say. Never mention the log or the notes to the players.",
+    "WRAP UP THE SESSION. The table is stopping here. Close the scene in a short beat that leaves the characters somewhere they can safely stop, with no new danger, and do not start anything new. Then call end_session once with the write-up. Update the notes with note_npc and note_thread first if anything changed that they do not yet say. Never mention the log or the notes to the players.",
     digest ? `What the system recorded this session, to write from:\n${digest}` : "",
   ]
     .filter(Boolean)
@@ -183,8 +183,6 @@ export class GameSession {
   private mission: string | undefined;
   /** The GM's opening turn is being taken, so the session has begun though `opened` is not set yet. */
   private opening = false;
-  /** The next session is being set up, so a second message does not set it up again. */
-  private beginning: Promise<void> | null = null;
   /** The wrap-up turn the GM is in, and the log entry it wrote in it. */
   private wrapping: { logged?: WrittenUp } | null = null;
   /** The fight in progress, if any. */
@@ -367,18 +365,6 @@ export class GameSession {
    */
   async start(mission?: string): Promise<Ack> {
     if (!this.ended && (this.opened || this.openRequested || this.opening)) return { ok: false, error: "The session has already begun." };
-    await this.beginSession(mission);
-    this.schedule();
-    return { ok: true };
-  }
-
-  /** Begins a session once, however many callers ask while it is being set up: the first call's mission is the one used. */
-  private beginSession(mission?: string): Promise<void> {
-    this.beginning ??= this.openSession(mission).finally(() => { this.beginning = null; });
-    return this.beginning;
-  }
-
-  private async openSession(mission?: string): Promise<void> {
     const number = await this.nextSessionNumber();
     if (this.ended) this.refreshEdge();
     this.sessionNumber = number;
@@ -390,6 +376,8 @@ export class GameSession {
     await this.record({ kind: "session", event: "start", number, ...(this.mission !== undefined && { mission: this.mission }) });
     await this.persist();
     this.announceSession();
+    this.schedule();
+    return { ok: true };
   }
 
   /** The number for the session about to begin: the next after the highest in the campaign's log. */
@@ -434,13 +422,9 @@ export class GameSession {
     this.schedule();
   }
 
-  /**
-   * What a player says to the GM. After a session was saved (wrapped up) the story simply carries on: speaking begins the next session,
-   * and the GM opens it by picking the scene up and answering what was said. `mission` is the table's note for that session, used only then.
-   */
-  async say(characterId: string | undefined, text: string, mission?: string): Promise<Ack> {
+  async say(characterId: string | undefined, text: string): Promise<Ack> {
+    if (this.ended) return { ok: false, error: "The session is over. Begin the next one first." };
     if (characterId !== undefined && !this.member(characterId)) return { ok: false, error: `There is no character "${characterId}" at the table.` };
-    if (this.ended) await this.beginSession(mission);
     const name = this.nameOf(characterId);
     await this.record({ kind: "say", ...(characterId !== undefined && { characterId }), name, text });
     this.held.push({ ...(characterId !== undefined && { characterId }), name, text });
@@ -1708,7 +1692,7 @@ export class GameSession {
   private turnInput(turn: Turn, digest = ""): GmTurnInput {
     const parts: string[] = [];
     if (!this.opened) {
-      parts.push(this.sessionNumber === 1 ? "BEGIN SESSION. Open the first scene." : `BEGIN SESSION ${this.sessionNumber}. Carry on from your notes, picking the scene up where it stood.`);
+      parts.push(this.sessionNumber === 1 ? "BEGIN SESSION. Open the first scene." : `BEGIN SESSION ${this.sessionNumber}. Open the first scene of this session, carrying on from your notes.`);
       if (this.mission) parts.push(`What the table wants this session to be about: ${this.mission}`);
     }
     if (this.combat) parts.push(formatCombatStatus(this.combat, this.statusOf));

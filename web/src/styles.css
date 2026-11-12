@@ -141,12 +141,13 @@ h4.spend{margin:14px 0 0;font:800 11px var(--hud);letter-spacing:.15em;color:var
 .use .wide{margin-top:6px;width:100%}
 .nde{margin:12px 0;padding:10px 12px;border:1px solid #7a2a45;border-radius:10px;background:#1a1014}.nde .problem{margin:0 0 8px}.nde small{display:block;color:var(--dim);font-size:13px;margin-top:6px}.nde .dng{margin-left:0}
 
-/* ---- sessions: the header pill, the divider in the story, the save question and the saved note ---- */
+/* ---- sessions: the header pill, the divider in the story, the wrap-up question and the session-over card ---- */
 .pill.session{color:var(--cyan);border-color:#2e4f6b}
 .pill.btn{font:inherit;font-size:13px;cursor:pointer;background:transparent;color:var(--cyan);border:1px solid #2e4f6b;border-radius:99px;padding:2px 10px;box-shadow:none}
 .pill.btn:hover:not([aria-disabled="true"]){background:#0f3d4d;border-color:var(--cyan);box-shadow:0 0 10px #38e1ff44}
 .pill.btn[aria-expanded="true"]{background:#0f3d4d;border-color:var(--cyan)}
 .pill.btn[aria-disabled="true"]{opacity:.55;cursor:default}
+.pill.btn .caret{margin-left:6px;opacity:.7}
 .tip.pilltip{cursor:default}
 .tip.pilltip .tip-text{left:auto;right:0}
 .divider{display:flex;align-items:center;gap:14px;color:var(--dim);font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin:10px 0 2px;max-width:640px}
