@@ -141,8 +141,8 @@ export type TranscriptEntry =
   | (EntryBase & { kind: "edge_burn"; characterId: string; name: string; burn: "smackdown" | "not_dead_yet"; lost: number; rank: number })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
-  /** A session began, or was wrapped up with the summary the GM wrote for the log. */
-  | (EntryBase & { kind: "session"; event: "start" | "end"; number: number; mission?: string; summary?: string })
+  /** A session began, or was wrapped up with the summary the GM wrote for the log, the date in the story, and what it changed for each character. */
+  | (EntryBase & { kind: "session"; event: "start" | "end"; number: number; mission?: string; summary?: string; fictionDate?: string; changes?: Array<{ name: string; changes: string[] }> })
   | (EntryBase & { kind: "system"; text: string });
 
 /** Where the table is in its sessions: not begun, in play, being wrapped up, or over until the next begins. */

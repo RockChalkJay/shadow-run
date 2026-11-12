@@ -134,6 +134,14 @@ export interface SessionOptions {
   now?: () => Date;
 }
 
+/** A session as the GM wrote it up: its number in the log, its summary and date, and what it changed for each character. */
+interface WrittenUp {
+  number: number;
+  summary: string;
+  fictionDate?: string;
+  changes?: Array<{ name: string; changes: string[] }>;
+}
+
 /** The date as the table writes it in the session log, in the server's own time zone. */
 const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -176,7 +184,7 @@ export class GameSession {
   /** The GM's opening turn is being taken, so the session has begun though `opened` is not set yet. */
   private opening = false;
   /** The wrap-up turn the GM is in, and the log entry it wrote in it. */
-  private wrapping: { logged?: { number: number; summary: string } } | null = null;
+  private wrapping: { logged?: WrittenUp } | null = null;
   /** The fight in progress, if any. */
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
@@ -972,8 +980,8 @@ export class GameSession {
       return { ok: false, text: "The session log cannot be written just now. Do not mention this to the players." };
     }
     // The log is the commit: from here the session is over, whether or not the sheets can be saved.
-    this.wrapping.logged = { number, summary };
-    await this.applyRewards(planned, date, number);
+    this.wrapping.logged = { number, summary, ...(fictionDate !== undefined && { fictionDate }) };
+    this.wrapping.logged.changes = await this.applyRewards(planned, date, number);
     return { ok: true, text: `Session ${number} is written up and over. Give the players one last line if you have not already, and nothing more.` };
   }
 
@@ -1010,8 +1018,9 @@ export class GameSession {
   }
 
   /** Saves the sheets, each after a dated copy of the old one, makes them the sheets in play, tells the GM's driver and tells the table what changed. */
-  private async applyRewards(planned: Array<{ sheet: CharacterSheet; changes: string[] }>, date: string, number: number): Promise<void> {
+  private async applyRewards(planned: Array<{ sheet: CharacterSheet; changes: string[] }>, date: string, number: number): Promise<Array<{ name: string; changes: string[] }>> {
     const saved: CharacterSheet[] = [];
+    const told: Array<{ name: string; changes: string[] }> = [];
     for (const { sheet, changes } of planned) {
       try {
         await saveSheetWithCopy({ dir: this.opts.store.dir, sheet, date });
@@ -1020,12 +1029,14 @@ export class GameSession {
         continue;
       }
       saved.push(sheet);
+      told.push({ name: sheet.name, changes });
       await this.record({ kind: "system", text: `After session ${number}, ${describeChanges(sheet.name, changes)}` });
     }
-    if (saved.length === 0) return;
+    if (saved.length === 0) return told;
     const played = withBurnedEdge(saved, this.burned);
     this.sheets = this.sheets.map((sheet) => played.find((p) => p.id === sheet.id) ?? sheet);
     await this.opts.driver.refreshParty?.(this.sheets).catch((err) => console.warn(`The GM could not be given the updated sheets: ${err instanceof Error ? err.message : err}`));
+    return told;
   }
 
   private async recall(input: unknown): Promise<ToolReply> {
@@ -1624,7 +1635,7 @@ export class GameSession {
    * The GM's wrap-up turn is over. If it wrote the session up, the session ends: a marker goes in the story, and the GM's conversation is
    * let go, so the next session starts a new one from the notes. If it did not, the session stays open and the table is told.
    */
-  private async finishWrapUp(logged: { number: number; summary: string } | undefined): Promise<void> {
+  private async finishWrapUp(logged: WrittenUp | undefined): Promise<void> {
     if (!logged) {
       await this.record({ kind: "system", text: "The GM did not write up the session, so it is still open. Wrap up again to try once more." });
       this.announceSession();
@@ -1633,7 +1644,7 @@ export class GameSession {
     this.sessionNumber = logged.number;
     this.ended = true;
     this.claudeSessionId = undefined;
-    await this.record({ kind: "session", event: "end", number: logged.number, summary: logged.summary });
+    await this.record({ kind: "session", event: "end", number: logged.number, summary: logged.summary, ...(logged.fictionDate !== undefined && { fictionDate: logged.fictionDate }), ...(logged.changes && logged.changes.length > 0 && { changes: logged.changes }) });
     this.announceSession();
   }
 

@@ -456,6 +456,27 @@ describe("what a run does for the characters", () => {
     expect(copy.history).toBeUndefined();
   });
 
+  it("puts the date in the story and what changed for each character on the session's end marker, for the screen to show", async () => {
+    const t = await wrapped(REWARDS);
+    const marker = t.session.snapshot().transcript.find((e) => e.kind === "session" && e.event === "end");
+    expect(marker).toMatchObject({ kind: "session", event: "end", number: 1, summary: WRITE_UP.summary, fictionDate: WRITE_UP.fictionDate });
+    expect(marker?.kind === "session" && marker.changes).toEqual([
+      { name: "Kira", changes: ["Karma 0 → 4", "Nuyen 0 → 3,000", "Gear is written as text, so + Medkit is in the history only", "Contact Mr. Smith added (Loyalty 2, Connection 3)", "History: run 1 added"] },
+      { name: "Doc", changes: ["History: run 1 added"] },
+    ]);
+  });
+
+  it("still tells each character's run on the marker when the GM gave no rewards", async () => {
+    const t = await table(goodGm());
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    const marker = t.session.snapshot().transcript.find((e) => e.kind === "session" && e.event === "end");
+    expect(marker?.kind === "session" && marker.fictionDate).toBe(WRITE_UP.fictionDate);
+    expect(marker?.kind === "session" && marker.changes).toBeTruthy();
+  });
+
   it("gives a character the run in their history even when the GM gave them no reward, from the session's summary", async () => {
     const t = await wrapped(REWARDS);
     const doc = await sheetFile(t.store.dir, "doc");
