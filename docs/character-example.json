@@ -33,5 +33,9 @@
   "vehicles": [{ "name": "Americar", "handling": "4/4", "acceleration": "6", "speedInterval": "20", "topSpeed": "140", "body": "10", "armor": "6", "pilot": "1", "sensor": "2", "seats": "4" }],
   "spells": [],
   "abilities": [{ "name": "Killing Hands", "level": 1, "notes": "Adept power" }],
+  "backstory": "Raised in Tacoma, joined the Eastside Kings at fourteen and left them at nineteen after a job went wrong.",
+  "history": [
+    { "run": 1, "date": "2081-03-14", "campaign": "night-one", "summary": "Carried a case across the sprawl for Mr. Smith.", "goal": "Deliver the case unopened.", "with": ["Doc"], "consequences": "Paid 3,000 nuyen; earned 4 Karma." }
+  ],
   "notes": "Example character used by the tests and the docs."
 }

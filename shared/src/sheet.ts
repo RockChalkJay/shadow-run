@@ -198,6 +198,25 @@ export type Spell = z.infer<typeof Spell>;
 export const Ability = z.strictObject({ name: label, level: wholeNumber.optional(), notes: note.optional() });
 export type Ability = z.infer<typeof Ability>;
 
+/** The most runs a sheet's history may list. */
+const MAX_HISTORY = 100;
+
+/** One run the character has been on: what it was, when, who was in it, and what came of it. */
+export const RunEntry = z.strictObject({
+  /** Counts from 1, in the order the runs were played. */
+  run: z.number().int().min(1).max(999),
+  /** When it ended, as the table writes dates (YYYY-MM-DD). */
+  date: z.string().trim().min(1).max(40),
+  /** The campaign it was played in. */
+  campaign: z.string().max(60).optional(),
+  summary: z.string().trim().min(1).max(600),
+  goal: note.optional(),
+  /** The other characters in it. */
+  with: z.array(label).max(12).optional(),
+  consequences: note.optional(),
+});
+export type RunEntry = z.infer<typeof RunEntry>;
+
 /** The lists on a sheet that mark one entry as primary. */
 const PRIMARY_LISTS = ["rangedWeapons", "meleeWeapons", "armor"] as const;
 
@@ -235,6 +254,10 @@ export const CharacterSheet = z.strictObject({
   vehicles: entries(Vehicle).optional(),
   spells: entries(Spell).optional(),
   abilities: entries(Ability).optional(),
+  /** Who the character was before the game began. Written by the owner; the game never changes it. */
+  backstory: z.string().max(4000).optional(),
+  /** The runs the character has been on, oldest first. */
+  history: z.array(RunEntry).max(MAX_HISTORY).optional(),
 }).superRefine((sheet, ctx) => {
   for (const list of PRIMARY_LISTS) {
     if ((sheet[list] ?? []).filter((entry) => entry.primary).length > 1) {

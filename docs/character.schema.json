@@ -807,6 +807,61 @@
         ],
         "additionalProperties": false
       }
+    },
+    "backstory": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "history": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999
+          },
+          "date": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "campaign": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "with": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "consequences": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "run",
+          "date",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

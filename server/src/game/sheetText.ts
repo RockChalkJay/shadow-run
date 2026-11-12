@@ -6,6 +6,10 @@ const cap = (word: string) => word[0]!.toUpperCase() + word.slice(1);
 /** The most entries of one list the GM is told about; the rest are counted, so a long list cannot swamp the prompt. */
 const MAX_TOLD = 15;
 
+/** The longest backstory the GM is told, and how many of the latest runs. */
+const MAX_BACKSTORY = 600;
+const RECENT_RUNS = 5;
+
 /** The longest a note is when the GM is told it, so a sheet full of long notes cannot swamp the prompt. */
 const MAX_NOTE = 120;
 const short = (text: string) => (text.length > MAX_NOTE ? `${text.slice(0, MAX_NOTE - 1)}…` : text);
@@ -75,6 +79,8 @@ export function describeCharacter(sheet: CharacterSheet): string {
   parts.push(...listed("Vehicles", sheet.vehicles, (v) => `${v.name} (${[["Handling", v.handling], ["Speed", v.topSpeed], ["Body", v.body], ["Armor", v.armor], ["Pilot", v.pilot], ["Seats", v.seats]].filter(([, value]) => value).map(([stat, value]) => `${stat} ${value}`).join(", ")})`));
   parts.push(...listed("Contacts", sheet.contacts, (c) => `${c.name} (Loyalty ${c.loyalty}, Connection ${c.connection})${c.notes ? `: ${short(c.notes)}` : ""}`));
   parts.push(...lifestyle(sheet));
+  parts.push(...backstory(sheet));
+  parts.push(...history(sheet));
   if (sheet.notes) parts.push(sheet.notes);
   return parts.join(" ");
 }
@@ -107,4 +113,20 @@ function lifestyle(sheet: CharacterSheet): string[] {
   if (!l) return [];
   const told = [l.primary ? `${l.primary} lifestyle` : "", l.nuyen !== undefined ? `${l.nuyen} nuyen` : "", l.licenses ? `licenses: ${short(l.licenses)}` : "", l.fakeIds && l.fakeIds.length > 0 ? `fake IDs: ${l.fakeIds.slice(0, MAX_TOLD).map(short).join("; ")}` : ""].filter(Boolean);
   return told.length > 0 ? [sentence(`Money and IDs: ${told.join(", ")}`)] : [];
+}
+
+function backstory(sheet: CharacterSheet): string[] {
+  const text = sheet.backstory?.trim();
+  if (!text) return [];
+  return [sentence(`Backstory: ${text.length > MAX_BACKSTORY ? `${text.slice(0, MAX_BACKSTORY - 1)}…` : text}`)];
+}
+
+/** The latest runs, oldest first, one line each, and how many earlier ones there are. */
+function history(sheet: CharacterSheet): string[] {
+  // By run number, so the latest are the highest numbers whatever order the list was written in.
+  const runs = [...(sheet.history ?? [])].sort((a, b) => a.run - b.run);
+  if (runs.length === 0) return [];
+  const latest = runs.slice(-RECENT_RUNS).map((r) => `Run ${r.run}${r.campaign ? ` in ${r.campaign}` : ""} (${r.date}): ${short(r.summary)}${r.consequences ? ` Came of it: ${short(r.consequences)}` : ""}`);
+  const earlier = runs.length > RECENT_RUNS ? `; ${runs.length - RECENT_RUNS} earlier ${runs.length - RECENT_RUNS === 1 ? "run" : "runs"} not shown` : "";
+  return [sentence(`Previous runs: ${latest.join("; ")}${earlier}`)];
 }

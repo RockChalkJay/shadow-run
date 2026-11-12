@@ -15,7 +15,7 @@ const [kira] = demoParty as [(typeof demoParty)[0]];
 describe("a character sheet with the record sheet's sections", () => {
   it("accepts the documented example, which uses every section", async () => {
     const sheet = CharacterSheet.parse(await example());
-    for (const key of ["personal", "knowledge", "contacts", "lifestyle", "rangedWeapons", "meleeWeapons", "armor", "augmentations", "matrix", "vehicles", "spells", "abilities"] as const) {
+    for (const key of ["personal", "knowledge", "contacts", "lifestyle", "rangedWeapons", "meleeWeapons", "armor", "augmentations", "matrix", "vehicles", "spells", "abilities", "backstory", "history"] as const) {
       expect(sheet[key], key).toBeDefined();
     }
     expect(Array.isArray(sheet.gear) && Array.isArray(sheet.qualities)).toBe(true);
@@ -46,6 +46,12 @@ describe("a character sheet with the record sheet's sections", () => {
     ["a knowledge skill with no rating", { knowledge: [{ name: "X" }] }],
     ["more entries than a list may hold", { abilities: Array.from({ length: 51 }, (_, i) => ({ name: `Power ${i}` })) }],
     ["an unknown section", { pets: [] }],
+    ["a run with no summary", { history: [{ run: 1, date: "2081-03-14" }] }],
+    ["a run numbered 0", { history: [{ run: 0, date: "2081-03-14", summary: "s" }] }],
+    ["a misspelled field in a run", { history: [{ run: 1, date: "2081-03-14", summary: "s", sumary: "x" }] }],
+    ["a run with 13 companions", { history: [{ run: 1, date: "d", summary: "s", with: Array.from({ length: 13 }, (_, i) => `P${i}`) }] }],
+    ["more runs than a history may hold", { history: Array.from({ length: 101 }, (_, i) => ({ run: i + 1, date: "d", summary: "s" })) }],
+    ["a backstory past 4,000 characters", { backstory: "x".repeat(4001) }],
   ])("refuses %s", async (_what, over) => {
     expect(CharacterSheet.safeParse({ ...(await example()), ...over }).success).toBe(false);
   });
@@ -57,6 +63,52 @@ describe("a character sheet with the record sheet's sections", () => {
     const twice = CharacterSheet.safeParse({ ...base, [list]: [{ ...entry, primary: true }, { ...entry, name: "Another", primary: true }] });
     expect(twice.success).toBe(false);
     expect(JSON.stringify(twice.error?.issues)).toContain("only one entry may be primary");
+  });
+});
+
+describe("a character's backstory and history", () => {
+  it("are optional, so a sheet without them is as valid as before", async () => {
+    const { backstory: _b, history: _h, ...without } = await example();
+    const parsed = CharacterSheet.parse(without);
+    expect(parsed).not.toHaveProperty("backstory");
+    expect(parsed).not.toHaveProperty("history");
+  });
+
+  it("tell the GM the backstory, cut to 600 characters", async () => {
+    const sheet = CharacterSheet.parse(await example());
+    expect(describeCharacter(sheet)).toContain("Backstory: Raised in Tacoma, joined the Eastside Kings at fourteen and left them at nineteen after a job went wrong.");
+    const long = describeCharacter({ ...sheet, backstory: "x".repeat(900) });
+    expect(long).toContain(`Backstory: ${"x".repeat(599)}…`);
+    expect(long).not.toContain("x".repeat(601));
+  });
+
+  it("tell the GM the previous runs, oldest first, and say so when there are earlier ones", async () => {
+    const sheet = CharacterSheet.parse(await example());
+    expect(describeCharacter(sheet)).toContain("Previous runs: Run 1 in night-one (2081-03-14): Carried a case across the sprawl for Mr. Smith. Came of it: Paid 3,000 nuyen; earned 4 Karma.");
+    const runs = Array.from({ length: 8 }, (_, i) => ({ run: i + 1, date: `2081-04-0${i + 1}`, summary: `Run ${i + 1} went on.` }));
+    const text = describeCharacter({ ...sheet, history: runs });
+    expect(text).toContain("Run 4 (2081-04-04): Run 4 went on.; Run 5 (2081-04-05): Run 5 went on.; Run 6 (2081-04-06): Run 6 went on.; Run 7 (2081-04-07): Run 7 went on.; Run 8 (2081-04-08): Run 8 went on.; 3 earlier runs not shown.");
+    expect(text).not.toContain("Run 3 (");
+    expect(describeCharacter({ ...sheet, history: runs.slice(0, 6) })).toContain("1 earlier run not shown.");
+  });
+
+  it("are told in order of run number, so the latest are the highest numbers whatever order they were written in", async () => {
+    const sheet = CharacterSheet.parse(await example());
+    const runs = [6, 1, 8, 3, 7, 2, 5, 4].map((n) => ({ run: n, date: `d${n}`, summary: `Run ${n}.` }));
+    const text = describeCharacter({ ...sheet, history: runs });
+    expect(text).toContain("Run 4 (d4): Run 4.; Run 5 (d5): Run 5.; Run 6 (d6): Run 6.; Run 7 (d7): Run 7.; Run 8 (d8): Run 8.; 3 earlier runs not shown.");
+  });
+
+  it("are left out of what the GM is told when empty", async () => {
+    const text = describeCharacter({ ...CharacterSheet.parse(await example()), backstory: "  ", history: [] });
+    expect(text).not.toContain("Backstory");
+    expect(text).not.toContain("Previous runs");
+  });
+
+  it("trim a long run summary the way every other note is trimmed", async () => {
+    const text = describeCharacter({ ...CharacterSheet.parse(await example()), history: [{ run: 1, date: "d", summary: "x".repeat(500), consequences: "y".repeat(300) }] });
+    expect(text).not.toContain("x".repeat(121));
+    expect(text).not.toContain("y".repeat(121));
   });
 });
 
