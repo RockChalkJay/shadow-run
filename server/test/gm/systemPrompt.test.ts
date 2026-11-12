@@ -173,4 +173,16 @@ describe("the GM's system prompt", () => {
   it("is the same every time it is built", () => {
     expect(buildSystemPrompt({ party })).toBe(prompt);
   });
+
+  it("tells the GM about the campaign's notes: when to write them, to look before bringing someone back, to treat the memory message as true, and to keep it all from the players", () => {
+    expect(prompt).toContain("# Campaign memory");
+    for (const tool of ["note_npc", "note_thread", "recall"]) expect(prompt).toContain(tool);
+    expect(prompt).toContain("PR 3, Body 3, Willpower 4");
+    expect(prompt).toContain('A message that begins "CAMPAIGN MEMORY"');
+    expect(prompt).toContain("never tell the players about them");
+    expect(prompt).toContain("Nameless grunts are not noted.");
+    // It comes before the privacy rule and the premise, so the premise stays last.
+    expect(prompt.indexOf("# Campaign memory")).toBeLessThan(prompt.indexOf("# Privacy"));
+    expect(prompt.indexOf("# Privacy")).toBeLessThan(prompt.indexOf("# This session"));
+  });
 });

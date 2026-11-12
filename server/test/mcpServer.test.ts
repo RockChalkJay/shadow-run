@@ -25,6 +25,9 @@ describe("GM MCP server", () => {
       endCombat: async () => (calls.push({ tool: "end_combat", input: {} }), reply),
       dealDamage: async (input) => (calls.push({ tool: "deal_damage", input }), reply),
       heal: async (input) => (calls.push({ tool: "heal", input }), reply),
+      noteNpc: async (input) => (calls.push({ tool: "note_npc", input }), reply),
+      noteThread: async (input) => (calls.push({ tool: "note_thread", input }), reply),
+      recall: async (input) => (calls.push({ tool: "recall", input }), reply),
     });
     client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(
@@ -88,6 +91,29 @@ describe("GM MCP server", () => {
     const outcome = await client.callTool({ name: "request_roll", arguments: bad }).catch((e) => e);
     expect(outcome instanceof Error || outcome.isError === true).toBe(true);
     expect(calls).toHaveLength(0);
+  });
+
+  it("passes the campaign notes tools to the session, and rejects a note with no name before it gets there", async () => {
+    await client.callTool({ name: "note_npc", arguments: { name: "Mr. Smith", status: "Ally" } });
+    await client.callTool({ name: "note_thread", arguments: { title: "Gang Beef", status: "active", summary: "Heating up." } });
+    await client.callTool({ name: "recall", arguments: { what: "npc", name: "Mr. Smith" } });
+    expect(calls).toEqual([
+      { tool: "note_npc", input: { name: "Mr. Smith", status: "Ally" } },
+      { tool: "note_thread", input: { title: "Gang Beef", status: "active", summary: "Heating up." } },
+      { tool: "recall", input: { what: "npc", name: "Mr. Smith" } },
+    ]);
+    const bad = await client.callTool({ name: "note_npc", arguments: { role: "Fixer" } }).catch((e) => e);
+    expect(bad instanceof Error || bad.isError === true).toBe(true);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("tells the GM what the notes are for and not to mention them", async () => {
+    const { tools } = await client.listTools();
+    const text = (name: string) => tools.find((t) => t.name === name)?.description ?? "";
+    expect(text("note_npc")).toMatch(/Never mention the notes to the players/);
+    expect(text("note_npc")).toMatch(/PR 3, Body 3, Willpower 4/);
+    expect(text("note_thread")).toMatch(/same title updates the same thread/);
+    expect(text("recall")).toMatch(/before you bring someone or something back/);
   });
 
   it("passes an NPC roll to the session", async () => {

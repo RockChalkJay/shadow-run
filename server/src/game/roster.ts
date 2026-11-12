@@ -53,6 +53,9 @@ export class Roster {
   private readonly pcs = new Map<string, Entry>();
   private readonly npcs = new Map<string, Entry>();
 
+  /** Told when a non-player character who is not a grunt joins the table for the first time, with the numbers they were given. */
+  onNewNpc: ((npc: { id: string; name: string; body: number; willpower: number }) => void) | undefined;
+
   constructor(
     party: readonly CharacterSheet[],
     saved: SavedRoster | OlderSavedRoster | undefined,
@@ -153,6 +156,7 @@ export class Roster {
       return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
     }
     this.npcs.set(ref.id, { name: ref.name, body: ref.body, willpower: ref.willpower, monitor: newMonitor(ref.body, ref.willpower, this.rules), treated: new Set() });
+    this.onNewNpc?.({ id: ref.id, name: ref.name, body: ref.body, willpower: ref.willpower });
     return { ok: true, kind: "npc", id: ref.id, name: ref.name, body: ref.body };
   }
 
