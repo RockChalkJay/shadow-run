@@ -62,6 +62,14 @@ describe("the session pill", () => {
     expect(screen.getByRole("button", { name: "Session 2" }).getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("shows the reason on a click even where a click does not focus a button", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<SessionPill session={{ number: 2, phase: "open" }} block="Answer or skip the waiting rolls first." expanded={false} onAsk={vi.fn()} buttonRef={ref} />);
+    fireEvent.click(screen.getByRole("button", { name: "Session 2" }));
+    expect(document.activeElement).toBe(ref.current);
+    expect(screen.getByRole("tooltip").className).toContain("open");
+  });
+
   it("has one tab stop, not two", async () => {
     pill({ number: 2, phase: "open" });
     await userEvent.tab();

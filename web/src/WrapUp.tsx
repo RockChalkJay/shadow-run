@@ -1,11 +1,8 @@
-import type { GmStatus, SessionInfo, TranscriptEntry } from "@shadow-run/shared";
+import { MAX_MISSION, type GmStatus, type SessionInfo, type TranscriptEntry } from "@shadow-run/shared";
 import { useEffect, useId, useRef, useState } from "react";
 import { Tip } from "./Rail";
 
 export type SessionMarker = Extract<TranscriptEntry, { kind: "session" }>;
-
-/** The most a mission seed may be; the server enforces the same limit. */
-export const MAX_MISSION = 1000;
 
 /** Why the wrap-up control cannot be used right now, or null when it can. */
 export function wrapUpBlock(connected: boolean, gm: GmStatus, waitingRolls: number): string | null {
@@ -40,7 +37,7 @@ export function SessionPill({ session, block, expanded, onAsk, buttonRef }: {
         aria-expanded={expanded}
         aria-disabled={block !== null}
         aria-describedby={tipId}
-        onClick={() => { if (block === null) onAsk(); }}
+        onClick={() => { if (block === null) onAsk(); else buttonRef.current?.focus(); }}
       >
         Session {session.number}
         <svg className="caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>

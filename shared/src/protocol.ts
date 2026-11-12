@@ -9,13 +9,16 @@ export type { Status };
 /** Longest message one player can say to the GM. */
 export const MAX_SAY = 2000;
 
+/** Longest note about what a session should be about. */
+export const MAX_MISSION = 1000;
+
 /** Edge spent before a roll: 4 for Edge dice (the Edge attribute added to the pool, 6s exploding), 5 to make 2s count as glitches on the opposing roll. */
 const RollEdge = z.enum(["dice", "widen_glitch"]);
 
 /** What the browser (or any client) may send. Everything is validated on the server. */
 export const ClientMessage = z.discriminatedUnion("type", [
   /** Begin a session, or the next one after the last was wrapped up; `mission` is what the table wants it to be about. */
-  z.object({ type: z.literal("session.start"), mission: z.string().trim().max(1000).optional() }),
+  z.object({ type: z.literal("session.start"), mission: z.string().trim().max(MAX_MISSION).optional() }),
   /** Stop for now: the GM closes the scene and writes up the session in the campaign's notes. */
   z.object({ type: z.literal("session.wrapup") }),
   z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
