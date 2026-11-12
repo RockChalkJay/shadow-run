@@ -25,9 +25,11 @@ const NO_TURN: ToolReply = { ok: false, text: "No turn is in progress, so nothin
 /** What the CLI says when asked to resume a session it no longer has. */
 const LOST_SESSION = /no conversation found/i;
 
-function startOverPrompt(recap: string, text: string): string {
+/** What a GM starting a conversation is told before the turn itself: what the campaign's notes hold, then the story so far. */
+function startOverPrompt(brief: string, recap: string, text: string): string {
   return [
-    "Your memory of the earlier part of this session was lost, so the conversation so far is below, as the table saw it. Carry on from it and do not repeat it.",
+    brief,
+    recap ? "Your memory of the earlier part of this session was lost, so the conversation so far is below, as the table saw it. Carry on from it and do not repeat it." : "",
     recap ? `--- The conversation so far ---\n${recap}\n--- End of the conversation so far ---` : "",
     text,
   ]
@@ -62,6 +64,9 @@ export class ClaudeGmDriver implements GmDriver {
       nextRound: () => driver?.current?.tools.nextRound() ?? Promise.resolve(NO_TURN),
       endCombat: () => driver?.current?.tools.endCombat() ?? Promise.resolve(NO_TURN),
       heal: (input) => driver?.current?.tools.heal(input) ?? Promise.resolve(NO_TURN),
+      noteNpc: (input) => driver?.current?.tools.noteNpc(input) ?? Promise.resolve(NO_TURN),
+      noteThread: (input) => driver?.current?.tools.noteThread(input) ?? Promise.resolve(NO_TURN),
+      recall: (input) => driver?.current?.tools.recall(input) ?? Promise.resolve(NO_TURN),
     });
     const files = { systemPrompt: join(cwd, "system-prompt.md"), mcpConfig: join(cwd, "mcp.json") };
     await writePrivateFile(files.systemPrompt, buildSystemPrompt(opts));
@@ -73,9 +78,11 @@ export class ClaudeGmDriver implements GmDriver {
   async takeTurn(input: GmTurnInput, ctx: GmTurnContext): Promise<void> {
     this.current = ctx;
     try {
-      // With no session to resume, such as a game started from a saved scenario, the GM is told what has happened so far.
-      const recap = ctx.resumeId === undefined ? ctx.recap() : "";
-      await this.attempt(recap ? startOverPrompt(recap, input.text) : input.text, ctx, ctx.resumeId);
+      // With no session to resume, such as a game started from a saved scenario, the GM is told what its notes hold and what has happened so far.
+      const fresh = ctx.resumeId === undefined;
+      const brief = fresh ? ((await ctx.brief?.()) ?? "") : "";
+      const recap = fresh ? ctx.recap() : "";
+      await this.attempt(brief || recap ? startOverPrompt(brief, recap, input.text) : input.text, ctx, ctx.resumeId);
     } finally {
       this.current = null;
     }
@@ -112,7 +119,7 @@ export class ClaudeGmDriver implements GmDriver {
       // A session the CLI no longer has is not the table's problem: start over from what was said.
       if (sessionId !== undefined && !sawSession && LOST_SESSION.test(failure) && !ctx.signal.aborted) {
         console.warn("The GM's earlier session is gone; starting a new one from the transcript.");
-        return this.attempt(startOverPrompt(ctx.recap(), prompt), ctx, undefined);
+        return this.attempt(startOverPrompt((await ctx.brief?.()) ?? "", ctx.recap(), prompt), ctx, undefined);
       }
       throw new Error(failure);
     }

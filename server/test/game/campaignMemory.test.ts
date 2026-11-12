@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CampaignMemory, MEMORY_FILES, parseNpcs, parseSessions, parseThreads, withNpc, withSession, withThread } from "../../src/game/campaignMemory.js";
+import { CampaignMemory, formatBrief, MEMORY_FILES, npcLine, parseNpcs, parseSessions, parseThreads, recallText, withNpc, withSession, withThread, type LoggedSession, type Npc, type Thread } from "../../src/game/campaignMemory.js";
 
 // Files laid out the way a table keeps them by hand.
 const BIBLE = `# Campaign Bible
@@ -168,6 +168,10 @@ describe("the NPC tracker", () => {
     expect(withNpc(FILE, once, { name: "Ana", stats: "PR 2" }).match(/Stats/g)).toHaveLength(1);
   });
 
+  it("reads a table whose separator row uses single dashes, as the markdown rules allow", () => {
+    expect(parseNpcs(FILE, "| Name | Status |\n|-|:-:|\n| Ana | Ally |\n").map((n) => n.name)).toEqual(["Ana"]);
+  });
+
   it("keeps a pipe inside a cell", () => {
     const after = withNpc(FILE, NPCS, { name: "Ana", notes: "owes a|b" });
     expect(parseNpcs(FILE, after)[0]?.notes).toBe("owes a|b");
@@ -328,5 +332,86 @@ describe("a campaign's memory on disk", () => {
     expect(await readFile(join(other, MEMORY_FILES.npcs), "utf8")).toBe(bad);
     // A refused change does not block the next one.
     await expect(new CampaignMemory(other).logSession({ date: "2026-11-12", summary: "s" })).resolves.toBe(1);
+  });
+});
+
+describe("ensuring an NPC is in the tracker", () => {
+  it("adds one who is not there, and leaves one who is exactly as they are, without rewriting the file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sr-memory-"));
+    const odd = "| Name | Status | Notes |\n|:--|:-:|---|\n| Ana |  Ally  | keeps   spacing |\n";
+    await writeFile(join(dir, MEMORY_FILES.npcs), odd);
+    const memory = new CampaignMemory(dir);
+    await memory.ensureNpc({ name: "ana", stats: "PR 9" });
+    expect(await readFile(join(dir, MEMORY_FILES.npcs), "utf8")).toBe(odd);
+    await memory.ensureNpc({ name: "Bo", stats: "Body 3, Willpower 3" });
+    expect((await memory.npcs()).map((n) => [n.name, n.stats])).toEqual([["Ana", ""], ["Bo", "Body 3, Willpower 3"]]);
+  });
+});
+
+describe("what a new conversation is told", () => {
+  const thread = (n: number, text = "active. Going on."): Thread => ({ number: n, title: `Thread ${n}`, text });
+  const npc = (n: number): Npc => ({ name: `NPC ${n}`, role: "Fixer", status: "Ally", stats: "PR 3", notes: "never in the brief" });
+  const session: LoggedSession = { number: 2, heading: "Session 2 — 2026-11-19", body: "The team escaped." };
+
+  it("is nothing when nothing is noted", () => {
+    expect(formatBrief([], [], [])).toBe("");
+  });
+
+  it("has the threads, a line for each NPC and how the last session ended, and says it is true", () => {
+    const brief = formatBrief([thread(1)], [npc(1)], [{ ...session, number: 1, heading: "Session 1", body: "Earlier." }, session]);
+    expect(brief.split("\n")[0]).toMatch(/^CAMPAIGN MEMORY\. .*Treat it as true/);
+    expect(brief).toContain("Standing plot threads:\n- Thread 1: active. Going on.");
+    expect(brief).toContain("Non-player characters the party has met:\n- NPC 1 (Fixer): Ally. PR 3.");
+    expect(brief).toContain("Last session, Session 2 — 2026-11-19:\nThe team escaped.");
+    expect(brief).not.toContain("Earlier.");
+    expect(brief).not.toContain("never in the brief");
+  });
+
+  it("leaves out the parts that are empty", () => {
+    expect(formatBrief([], [npc(1)], [])).not.toContain("Standing plot threads");
+    expect(formatBrief([thread(1)], [], [])).not.toContain("Non-player characters");
+    expect(formatBrief([thread(1)], [], [])).not.toContain("Last session");
+  });
+
+  it("stays short: a few of each, clipped, and a count of the rest", () => {
+    const brief = formatBrief(Array.from({ length: 20 }, (_, i) => thread(i + 1, "x".repeat(500))), Array.from({ length: 50 }, (_, i) => npc(i + 1)), [{ ...session, body: "y".repeat(3000) }]);
+    expect(brief).toContain("- Thread 12:");
+    expect(brief).not.toContain("- Thread 13:");
+    expect(brief).toContain("- and 8 more");
+    expect(brief).toContain("- NPC 40 (Fixer)");
+    expect(brief).not.toContain("- NPC 41 ");
+    expect(brief).toContain("- and 10 more");
+    expect(brief).not.toContain("x".repeat(221));
+    expect(brief).not.toContain("y".repeat(901));
+    expect(brief.length).toBeLessThan(6000);
+  });
+
+  it("writes an NPC as name, role, status and stats", () => {
+    expect(npcLine({ name: "Ana", role: "", status: "", stats: "", notes: "" })).toBe("Ana: Unknown.");
+    expect(npcLine(npc(1))).toBe("NPC 1 (Fixer): Ally. PR 3.");
+  });
+});
+
+describe("what the GM recalls", () => {
+  const notes = { threads: [] as Thread[], npcs: [{ name: "Mr. Smith", role: "Fixer", status: "Ally", stats: "", notes: "" }, { name: "Ms. Smithson", role: "", status: "Enemy", stats: "", notes: "" }], sessions: [1, 2, 3, 4].map((n) => ({ number: n, heading: `Session ${n}`, body: `Body ${n}` })) };
+
+  it("finds an NPC by the whole name before part of it", () => {
+    expect(recallText({ what: "npc", name: "ms. smithson" }, notes).text).toBe("Ms. Smithson: Enemy.");
+    expect(recallText({ what: "npc", name: "smith" }, notes).text).toBe("Mr. Smith (Fixer): Ally.");
+  });
+
+  it("prefers the NPC whose whole name was given over one whose name only contains it", () => {
+    const both = { ...notes, npcs: [{ name: "Ana Maria", role: "", status: "Enemy", stats: "", notes: "" }, { name: "Ana", role: "", status: "Ally", stats: "", notes: "" }] };
+    expect(recallText({ what: "npc", name: "ana" }, both).text).toBe("Ana: Ally.");
+  });
+
+  it("gives the last sessions asked for, oldest first, and one by default", () => {
+    expect(recallText({ what: "sessions" }, notes).text).toBe("Session 4\nBody 4");
+    expect(recallText({ what: "sessions", last: 2 }, notes).text).toBe("Session 3\nBody 3\n\nSession 4\nBody 4");
+  });
+
+  it("clips a long session", () => {
+    const long = { ...notes, sessions: [{ number: 1, heading: "Session 1", body: "z".repeat(5000) }] };
+    expect(recallText({ what: "sessions" }, long).text.length).toBeLessThan(1600);
   });
 });
