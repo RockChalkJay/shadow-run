@@ -64,6 +64,12 @@ describe("a run's changes to a sheet", () => {
     expect(r.changes[0]).toBe("Gear is written as text, so + Medkit, − Knife is in the history only");
   });
 
+  it("does not say gear changes are in the history when there is no history entry to hold them", async () => {
+    const r = ok(await apply({ gear: { add: [{ name: "Medkit" }] } }, (s) => ({ ...s, gear: "A knife." })));
+    expect(r.changes).toEqual(["Gear is written as text, so + Medkit was not applied, and there is no history entry to hold it"]);
+    expect(r.sheet.history).toHaveLength(1);
+  });
+
   it("refuse more gear than a list holds", async () => {
     const full = Array.from({ length: 50 }, (_, i) => ({ name: `Item ${i}` }));
     expect((await apply({ gear: { add: [{ name: "One more" }] } }, (s) => ({ ...s, gear: full }))).ok).toBe(false);

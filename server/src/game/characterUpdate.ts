@@ -68,7 +68,8 @@ export function applyRunUpdate(sheet: CharacterSheet, update: RunUpdate, options
     if (typeof next.gear === "string") {
       // Free text cannot have items added to it or taken out, so what changed goes in the history instead.
       gearNotes.push(...added.map((g) => `+ ${g.name}`), ...removed.map((name) => `− ${name}`));
-      changes.push(`Gear is written as text, so ${[...added.map((g) => `+ ${g.name}`), ...removed.map((n) => `− ${n}`)].join(", ")} is in the history only`);
+      const what = [...added.map((g) => `+ ${g.name}`), ...removed.map((n) => `− ${n}`)].join(", ");
+      changes.push(`Gear is written as text, so ${what} ${update.history ? "is in the history only" : "was not applied, and there is no history entry to hold it"}`);
     } else {
       let items = [...next.gear];
       for (const name of removed) {
