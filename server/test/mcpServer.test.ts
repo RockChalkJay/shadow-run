@@ -115,6 +115,10 @@ describe("GM MCP server", () => {
     expect(text("note_npc")).toMatch(/PR 3, Body 3, Willpower 4/);
     expect(text("note_thread")).toMatch(/same title updates the same thread/);
     expect(text("recall")).toMatch(/before you bring someone or something back/);
+    expect(text("recall")).toMatch(/history \(a player character's earlier runs, newest first/);
+    expect(text("end_session")).toMatch(/Put what each player character earned in `rewards`/);
+    expect(text("end_session")).toMatch(/5 or 6 for an excellent one or a finished run/);
+    expect(text("end_session")).toMatch(/at most 30 Karma and 500,000 nuyen/);
   });
 
   it("passes an NPC roll to the session", async () => {

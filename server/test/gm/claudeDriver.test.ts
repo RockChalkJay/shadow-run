@@ -340,6 +340,27 @@ describe("sessions", () => {
     expect(first?.stdin).toBe("BEGIN SESSION. Open the first scene.");
   });
 
+  it("update the sheets the GM is told, so the next session's prompt has what the run earned", async () => {
+    const t = await table([
+      { steps: [{ say: "Rain falls." }] },
+      { steps: [{ say: "Quiet." }, { tool: "end_session", args: { ...WRITE_UP, rewards: [{ characterId: "kira", karma: 4, nuyen: 3000, summary: "Carried the case across the sprawl." }] } }] },
+      { steps: [{ say: "A new night." }] },
+    ]);
+    await t.session.start();
+    await t.session.whenIdle();
+    expect((await t.starts())[0]?.systemPrompt).not.toContain("Previous runs");
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect((await t.tools()).map((r) => [r.tool, r.isError])).toEqual([["end_session", false]]);
+    await t.session.start();
+    await t.session.whenIdle();
+    const [, , second] = await t.starts();
+    expect(second?.systemPrompt).toContain("karma 4, total karma 4");
+    expect(second?.systemPrompt).toContain("3000 nuyen");
+    expect(second?.systemPrompt).toContain("Previous runs: Run 1");
+    expect(second?.systemPrompt).toContain("Carried the case across the sprawl.");
+  });
+
   it("are the only story a GM that lost its conversation is given again", async () => {
     const t = await table([
       { steps: [{ say: "Rain falls." }] },

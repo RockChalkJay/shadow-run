@@ -420,7 +420,7 @@ export function recallText(
     case "threads":
       return { ok: true, text: notes.threads.length === 0 ? "No plot threads are noted yet." : notes.threads.map((t) => `${t.number}. ${t.title}: ${t.text}`).join("\n") };
     case "sessions": {
-      const last = notes.sessions.slice(-(ask.last ?? 1));
+      const last = notes.sessions.slice(-Math.min(ask.last ?? 1, 5));
       return { ok: true, text: last.length === 0 ? "No sessions are logged yet." : last.map((s) => `${s.heading}\n${clip(s.body, 1500)}`).join("\n\n") };
     }
   }

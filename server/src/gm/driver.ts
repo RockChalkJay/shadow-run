@@ -1,4 +1,4 @@
-import type { GmEvent } from "@shadow-run/shared";
+import type { CharacterSheet, GmEvent } from "@shadow-run/shared";
 
 export interface ToolReply {
   ok: boolean;
@@ -59,6 +59,8 @@ export interface GmTurnContext {
 export interface GmDriver {
   /** Runs one turn. Resolves when it ends cleanly; rejects if it fails or is aborted. */
   takeTurn(input: GmTurnInput, ctx: GmTurnContext): Promise<void>;
+  /** Gives the GM the party's sheets as they are now, after a run changed them. */
+  refreshParty?(party: readonly CharacterSheet[]): Promise<void>;
   /** Releases anything the driver holds, such as a local server. */
   close?(): Promise<void>;
 }
