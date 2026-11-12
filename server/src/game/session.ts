@@ -867,17 +867,20 @@ export class GameSession {
       this.activeTurn?.id === turnId && !signal.aborted
         ? act()
         : Promise.resolve({ ok: false, text: "That turn is over, so nothing was done. Do not call tools now." });
+    // Once the session is written up nothing more happens in it, so the dice, damage and combat tools are refused; the notes tools still work.
+    const gameplay = (act: () => Promise<ToolReply>): Promise<ToolReply> =>
+      whileCurrent(() => (this.wrapping?.logged ? Promise.resolve({ ok: false, text: "The session is written up and over, so nothing more happens in it. Do not call tools now." }) : act()));
     return {
-      requestRoll: (input) => whileCurrent(() => this.requestRoll(input)),
-      rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
-      dealDamage: (input) => whileCurrent(() => this.dealDamage(input)),
-      attack: (input) => whileCurrent(() => this.attack(input)),
-      awardEdge: (input) => whileCurrent(() => this.awardEdge(input)),
-      startCombat: (input) => whileCurrent(() => this.startCombat(input)),
-      joinCombat: (input) => whileCurrent(() => this.joinCombat(input)),
-      nextRound: () => whileCurrent(() => this.nextRound()),
-      endCombat: () => whileCurrent(() => this.endCombat()),
-      heal: (input) => whileCurrent(() => this.heal(input)),
+      requestRoll: (input) => gameplay(() => this.requestRoll(input)),
+      rollNpc: (input) => gameplay(() => this.rollNpc(input)),
+      dealDamage: (input) => gameplay(() => this.dealDamage(input)),
+      attack: (input) => gameplay(() => this.attack(input)),
+      awardEdge: (input) => gameplay(() => this.awardEdge(input)),
+      startCombat: (input) => gameplay(() => this.startCombat(input)),
+      joinCombat: (input) => gameplay(() => this.joinCombat(input)),
+      nextRound: () => gameplay(() => this.nextRound()),
+      endCombat: () => gameplay(() => this.endCombat()),
+      heal: (input) => gameplay(() => this.heal(input)),
       noteNpc: (input) => whileCurrent(() => this.noteNpc(input)),
       noteThread: (input) => whileCurrent(() => this.noteThread(input)),
       recall: (input) => whileCurrent(() => this.recall(input)),
@@ -1717,6 +1720,14 @@ export class GameSession {
       this.mission = undefined;
       this.blocked = false;
       if (turn.wrapUp) await this.finishWrapUp(wrapped?.logged);
+      await this.persist();
+      return true;
+    }
+
+    if (turn.wrapUp && wrapped?.logged) {
+      // The session was written up before the turn failed, so it is over; asking again would log it twice.
+      await this.finishWrapUp(wrapped.logged);
+      await this.record({ kind: "system", text: `The GM's turn ended with a problem after it had written the session up, so the session is over anyway: ${failure}` });
       await this.persist();
       return true;
     }

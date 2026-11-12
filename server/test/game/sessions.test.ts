@@ -169,6 +169,61 @@ describe("wrapping up a session", () => {
     expect((await t.store.loadState())).toMatchObject({ wrapUpRequested: false, ended: true });
   });
 
+  it("ends the session even if the GM's turn fails after it has written the session up, and logs it once", async () => {
+    const driver: GmDriver = {
+      async takeTurn(input, ctx) {
+        if (!wrapping(input)) return;
+        await ctx.tools.endSession(WRITE_UP);
+        throw new Error("The GM went away.");
+      },
+    };
+    const t = await table(driver);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect(t.session.snapshot().session).toEqual({ number: 1, phase: "ended" });
+    expect((await t.log()).match(/## Session/g)).toHaveLength(1);
+    expect(t.session.snapshot().transcript.at(-1)).toMatchObject({ kind: "system", text: expect.stringContaining("so the session is over anyway: The GM went away.") });
+    expect(t.session.retry()).toMatchObject({ ok: false });
+    expect(await t.session.wrapUp()).toMatchObject({ ok: false });
+  });
+
+  it("refuses the dice, damage and combat tools once the session is written up, and still takes notes", async () => {
+    const replies: Array<{ ok: boolean; text: string }> = [];
+    const driver: GmDriver = {
+      async takeTurn(input, ctx) {
+        if (!wrapping(input)) return;
+        await ctx.tools.endSession(WRITE_UP);
+        replies.push(await ctx.tools.requestRoll(rollInput()));
+        replies.push(await ctx.tools.rollNpc({ label: "x", pool: 4, threshold: 2 }));
+        replies.push(await ctx.tools.dealDamage({ label: "x", target: { kind: "npc", id: "g", name: "G", body: 3, willpower: 3 }, damageValue: 2, damageType: "physical" }));
+        replies.push(await ctx.tools.attack({}));
+        replies.push(await ctx.tools.awardEdge({}));
+        replies.push(await ctx.tools.heal({}));
+        replies.push(await ctx.tools.startCombat({ participants: [] }));
+        replies.push(await ctx.tools.joinCombat({}));
+        replies.push(await ctx.tools.nextRound());
+        replies.push(await ctx.tools.endCombat());
+        replies.push(await ctx.tools.noteNpc({ name: "Mr. Smith", status: "Ally" }));
+      }
+    };
+    const t = await table(driver);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    const over = "The session is written up and over, so nothing more happens in it. Do not call tools now.";
+    expect(replies.slice(0, 10)).toEqual(Array(10).fill({ ok: false, text: over }));
+    expect(replies[10]).toMatchObject({ ok: true });
+    expect(t.session.snapshot().pendingRolls).toEqual([]);
+    expect(t.session.snapshot().session.phase).toBe("ended");
+  });
+
   it("is the only time the GM may write the session up", async () => {
     const t = await table(goodGm());
     await t.session.start();
