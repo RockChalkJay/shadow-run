@@ -6,15 +6,16 @@ export type SessionMarker = Extract<TranscriptEntry, { kind: "session" }>;
 
 /** Why the wrap-up control cannot be used right now, or null when it can. */
 export function wrapUpBlock(connected: boolean, gm: GmStatus, waitingRolls: number): string | null {
-  if (!connected) return "Reconnecting to the table. Wrap up when it is back.";
+  if (!connected) return "Reconnecting to the table. Save when it is back.";
   if (waitingRolls > 0) return "Answer or skip the waiting rolls first.";
-  if (gm.phase === "thinking") return "The GM is in the middle of a turn. Wrap up when it has finished.";
+  if (gm.phase === "thinking") return "The GM is in the middle of a turn. Save when it has finished.";
   return null;
 }
 
 /**
- * The session in the header. While the session is open it is the wrap-up button; when wrap-up cannot start it stays focusable with
- * aria-disabled, so the reason can be reached by keyboard and by touch. While wrapping up, and once over, it is plain text.
+ * The save control in the header. While a session is open it is the "Save progress" button; when saving cannot start it stays focusable with
+ * aria-disabled, so the reason can be reached by keyboard and by touch. While the GM writes the session up, and after it is saved, it is plain text.
+ * (Saving wraps the session up on the server; the story carries on with the next message.)
  */
 export function SessionPill({ session, block, expanded, onAsk, buttonRef }: {
   session: SessionInfo;
@@ -25,10 +26,10 @@ export function SessionPill({ session, block, expanded, onAsk, buttonRef }: {
 }) {
   const tipId = useId();
   if (session.phase === "idle") return null;
-  if (session.phase === "wrapping") return <span className="pill session">Session {session.number} · wrapping up…</span>;
-  if (session.phase === "ended") return <span className="pill session">Session {session.number} · over</span>;
+  if (session.phase === "wrapping") return <span className="pill session">Saving…</span>;
+  if (session.phase === "ended") return <span className="pill session">Saved</span>;
   return (
-    <Tip className="pilltip" focusable={false} id={tipId} text={block ?? "Wrap up this session."}>
+    <Tip className="pilltip" focusable={false} id={tipId} text={block ?? "Save the story so far in the campaign log and on the sheets."}>
       <button
         ref={buttonRef}
         type="button"
@@ -39,8 +40,7 @@ export function SessionPill({ session, block, expanded, onAsk, buttonRef }: {
         aria-describedby={tipId}
         onClick={() => { if (block === null) onAsk(); else buttonRef.current?.focus(); }}
       >
-        Session {session.number}
-        <svg className="caret" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        Save progress
       </button>
     </Tip>
   );
@@ -49,11 +49,10 @@ export function SessionPill({ session, block, expanded, onAsk, buttonRef }: {
 const FOCUSABLE = "button:not(:disabled)";
 
 /**
- * The question before a session is wrapped up. Focus starts on "Keep playing" (the safe answer), Tab stays inside, Esc closes, and the page behind is
- * inert while it is open. The dialog stays up after "Wrap up" until the server moves the session on, so a refusal can be shown here.
+ * The question before the story is saved. Focus starts on "Cancel" (the safe answer), Tab stays inside, Esc closes, and the page behind is
+ * inert while it is open. The dialog stays up after "Save progress" until the server moves the session on, so a refusal can be shown here.
  */
-export function WrapUpDialog({ number, error, connected, onConfirm, onClose }: {
-  number: number;
+export function WrapUpDialog({ error, connected, onConfirm, onClose }: {
   error: string | null;
   connected: boolean;
   onConfirm: () => void;
@@ -94,26 +93,26 @@ export function WrapUpDialog({ number, error, connected, onConfirm, onClose }: {
   return (
     <div className="modal" ref={root} role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onKeyDown}>
       <div className="card wrap">
-        <h3 id={titleId}>WRAP UP SESSION {number}?</h3>
-        <p>The GM closes the scene in a short beat and writes the session up in the campaign log.</p>
-        <p className="dim small">What the session earned is saved to each character's sheet, with a copy of the old sheet kept first. A fight in progress carries over.</p>
+        <h3 id={titleId}>SAVE PROGRESS?</h3>
+        <p>The GM writes the story so far into the campaign log, and what it earned is saved to each character's sheet, with a copy of the old sheet kept first.</p>
+        <p className="dim small">Nothing stops: the scene stays where it is, a fight in progress carries on, and the story picks up with your next message. Everyone's Edge refreshes when it does.</p>
         {refused && <p className="problem" role="alert">{refused}</p>}
         <div className="btns">
-          <button className="pri" disabled={!connected || waiting} onClick={() => { setAsked(true); onConfirm(); }}>Wrap up</button>
-          <button ref={keep} onClick={onClose}>Keep playing</button>
+          <button className="pri" disabled={!connected || waiting} onClick={() => { setAsked(true); onConfirm(); }}>Save progress</button>
+          <button ref={keep} onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>
   );
 }
 
-/** The optional note about what the next session should be about. Ctrl or Cmd+Enter submits. */
-export function MissionBox({ number, value, onChange, onSubmit }: { number: number; value: string; onChange: (v: string) => void; onSubmit: () => void }) {
+/** The optional note about what the story should be about next. When `onSubmit` is given, Ctrl or Cmd+Enter calls it. */
+export function MissionBox({ label, value, onChange, onSubmit }: { label: string; value: string; onChange: (v: string) => void; onSubmit?: () => void }) {
   const id = useId();
   const hint = useId();
   return (
     <div className="next">
-      <label htmlFor={id}>What should session {number} be about? <span className="dim" id={hint}>(optional; leave it empty and the GM follows the open threads)</span></label>
+      <label htmlFor={id}>{label} <span className="dim" id={hint}>(optional; leave it empty and the GM follows the open threads)</span></label>
       <textarea
         id={id}
         aria-describedby={hint}
@@ -121,22 +120,23 @@ export function MissionBox({ number, value, onChange, onSubmit }: { number: numb
         placeholder="e.g. Follow the courier's employer. Or: a quiet night, downtime and a favor for Mama Rose."
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onSubmit(); } }}
+        onKeyDown={(e) => { if (onSubmit && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onSubmit(); } }}
       />
       <div className="count" aria-hidden="true">{value.length} / {MAX_MISSION}</div>
     </div>
   );
 }
 
-/** What the table sees once a session has been written up: the summary, what changed on each sheet, and the box to begin the next one. */
-export function SessionOver({ number, marker, connected, onBegin }: { number: number; marker: SessionMarker | undefined; connected: boolean; onBegin: (mission: string) => void }) {
-  const [mission, setMission] = useState("");
-  const begin = () => { if (connected) onBegin(mission.trim()); };
+/**
+ * What the table sees once the story is saved: the write-up, what changed on each sheet, and an optional note about what to pick up with,
+ * which goes with the next message. The typing box stays open: saving is not an ending.
+ */
+export function SavedNote({ marker, mission, onMission }: { marker: SessionMarker | undefined; mission: string; onMission: (v: string) => void }) {
   return (
-    <section className="card over" aria-label="Session over">
-      <h3>SESSION {number} IS OVER</h3>
+    <section className="card over" aria-label="Progress saved">
+      <h3>PROGRESS SAVED</h3>
       {marker?.summary && <p className="summary">{marker.summary}</p>}
-      {marker?.fictionDate && <div className="dim small">{marker.fictionDate} · written to the campaign log as Session {number}</div>}
+      {marker?.fictionDate && <div className="dim small">In the story: {marker.fictionDate}</div>}
       {marker?.changes && marker.changes.length > 0 && (
         <>
           <h4>WHAT CHANGED</h4>
@@ -145,8 +145,8 @@ export function SessionOver({ number, marker, connected, onBegin }: { number: nu
           ))}
         </>
       )}
-      <MissionBox number={number + 1} value={mission} onChange={setMission} onSubmit={begin} />
-      <div className="btns"><button className="pri big" disabled={!connected} onClick={begin}>Begin session {number + 1}</button></div>
+      <MissionBox label="What should the story pick up with?" value={mission} onChange={onMission} />
+      <p className="dim small">Type to carry on from here. A note above goes to the GM with your next message.</p>
     </section>
   );
 }

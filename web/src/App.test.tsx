@@ -125,34 +125,44 @@ describe("the table screen", () => {
 
   describe("sessions", () => {
     const say = { id: 1, ts: "t", kind: "say", name: "Kira", text: "I wait." };
+    const saved = (number: number, summary: string) => ({ id: 10 + number, ts: "t", kind: "session", event: "end", number, summary });
     const open = async (over: object = {}) => {
       render(<App url="ws://x" />);
       await act(async () => {});
       socket().push(snapshot({ transcript: [say], session: { number: 2, phase: "open" }, ...over }));
     };
+    const savePill = () => screen.getByRole("button", { name: "Save progress" });
 
     it("starts the first session with the mission typed on the start screen, and with none when it is left empty", async () => {
       render(<App url="ws://x" />);
       await act(async () => {});
       socket().push(snapshot());
-      await userEvent.type(screen.getByLabelText(/What should session 1 be about/), "  Meet Mr. Smith.  ");
+      await userEvent.type(screen.getByLabelText(/What should this first session be about/), "  Meet Mr. Smith.  ");
       await userEvent.click(screen.getByRole("button", { name: "Begin the session" }));
       expect(socket().sent).toEqual([{ type: "session.start", mission: "Meet Mr. Smith." }]);
     });
 
-    it("wraps a session up through the pill and the question, and shows the wrap-up while it happens", async () => {
+    it("lets the first session begin with Ctrl+Enter from the mission box", async () => {
+      render(<App url="ws://x" />);
+      await act(async () => {});
+      socket().push(snapshot());
+      await userEvent.type(screen.getByLabelText(/What should this first session be about/), "Heist{Control>}{Enter}{/Control}");
+      expect(socket().sent).toEqual([{ type: "session.start", mission: "Heist" }]);
+    });
+
+    it("saves progress through the pill and the question, and shows the saving while it happens", async () => {
       await open();
-      await userEvent.click(screen.getByRole("button", { name: "Session 2" }));
-      expect(screen.getByRole("dialog", { name: "WRAP UP SESSION 2?" })).toBeTruthy();
-      await userEvent.click(screen.getByRole("button", { name: "Wrap up" }));
+      await userEvent.click(savePill());
+      expect(screen.getByRole("dialog", { name: "SAVE PROGRESS?" })).toBeTruthy();
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save progress" }));
       expect(socket().sent).toEqual([{ type: "session.wrapup" }]);
       socket().push({ type: "session.updated", session: { number: 2, phase: "wrapping" } });
       expect(screen.queryByRole("dialog")).toBeNull();
-      expect(screen.getByText("Session 2 · wrapping up…")).toBeTruthy();
-      expect(screen.getByRole("status").textContent).toContain("Wrapping up session 2. The GM is closing the scene and writing it up.");
+      expect(screen.getByText("Saving…")).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain("Saving your progress. The GM is writing the story so far into the campaign log.");
       const box = screen.getByLabelText("Say or do something") as HTMLInputElement;
       expect(box.disabled).toBe(true);
-      expect(box.placeholder).toBe("The GM is wrapping up the session…");
+      expect(box.placeholder).toBe("The GM is saving the story so far…");
       expect((screen.getByLabelText("Speaking as") as HTMLSelectElement).disabled).toBe(true);
       expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
     });
@@ -162,7 +172,7 @@ describe("the table screen", () => {
         pendingRolls: [{ id: "r1", characterId: "kira", label: "Sneak", pool: { total: 4, breakdown: "x" }, threshold: 2, stakes: "s", goodRoll: "g", badRoll: "b", consequences: { success: "s", failure: "f", glitch: "g", criticalGlitch: "c" }, edgeAdvice: "e" }],
         gm: { phase: "waiting_for_rolls" },
       });
-      const pill = screen.getByRole("button", { name: "Session 2" });
+      const pill = savePill();
       expect(pill.getAttribute("aria-disabled")).toBe("true");
       await userEvent.click(pill);
       expect(screen.queryByRole("dialog")).toBeNull();
@@ -171,86 +181,82 @@ describe("the table screen", () => {
 
     it("shows the server's refusal in the question and keeps it open", async () => {
       await open();
-      await userEvent.click(screen.getByRole("button", { name: "Session 2" }));
-      await userEvent.click(screen.getByRole("button", { name: "Wrap up" }));
+      await userEvent.click(savePill());
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save progress" }));
       socket().push({ type: "error", message: "The GM is in the middle of a turn." });
       expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("The GM is in the middle of a turn.");
     });
 
-    it("puts focus back on the pill when the question is dismissed with Escape", async () => {
+    it("puts focus back on the pill when the question is dismissed with Escape, and marks the pill while it is open", async () => {
       await open();
-      const pill = screen.getByRole("button", { name: "Session 2" });
+      const pill = savePill();
+      expect(pill.getAttribute("aria-expanded")).toBe("false");
       await userEvent.click(pill);
+      expect(pill.getAttribute("aria-expanded")).toBe("true");
       await userEvent.keyboard("{Escape}");
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(document.activeElement).toBe(pill);
     });
 
-    it("does not reopen the question when the next session opens", async () => {
+    it("does not reopen the question when the story carries on into the next session", async () => {
       await open();
-      await userEvent.click(screen.getByRole("button", { name: "Session 2" }));
+      await userEvent.click(savePill());
       socket().push({ type: "session.updated", session: { number: 2, phase: "ended" } });
       socket().push({ type: "session.updated", session: { number: 3, phase: "open" } });
       expect(screen.queryByRole("dialog")).toBeNull();
     });
 
-    it("shows the session-over card, closes the typing box, and begins the next session with a mission", async () => {
-      const marker = { id: 5, ts: "t", kind: "session", event: "end", number: 2, summary: "The case changed hands.", changes: [{ name: "Kira", changes: ["Karma 0 → 4"] }] };
-      await open({ transcript: [say, marker], session: { number: 2, phase: "ended" } });
-      expect(screen.getByText("Session 2 · over")).toBeTruthy();
+    it("shows the saved note after a save, keeps the typing box open, and sends the note with the next words only", async () => {
+      await open({ transcript: [say, { ...saved(2, "The case changed hands."), changes: [{ name: "Kira", changes: ["Karma 0 → 4"] }] }], session: { number: 2, phase: "ended" } });
+      expect(screen.getByText("Saved")).toBeTruthy();
       expect(screen.getAllByText("The case changed hands.")).toHaveLength(1);
       expect(screen.getByText("Karma 0 → 4")).toBeTruthy();
-      expect((screen.getByLabelText("Say or do something") as HTMLInputElement).placeholder).toBe("The session is over. Begin the next one above.");
-      expect((screen.getByLabelText("Say or do something") as HTMLInputElement).disabled).toBe(true);
-      await userEvent.type(screen.getByLabelText(/What should session 3 be about/), "Follow Mr. Smith.");
-      await userEvent.click(screen.getByRole("button", { name: "Begin session 3" }));
-      expect(socket().sent).toEqual([{ type: "session.start", mission: "Follow Mr. Smith." }]);
+      const box = screen.getByLabelText("Say or do something") as HTMLInputElement;
+      expect(box.disabled).toBe(false);
+      expect(box.placeholder).toBe("Pick up where you left off…");
+      await userEvent.type(screen.getByLabelText(/What should the story pick up with/), "  Follow Mr. Smith.  ");
+      await userEvent.type(box, "I order noodles.{Enter}");
+      expect(socket().sent).toEqual([{ type: "player.say", characterId: "kira", text: "I order noodles.", mission: "Follow Mr. Smith." }]);
+      socket().push({ type: "session.updated", session: { number: 3, phase: "open" } });
+      await userEvent.type(box, "Then I wait.{Enter}");
+      expect(socket().sent.at(-1)).toEqual({ type: "player.say", characterId: "kira", text: "Then I wait." });
     });
 
-    it("lets the first session begin with Ctrl+Enter from the mission box", async () => {
+    it("sends no mission when the note is empty or blank, and forgets one left over from the start screen", async () => {
       render(<App url="ws://x" />);
       await act(async () => {});
       socket().push(snapshot());
-      await userEvent.type(screen.getByLabelText(/What should session 1 be about/), "Heist{Control>}{Enter}{/Control}");
-      expect(socket().sent).toEqual([{ type: "session.start", mission: "Heist" }]);
+      await userEvent.type(screen.getByLabelText(/What should this first session be about/), "Heist");
+      await userEvent.click(screen.getByRole("button", { name: "Begin the session" }));
+      socket().push(snapshot({ transcript: [say, saved(1, "Done.")], session: { number: 1, phase: "ended" } }));
+      expect((screen.getByLabelText(/What should the story pick up with/) as HTMLTextAreaElement).value).toBe("");
+      await userEvent.type(screen.getByLabelText(/What should the story pick up with/), "   ");
+      await userEvent.type(screen.getByLabelText("Say or do something"), "Go.{Enter}");
+      expect(socket().sent.at(-1)).toEqual({ type: "player.say", characterId: "kira", text: "Go." });
     });
 
-    it("shows the card only for an ended session, from that session's own end marker, and keeps Send shut even with text waiting in the box", async () => {
-      const end = (number: number, summary: string) => ({ id: number, ts: "t", kind: "session", event: "end", number, summary });
-      await open({ transcript: [end(1, "First night."), say] });
-      expect(screen.queryByRole("region", { name: "Session over" })).toBeNull();
+    it("shows the note only for a saved session, and from that session's own end marker", async () => {
+      await open({ transcript: [saved(1, "First night."), say] });
+      expect(screen.queryByRole("region", { name: "Progress saved" })).toBeNull();
       expect(screen.getByText("First night.")).toBeTruthy();
-      await userEvent.type(screen.getByLabelText("Say or do something"), "one more thing");
-      socket().push({ type: "snapshot", ...(snapshot({ transcript: [end(1, "First night."), say, end(2, "Second night.")], session: { number: 2, phase: "ended" } }) as object) } as never);
-      const card = screen.getByRole("region", { name: "Session over" });
+      socket().push({ type: "snapshot", ...(snapshot({ transcript: [saved(1, "First night."), say, saved(2, "Second night.")], session: { number: 2, phase: "ended" } }) as object) } as never);
+      const card = screen.getByRole("region", { name: "Progress saved" });
       expect(within(card).getByText("Second night.")).toBeTruthy();
       expect(screen.getByText("First night.")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
     });
 
-    it("shows the write-up in the story while the session is still wrapping up, before the card is up", async () => {
-      const marker = { id: 5, ts: "t", kind: "session", event: "end", number: 2, summary: "The case changed hands." };
-      await open({ transcript: [say, marker], session: { number: 2, phase: "wrapping" } });
+    it("does not show an earlier session's write-up in the note of one that has none", async () => {
+      await open({ transcript: [saved(1, "First night."), say], session: { number: 2, phase: "ended" } });
+      expect(within(screen.getByRole("region", { name: "Progress saved" })).queryByText("First night.")).toBeNull();
+    });
+
+    it("shows the write-up in the story while the save is still being written, before the note is up", async () => {
+      await open({ transcript: [say, saved(2, "The case changed hands.")], session: { number: 2, phase: "wrapping" } });
       expect(screen.getAllByText("The case changed hands.")).toHaveLength(1);
-      expect(screen.queryByRole("region", { name: "Session over" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Progress saved" })).toBeNull();
     });
 
-    it("does not show an earlier session's write-up on the card of one that has none", async () => {
-      await open({ transcript: [{ id: 1, ts: "t", kind: "session", event: "end", number: 1, summary: "First night." }, say], session: { number: 2, phase: "ended" } });
-      const card = screen.getByRole("region", { name: "Session over" });
-      expect(within(card).queryByText("First night.")).toBeNull();
-      expect(within(card).getByRole("button", { name: "Begin session 3" })).toBeTruthy();
-    });
-
-    it("marks the pill expanded while the question is open", async () => {
-      await open();
-      const pill = screen.getByRole("button", { name: "Session 2" });
-      expect(pill.getAttribute("aria-expanded")).toBe("false");
-      await userEvent.click(pill);
-      expect(pill.getAttribute("aria-expanded")).toBe("true");
-    });
-
-    it("scrolls to the end when the session moves to over", async () => {
+    it("scrolls to the end when the session moves to saved", async () => {
       const scroll = vi.fn();
       Element.prototype.scrollIntoView = scroll;
       try {

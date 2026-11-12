@@ -251,7 +251,7 @@ describe("playing", () => {
     expect(await client.until((e) => e.type === "error" && e.message.includes("Message not understood"))).toBeDefined();
   });
 
-  it("routes wrapping up a session and beginning the next with a mission, and refuses to talk in between", async () => {
+  it("routes wrapping up a session and carrying on with the first words of the next, with its mission", async () => {
     const wrapUp = { say: ["The night goes quiet."], endSession: { summary: "The team met Mr. Smith and took the courier job." } };
     const { port } = await startTable([{ say: ["Rain falls."] }, wrapUp, { say: ["A new night."] }], []);
     const client = await connect(port);
@@ -268,11 +268,12 @@ describe("playing", () => {
     client.send({ type: "session.wrapup" });
     await client.until(phase("wrapping", 1));
     await client.until(phase("ended", 1));
-    client.send({ type: "player.say", text: "hello?" });
-    await refused("The session is over");
     client.send({ type: "session.start", mission: "x".repeat(1001) } as never);
     await refused("Message not understood");
-    client.send({ type: "session.start" });
+    client.send({ type: "player.say", text: "hello?", mission: "x".repeat(1001) } as never);
+    await refused("Message not understood");
+    client.send({ type: "player.say", text: "hello?", mission: "Follow Mr. Smith." });
+    await client.until((e) => e.type === "entry" && e.entry.kind === "session" && e.entry.event === "start" && e.entry.number === 2 && e.entry.mission === "Follow Mr. Smith.");
     await client.until(phase("open", 2));
   });
 
