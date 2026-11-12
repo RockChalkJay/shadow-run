@@ -33,11 +33,26 @@ The server checks a sheet when it starts. A misspelled field, or a number outsid
 
 A weapon's `damage.type` is `physical` or `stun`, so a 7S weapon is `{ "value": 7, "type": "stun" }`. The `ranges` of a ranged weapon are Attack Ratings; leave out a range the weapon cannot reach.
 
-## Changes at the end of a run
+## Importing and exporting
 
-Playing does not change a sheet file. Code exists for the end of a run to do it (nothing calls it yet; the GM gets a way to in a later change): Karma earned is added to the Karma in hand and the total, nuyen is added or spent (never below 0), gear is added or taken out by name, contacts are added or updated by name, a line is added to the notes, and the run is added to the end of the `history` as the next number. A run can change Karma by at most 30 and nuyen by at most 500,000, and if any part of an update cannot be applied, none of it is. A sheet whose `gear` is still text is left as text; what changed in its gear goes into that run's history entry instead.
+A character file can be moved between campaigns and scenarios, or kept as a backup, with two commands. Stop the server first and restart it after, since characters are read when it starts. A relative path is taken from where you typed the command.
 
-Before a sheet is changed, the file as it was is copied to `characters/history/<id>-<date>.json` (`-2`, `-3` for more on the same day), and if that copy cannot be made, the sheet is not changed. The `history` folder is not read as characters and is not carried into a scenario. To undo a change, copy an old file back over the sheet and restart the server.
+```
+npm run character:export -- kira --out kira.json          # one character, from the "default" campaign
+npm run character:export -- --all --out party              # every character, one file each, into a folder
+npm run character:export -- kira --scenario ambush         # from a scenario (or --campaign night-one)
+npm run -s character:export -- kira > kira.json            # to a file by redirect; -s hides npm's own lines
+npm run character:export -- kira --derived --out kira.json # also writes the record sheet's worked-out boxes
+
+npm run character:import -- kira.json                      # into the "default" campaign
+npm run character:import -- party/*.json --scenario ambush  # into a scenario, made if it is new
+npm run character:import -- kira.json --force              # replace a character that is already there
+npm run character:import -- kira.json --check              # check the files, write nothing
+```
+
+An export is the same file the campaign keeps in `characters/`, read and written back in full. `--derived` adds a `derived` block for a person to read: Initiative, Composure, Judge Intentions, Memory, Lift/Carry, Defense Rating, unarmed Attack Rating and the three condition-monitor sizes, worked out from the attributes and the primary armor (core rulebook, printed pp. 67-68). Movement and the Matrix and astral initiatives are not worked out, because their formulas were not checked against the book. An import ignores `derived`, and the server does not accept it in a `characters/` file, so import such a file with the command rather than copying it in.
+
+An import writes nothing if it finds a problem first: if any file is not valid JSON or not a valid sheet, two files name one character, or a character's file is already there without `--force` (even if that file is not a valid sheet), every problem is listed and nothing is written. The files are then written one at a time. It will not write into the `scenario-<name>` folder a scenario run plays in, which is wiped on every start; import into the scenario with `--scenario`.
 
 ## What is not stored
 

@@ -24,6 +24,12 @@ export interface GmTools {
   nextRound(): Promise<ToolReply>;
   endCombat(): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
+  /** Writes down a non-player character in the campaign's notes, or updates what is written. */
+  noteNpc(input: unknown): Promise<ToolReply>;
+  /** Writes down a plot thread, or updates it. */
+  noteThread(input: unknown): Promise<ToolReply>;
+  /** Reads the campaign's notes back: an NPC, all of them, the threads, or the last sessions. */
+  recall(input: unknown): Promise<ToolReply>;
 }
 
 export interface GmTurnInput {
@@ -39,6 +45,8 @@ export interface GmTurnContext {
   resumeId?: string;
   /** The conversation so far as plain text, for a GM that has to start a session over. */
   recap(): string;
+  /** What the campaign's notes hold, for a GM starting a new conversation: threads, NPCs, the last session. Empty when nothing is noted. */
+  brief?(): Promise<string>;
   /** Aborted when the turn is cancelled or runs too long. */
   signal: AbortSignal;
   onEvent(event: GmEvent): void;

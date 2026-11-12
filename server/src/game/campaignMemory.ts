@@ -116,7 +116,7 @@ const cells = (line: string) =>
     .split(/(?<!\\)\|/)
     .map((cell) => cell.replace(/\\\|/g, "|").trim());
 
-const isSeparator = (line: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+const isSeparator = (line: string) => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(line);
 
 /** The tables in the file: a header line, a separator line, and the rows after them. */
 function scanTables(lines: readonly string[]): Array<{ from: number; to: number; header: string[] }> {
@@ -339,6 +339,16 @@ export class CampaignMemory {
     return parseSessions(await this.read(MEMORY_FILES.log));
   }
 
+  /** Adds an NPC to the tracker if no one of that name is there; one already there is left exactly as it is. */
+  ensureNpc(npc: Partial<Npc> & { name: string }): Promise<void> {
+    return this.enqueue(async () => {
+      const file = this.path(MEMORY_FILES.npcs);
+      const text = await this.read(MEMORY_FILES.npcs);
+      if (parseNpcs(file, text).some((n) => n.name.toLowerCase() === oneLine(npc.name).toLowerCase())) return;
+      await this.write(MEMORY_FILES.npcs, withNpc(file, text, npc));
+    });
+  }
+
   /** Adds a session to the log and says which number it got. */
   logSession(entry: SessionEntry): Promise<number> {
     return this.enqueue(async () => {
@@ -346,5 +356,72 @@ export class CampaignMemory {
       await this.write(MEMORY_FILES.log, text);
       return number;
     });
+  }
+}
+
+// ---- what the GM is told -----------------------------------------------------------------------------------------------------
+
+/** Most threads, NPCs and characters of a session's text a brief carries; the rest the GM can recall. */
+const BRIEF = { threads: 12, npcs: 40, thread: 220, session: 900 } as const;
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/** One NPC as a line: "Name (role): Status. Stats." */
+export function npcLine(n: Npc): string {
+  return `${n.name}${n.role ? ` (${n.role})` : ""}: ${n.status || "Unknown"}.${n.stats ? ` ${n.stats}.` : ""}`;
+}
+
+/**
+ * What a GM starting a new conversation is told of the campaign so far, kept short: the threads, one line for each NPC, and how the
+ * last session ended. Empty when there is nothing noted. The recall tool has the detail.
+ */
+export function formatBrief(threads: readonly Thread[], npcs: readonly Npc[], sessions: readonly LoggedSession[]): string {
+  const last = sessions.at(-1);
+  if (threads.length === 0 && npcs.length === 0 && !last) return "";
+  const out = ["CAMPAIGN MEMORY. This is what the table's notes say happened before this conversation began. Treat it as true and carry on from it; use the recall tool for more on anything."];
+  if (threads.length > 0) {
+    out.push("", "Standing plot threads:");
+    for (const t of threads.slice(0, BRIEF.threads)) out.push(`- ${t.title}: ${clip(t.text, BRIEF.thread)}`);
+    if (threads.length > BRIEF.threads) out.push(`- and ${threads.length - BRIEF.threads} more`);
+  }
+  if (npcs.length > 0) {
+    out.push("", "Non-player characters the party has met:");
+    for (const n of npcs.slice(0, BRIEF.npcs)) out.push(`- ${clip(npcLine(n), 200)}`);
+    if (npcs.length > BRIEF.npcs) out.push(`- and ${npcs.length - BRIEF.npcs} more`);
+  }
+  if (last) out.push("", `Last session, ${last.heading}:`, clip(last.body, BRIEF.session));
+  return out.join("\n");
+}
+
+/** The brief for a campaign, read from its files. */
+export async function memoryBrief(memory: CampaignMemory): Promise<string> {
+  const [threads, npcs, sessions] = await Promise.all([memory.threads(), memory.npcs(), memory.sessions()]);
+  return formatBrief(threads, npcs, sessions);
+}
+
+/** The campaign's notes read back to the GM, as it asked: an NPC, all of them, the threads, or the last few sessions. */
+export function recallText(
+  ask: { what: "npc" | "npcs" | "threads" | "sessions"; name?: string | undefined; last?: number | undefined },
+  notes: { threads: readonly Thread[]; npcs: readonly Npc[]; sessions: readonly LoggedSession[] },
+): { ok: boolean; text: string } {
+  switch (ask.what) {
+    case "npc": {
+      if (!ask.name) return { ok: false, text: "Say which character: give their name." };
+      const wanted = oneLine(ask.name).toLowerCase();
+      const found = notes.npcs.find((n) => n.name.toLowerCase() === wanted) ?? notes.npcs.find((n) => n.name.toLowerCase().includes(wanted));
+      if (!found) {
+        const known = notes.npcs.slice(0, 30).map((n) => n.name);
+        return { ok: false, text: `No one called "${ask.name}" is in the notes.${known.length > 0 ? ` Noted so far: ${known.join(", ")}.` : " No one is noted yet."}` };
+      }
+      return { ok: true, text: `${npcLine(found)}${found.notes ? ` Notes: ${found.notes}` : ""}` };
+    }
+    case "npcs":
+      return { ok: true, text: notes.npcs.length === 0 ? "No non-player characters are noted yet." : notes.npcs.slice(0, 60).map((n) => `- ${npcLine(n)}`).join("\n") };
+    case "threads":
+      return { ok: true, text: notes.threads.length === 0 ? "No plot threads are noted yet." : notes.threads.map((t) => `${t.number}. ${t.title}: ${t.text}`).join("\n") };
+    case "sessions": {
+      const last = notes.sessions.slice(-(ask.last ?? 1));
+      return { ok: true, text: last.length === 0 ? "No sessions are logged yet." : last.map((s) => `${s.heading}\n${clip(s.body, 1500)}`).join("\n\n") };
+    }
   }
 }

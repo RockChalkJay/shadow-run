@@ -3,14 +3,14 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { AttackInput, AwardEdgeInput, DealDamageInput, HealInput, JoinCombatInput, NpcRollInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
+import { AttackInput, AwardEdgeInput, DealDamageInput, HealInput, JoinCombatInput, NoteNpcInput, NoteThreadInput, NpcRollInput, RecallInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "award_edge", "start_combat", "join_combat", "next_round", "end_combat"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "award_edge", "start_combat", "join_combat", "next_round", "end_combat", "note_npc", "note_thread", "recall"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
@@ -23,6 +23,9 @@ export interface GmToolHandlers {
   endCombat(): Promise<ToolReply>;
   dealDamage(input: unknown): Promise<ToolReply>;
   heal(input: unknown): Promise<ToolReply>;
+  noteNpc(input: unknown): Promise<ToolReply>;
+  noteThread(input: unknown): Promise<ToolReply>;
+  recall(input: unknown): Promise<ToolReply>;
 }
 
 const asResult = (reply: ToolReply) => ({
@@ -180,6 +183,45 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: HealInput.shape,
     },
     async (input) => asResult(await handlers.heal(input)),
+  );
+
+  server.registerTool(
+    "note_npc",
+    {
+      description:
+        "Write down a named non-player character in the campaign's notes, or update what is written, so they can come back in " +
+        "a later scene or session as the same person. Use it when a named character first matters to the story (they speak " +
+        "to the party, are hired, hunted or hurt) and whenever where they stand changes: their status (Alive, Dead, Burned, " +
+        "Ally, Enemy or Unknown), who they work for, what they want. For anyone who may fight or roll, give stats such as " +
+        "\"PR 3, Body 3, Willpower 4\" and use the same numbers whenever they return. Only what you give is changed. Do not " +
+        "note nameless grunts. Never mention the notes to the players.",
+      inputSchema: NoteNpcInput.shape,
+    },
+    async (input) => asResult(await handlers.noteNpc(input)),
+  );
+
+  server.registerTool(
+    "note_thread",
+    {
+      description:
+        "Write down a plot thread in the campaign's notes, or update it: a short title, where it stands (active, dormant, " +
+        "resolved) and one or two sentences on what is going on. Use it when a thread opens, changes or ends, so a later " +
+        "session can pick it up. The same title updates the same thread. Never mention the notes to the players.",
+      inputSchema: NoteThreadInput.shape,
+    },
+    async (input) => asResult(await handlers.noteThread(input)),
+  );
+
+  server.registerTool(
+    "recall",
+    {
+      description:
+        "Read the campaign's notes back before you bring someone or something back: `what` is npc (give their `name`), npcs " +
+        "(everyone noted), threads, or sessions (the last `last` entries of the session log, 1 to 5). Use it instead of " +
+        "guessing at what happened earlier, and keep what it says to yourself.",
+      inputSchema: RecallInput.shape,
+    },
+    async (input) => asResult(await handlers.recall(input)),
   );
 
   return server;

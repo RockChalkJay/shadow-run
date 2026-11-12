@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClaudeGmDriver, type ClaudeDriverOptions } from "../../src/gm/claudeDriver.js";
 import type { GameSession, SessionOptions } from "../../src/game/session.js";
-import { always, newSession, party, rollInput } from "../helpers.js";
+import { always, newSession, party, rollInput, tempStore } from "../helpers.js";
 
 const FAKE_GM = fileURLToPath(new URL("../fake-claude-gm.mjs", import.meta.url));
 
@@ -91,7 +91,7 @@ describe("a turn with the CLI", () => {
     expect(run).toMatchObject({
       stdin: "BEGIN SESSION. Open the first scene.",
       model: "haiku",
-      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__attack,mcp__gm__deal_damage,mcp__gm__heal,mcp__gm__award_edge,mcp__gm__start_combat,mcp__gm__join_combat,mcp__gm__next_round,mcp__gm__end_combat",
+      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__attack,mcp__gm__deal_damage,mcp__gm__heal,mcp__gm__award_edge,mcp__gm__start_combat,mcp__gm__join_combat,mcp__gm__next_round,mcp__gm__end_combat,mcp__gm__note_npc,mcp__gm__note_thread,mcp__gm__recall",
       settingSources: "",
     });
     expect(run?.systemPrompt).toContain("Kira (id: kira)");
@@ -232,6 +232,77 @@ describe("when the game has a transcript but no GM session to resume", () => {
     // Once the GM has a session again it is resumed, and the story is not repeated to it.
     expect(later?.resume).toBe("fake-session-1");
     expect(later?.stdin).not.toContain("Carry on from it");
+  });
+});
+
+describe("the campaign's notes", () => {
+  const BIBLE = "# Campaign Bible\n\n## Standing Plot Threads\n\n1. **The Train Fallout** — active. A corp noticed.\n";
+  const NPCS = "| Name | Role/Affiliation | Status | Notes |\n| :--- | :--- | :--- | :--- |\n| Mr. Smith | Fixer | Ally | Pays on time |\n";
+
+  /** A table whose campaign folder already has notes in it. */
+  async function withNotes(script: Turn[]) {
+    const store = await tempStore();
+    await mkdir(store.dir, { recursive: true });
+    await writeFile(join(store.dir, "campaign-bible.md"), BIBLE);
+    await writeFile(join(store.dir, "npc-tracker.md"), NPCS);
+    return table(script, {}, { store });
+  }
+
+  it("are written by the GM through the tool server", async () => {
+    const store = await tempStore();
+    const t = await table(
+      [{ steps: [{ tool: "note_npc", args: { name: "Mr. Smith", role: "Fixer", status: "Ally" } }, { tool: "note_thread", args: { title: "Gang Beef", status: "active", summary: "Heating up." } }, { say: "Noted." }] }],
+      {},
+      { store },
+    );
+    await t.session.start();
+    await t.session.whenIdle();
+    expect((await t.tools()).map((r) => [r.tool, r.isError])).toEqual([["note_npc", false], ["note_thread", false]]);
+    expect(await readFile(join(store.dir, "npc-tracker.md"), "utf8")).toContain("| Mr. Smith | Fixer | Ally |");
+    expect(await readFile(join(store.dir, "campaign-bible.md"), "utf8")).toContain("1. **Gang Beef** — active. Heating up.");
+  });
+
+  it("are given to a GM that starts a new conversation, ahead of the turn", async () => {
+    const t = await withNotes([{ steps: [{ say: "Rain falls." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+    const [run] = await t.starts();
+    expect(run?.stdin).toMatch(/^CAMPAIGN MEMORY\./);
+    expect(run?.stdin).toContain("- The Train Fallout: active. A corp noticed.");
+    expect(run?.stdin).toContain("- Mr. Smith (Fixer): Ally.");
+    expect(run?.stdin.endsWith("BEGIN SESSION. Open the first scene.")).toBe(true);
+    expect(run?.stdin).not.toContain("Carry on from it");
+  });
+
+  it("are not repeated to a GM whose conversation goes on", async () => {
+    const t = await withNotes([{ steps: [{ say: "Rain falls." }] }, { steps: [{ say: "A guard turns." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "I wait.");
+    await t.session.whenIdle();
+    const [, second] = await t.starts();
+    expect(second?.resume).toBe("fake-session-1");
+    expect(second?.stdin).not.toContain("CAMPAIGN MEMORY");
+  });
+
+  it("are given again, before the story so far, when the GM's session is lost", async () => {
+    const t = await withNotes([{ steps: [{ say: "Rain falls." }] }, { lostSession: true, steps: [] }, { steps: [{ say: "Back again." }] }]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "hello");
+    await t.session.whenIdle();
+    const [, , fresh] = await t.starts();
+    expect(fresh?.resume).toBeUndefined();
+    expect(fresh?.stdin).toContain("CAMPAIGN MEMORY");
+    expect(fresh?.stdin.indexOf("CAMPAIGN MEMORY")).toBeLessThan(fresh?.stdin.indexOf("GM: Rain falls."));
+    expect(fresh?.stdin).toContain("Carry on from it");
+  });
+
+  it("are given to a GM with no session to resume even when there is no story yet to tell", async () => {
+    const t = await withNotes([{ steps: [{ say: "Hello." }] }]);
+    await t.session.say("kira", "hello");
+    await t.session.whenIdle();
+    expect((await t.starts())[0]?.stdin).toMatch(/^CAMPAIGN MEMORY\./);
   });
 });
 
