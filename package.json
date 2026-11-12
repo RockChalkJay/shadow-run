@@ -15,6 +15,8 @@
     "check:gm": "npm run check:gm --workspace server",
     "scenario:save": "npm run scenario:save --workspace server --",
     "character:schema": "npm run character:schema --workspace server",
+    "character:export": "npm run character:export --workspace server --",
+    "character:import": "npm run character:import --workspace server --",
     "dev:web": "npm run dev --workspace web"
   }
 }

@@ -31,6 +31,27 @@ The server checks a sheet when it starts. A misspelled field, or a number outsid
 
 A weapon's `damage.type` is `physical` or `stun`, so a 7S weapon is `{ "value": 7, "type": "stun" }`. The `ranges` of a ranged weapon are Attack Ratings; leave out a range the weapon cannot reach.
 
+## Importing and exporting
+
+A character file can be moved between campaigns and scenarios, or kept as a backup, with two commands. Stop the server first and restart it after, since characters are read when it starts. A relative path is taken from where you typed the command.
+
+```
+npm run character:export -- kira --out kira.json          # one character, from the "default" campaign
+npm run character:export -- --all --out party              # every character, one file each, into a folder
+npm run character:export -- kira --scenario ambush         # from a scenario (or --campaign night-one)
+npm run -s character:export -- kira > kira.json            # to a file by redirect; -s hides npm's own lines
+npm run character:export -- kira --derived --out kira.json # also writes the record sheet's worked-out boxes
+
+npm run character:import -- kira.json                      # into the "default" campaign
+npm run character:import -- party/*.json --scenario ambush  # into a scenario, made if it is new
+npm run character:import -- kira.json --force              # replace a character that is already there
+npm run character:import -- kira.json --check              # check the files, write nothing
+```
+
+An export is the same file the campaign keeps in `characters/`, read and written back in full. `--derived` adds a `derived` block for a person to read: Initiative, Composure, Judge Intentions, Memory, Lift/Carry, Defense Rating, unarmed Attack Rating and the three condition-monitor sizes, worked out from the attributes and the primary armor (core rulebook, printed pp. 67-68). Movement and the Matrix and astral initiatives are not worked out, because their formulas were not checked against the book. An import ignores `derived`, and the server does not accept it in a `characters/` file, so import such a file with the command rather than copying it in.
+
+An import writes nothing if it finds a problem first: if any file is not valid JSON or not a valid sheet, two files name one character, or a character's file is already there without `--force` (even if that file is not a valid sheet), every problem is listed and nothing is written. The files are then written one at a time. It will not write into the `scenario-<name>` folder a scenario run plays in, which is wiped on every start; import into the scenario with `--scenario`.
+
 ## What is not stored
 
 The boxes the sheet works out from the numbers (Initiative, Composure, Judge Intentions, Memory, Lift/Carry, Defense Rating, the condition monitors) are not part of the file, since they follow from the attributes and armor. How hurt a character is, their treatments and any Edge rank they have burned are kept in the campaign's `state.json`, not in the sheet.
