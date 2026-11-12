@@ -40,6 +40,7 @@ function startOverPrompt(brief: string, recap: string, text: string): string {
 /** Plays the GM with the `claude` CLI on the owner's own login, one `claude -p` process per turn. */
 export class ClaudeGmDriver implements GmDriver {
   private current: GmTurnContext | null = null;
+  private party: readonly CharacterSheet[];
 
   private constructor(
     private readonly opts: ClaudeDriverOptions,
@@ -47,7 +48,15 @@ export class ClaudeGmDriver implements GmDriver {
     private readonly cwd: string,
     /** Where the system prompt and the tools configuration are kept, out of reach of other users and of the process list. */
     private readonly files: { systemPrompt: string; mcpConfig: string },
-  ) {}
+  ) {
+    this.party = opts.party;
+  }
+
+  /** Rewrites the system prompt with the sheets as they are now; the next turn of any conversation is sent it. */
+  async refreshParty(party: readonly CharacterSheet[]): Promise<void> {
+    this.party = party;
+    await writePrivateFile(this.files.systemPrompt, buildSystemPrompt({ ...this.opts, party }));
+  }
 
   static async start(opts: ClaudeDriverOptions): Promise<ClaudeGmDriver> {
     const cwd = await privateDir(opts.workDir ?? join(tmpdir(), "shadow-run-gm"));

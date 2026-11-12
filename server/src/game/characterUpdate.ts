@@ -1,13 +1,11 @@
 import { constants } from "node:fs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CharacterSheet, type Contact, type GearItem, type RunEntry } from "@shadow-run/shared";
+import { CharacterSheet, MAX_KARMA_PER_RUN, MAX_NUYEN_CHANGE, type Contact, type GearItem, type RunEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { CampaignStore } from "./store.js";
 
-/** The most Karma and nuyen one run may change a sheet by, so a slip by whoever writes the update cannot ruin a character. */
-export const MAX_KARMA_PER_RUN = 30;
-export const MAX_NUYEN_CHANGE = 500_000;
+export { MAX_KARMA_PER_RUN, MAX_NUYEN_CHANGE };
 
 /** What a run changes about a character. Everything is optional. */
 export interface RunUpdate {
