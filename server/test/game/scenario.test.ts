@@ -38,6 +38,17 @@ describe("saveScenario", () => {
     expect(await listScenarios(d.scenarios)).toEqual(["ambush"]);
   });
 
+  it("carries the campaign's memory files, and no other file", async () => {
+    const d = await dirs();
+    const dir = join(d.campaigns, "default");
+    await campaign(dir, { "campaign-bible.md": "# Bible", "npc-tracker.md": "# NPCs", "session-log.md": "# Log", "notes.txt": "mine" });
+    const target = await saveScenario({ campaignDir: dir, scenariosDir: d.scenarios, name: "ambush" });
+    expect(await names(target)).toEqual(["campaign-bible.md", "characters", "npc-tracker.md", "premise.md", "session-log.md", "state.json", "transcript.jsonl"]);
+    const into = join(d.campaigns, "scenario-ambush");
+    await loadScenario({ scenariosDir: d.scenarios, name: "ambush", into });
+    expect(await readFile(join(into, "npc-tracker.md"), "utf8")).toBe("# NPCs");
+  });
+
   it("saves a campaign that has only sheets", async () => {
     const d = await dirs();
     await mkdir(join(d.campaigns, "new", "characters"), { recursive: true });

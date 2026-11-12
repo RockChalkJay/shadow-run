@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { MEMORY_FILES } from "./campaignMemory.js";
 import { sheetFiles } from "./store.js";
 
 /** Reads `<name> [--campaign <campaign>] [--force]`, or returns undefined when the words do not fit that. */
@@ -47,7 +48,7 @@ export async function listScenarios(dir: string): Promise<string[]> {
 
 /**
  * Copies the files that make up a game from one folder to another: the character sheets, the game state, the
- * transcript and the premise. The GM's session id is left out of the state, since a scenario starts the GM
+ * transcript, the premise and the campaign's memory files. The GM's session id is left out of the state, since a scenario starts the GM
  * over from the transcript and does not resume whatever session was running when it was saved.
  */
 async function copyGame(from: string, to: string) {
@@ -57,7 +58,7 @@ async function copyGame(from: string, to: string) {
     await mkdir(join(to, "characters"), { recursive: true });
     for (const name of sheetFiles(names)) await cp(join(from, "characters", name), join(to, "characters", name));
   }
-  for (const name of ["transcript.jsonl", "premise.md"]) {
+  for (const name of ["transcript.jsonl", "premise.md", ...Object.values(MEMORY_FILES)]) {
     await cp(join(from, name), join(to, name)).catch((err) => (isMissing(err) ? undefined : Promise.reject(err)));
   }
   const statePath = join(from, "state.json");
