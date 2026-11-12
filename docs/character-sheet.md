@@ -33,6 +33,12 @@ The server checks a sheet when it starts. A misspelled field, or a number outsid
 
 A weapon's `damage.type` is `physical` or `stun`, so a 7S weapon is `{ "value": 7, "type": "stun" }`. The `ranges` of a ranged weapon are Attack Ratings; leave out a range the weapon cannot reach.
 
+## Changes at the end of a run
+
+Playing does not change a sheet file. Code exists for the end of a run to do it (nothing calls it yet; the GM gets a way to in a later change): Karma earned is added to the Karma in hand and the total, nuyen is added or spent (never below 0), gear is added or taken out by name, contacts are added or updated by name, a line is added to the notes, and the run is added to the end of the `history` as the next number. A run can change Karma by at most 30 and nuyen by at most 500,000, and if any part of an update cannot be applied, none of it is. A sheet whose `gear` is still text is left as text; what changed in its gear goes into that run's history entry instead.
+
+Before a sheet is changed, the file as it was is copied to `characters/history/<id>-<date>.json` (`-2`, `-3` for more on the same day), and if that copy cannot be made, the sheet is not changed. The `history` folder is not read as characters and is not carried into a scenario. To undo a change, copy an old file back over the sheet and restart the server.
+
 ## What is not stored
 
 The boxes the sheet works out from the numbers (Initiative, Composure, Judge Intentions, Memory, Lift/Carry, Defense Rating, the condition monitors) are not part of the file, since they follow from the attributes and armor. How hurt a character is, their treatments and any Edge rank they have burned are kept in the campaign's `state.json`, not in the sheet.
