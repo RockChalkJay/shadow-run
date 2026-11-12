@@ -955,7 +955,13 @@ export class GameSession {
     try {
       planned = await this.planRewards({ rewards, summary, date });
     } catch (err) {
-      return { ok: false, text: err instanceof Error ? err.message : String(err) };
+      const text = err instanceof Error ? err.message : String(err);
+      // The table is told too, once, since some of these (a sheet that is full) are not the GM's to fix.
+      if (!this.reportedMemoryProblems.has(text)) {
+        this.reportedMemoryProblems.add(text);
+        await this.record({ kind: "system", text });
+      }
+      return { ok: false, text };
     }
 
     let number: number;

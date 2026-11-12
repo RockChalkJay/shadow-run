@@ -510,6 +510,28 @@ describe("what a run does for the characters", () => {
     expect((await sheetFile(t.store.dir, "kira")).history).toBeUndefined();
   });
 
+  it("tells the table why a write-up was refused, once, since some reasons are not the GM's to fix", async () => {
+    const calls: Array<{ ok: boolean; text: string }> = [];
+    const driver: GmDriver = {
+      async takeTurn(input, ctx) {
+        if (!wrapping(input)) return;
+        calls.push(await ctx.tools.endSession({ ...WRITE_UP, rewards: [{ characterId: "kira", nuyen: -50 }] }));
+        calls.push(await ctx.tools.endSession({ ...WRITE_UP, rewards: [{ characterId: "kira", nuyen: -50 }] }));
+      },
+    };
+    const t = await table(driver);
+    await t.store.saveParty([...t.session.party]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    const told = t.session.snapshot().transcript.filter((e) => e.kind === "system" && e.text.startsWith("The session was not written up, because: Kira: Kira has 0 nuyen"));
+    expect(told).toHaveLength(1);
+    expect(calls.every((c) => !c.ok)).toBe(true);
+  });
+
   it("refuses a character that is not at the table, and one given twice", async () => {
     const t = await wrapped([{ characterId: "nobody", karma: 1 }]);
     expect(t.calls[0]).toEqual({ ok: false, text: 'There is no character "nobody" at the table. The ids are kira, doc.' });
