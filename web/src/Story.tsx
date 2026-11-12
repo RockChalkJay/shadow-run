@@ -64,19 +64,19 @@ function plain(entry: TranscriptEntry): string | null {
 }
 
 /** A session's start or end in the story: a divider, then the mission or the GM's write-up under it. */
-function SessionBreak({ entry, summaryInNote }: { entry: Extract<TranscriptEntry, { kind: "session" }>; summaryInNote: boolean }) {
+function SessionBreak({ entry, summaryInCard }: { entry: Extract<TranscriptEntry, { kind: "session" }>; summaryInCard: boolean }) {
   const begins = entry.event === "start";
   return (
     <>
-      <div className="divider"><b>{begins ? `Session ${entry.number} begins` : `Session ${entry.number} saved`}</b></div>
+      <div className="divider"><b>Session {entry.number} {begins ? "begins" : "ends"}</b></div>
       {begins && entry.mission && <div className="mission">Mission: <em>{entry.mission}</em></div>}
-      {!begins && entry.summary && !summaryInNote && <div className="wrapnote">{entry.summary.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}</div>}
+      {!begins && entry.summary && !summaryInCard && <div className="wrapnote">{entry.summary.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}</div>}
     </>
   );
 }
 
-/** `summaryInNote` is the session whose write-up the saved note already shows, so the story does not say it twice. */
-export function Story({ transcript, streaming, fresh, nameOf, summaryInNote }: { transcript: TranscriptEntry[]; streaming: string[]; fresh: number[]; nameOf: (id: string) => string; summaryInNote?: number | undefined }) {
+/** `summaryInCard` is the session whose write-up the session-over card already shows, so the story does not say it twice. */
+export function Story({ transcript, streaming, fresh, nameOf, summaryInCard }: { transcript: TranscriptEntry[]; streaming: string[]; fresh: number[]; nameOf: (id: string) => string; summaryInCard?: number | undefined }) {
   return (
     <>
       {transcript.map((entry) => {
@@ -88,7 +88,7 @@ export function Story({ transcript, streaming, fresh, nameOf, summaryInNote }: {
           case "roll":
             return <RollEntry key={entry.id} entry={entry} fresh={fresh.includes(entry.id)} nameOf={nameOf} />;
           case "session":
-            return <SessionBreak key={entry.id} entry={entry} summaryInNote={entry.number === summaryInNote} />;
+            return <SessionBreak key={entry.id} entry={entry} summaryInCard={entry.number === summaryInCard} />;
           default: {
             const text = plain(entry);
             return text ? <div key={entry.id} className="note">{text}</div> : null;
