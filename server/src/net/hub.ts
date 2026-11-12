@@ -107,7 +107,9 @@ export class Hub {
     if (!session) return { ok: false, error: "The table is not ready yet." };
     switch (message.type) {
       case "session.start":
-        return session.start();
+        return session.start(message.mission);
+      case "session.wrapup":
+        return session.wrapUp();
       case "player.say":
         return session.say(message.characterId, message.text);
       case "roll.app":

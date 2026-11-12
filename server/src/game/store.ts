@@ -61,6 +61,14 @@ export const SavedState = z.object({
       }),
     )
     .default([]),
+  /** The session in play, or the one that just ended. Older saves are session 1. */
+  sessionNumber: z.number().int().min(1).default(1),
+  /** The table asked to wrap the session up and the GM has not done it yet. */
+  wrapUpRequested: z.boolean().default(false),
+  /** The session was wrapped up, and nothing happens until the next one begins. */
+  ended: z.boolean().default(false),
+  /** What the table asked the next session to be about, until the GM has opened it. */
+  mission: z.string().optional(),
   /** What players said that the GM has not heard yet. */
   held: z.array(z.object({ characterId: z.string().optional(), name: z.string(), text: z.string() })),
 });

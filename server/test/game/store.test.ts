@@ -6,7 +6,7 @@ import { CampaignStore, sheetFiles, type SavedState } from "../../src/game/store
 import { demoParty } from "../../src/game/demoParty.js";
 
 const dir = () => mkdtemp(join(tmpdir(), "sr-store-"));
-const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, burned: {}, held: [] };
+const emptyState: SavedState = { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, burned: {}, sessionNumber: 1, wrapUpRequested: false, ended: false, held: [] };
 
 describe("character sheets", () => {
   const sheetsIn = (d: string) => readdir(join(d, "characters"));
@@ -130,6 +130,21 @@ describe("game state", () => {
     const old = { ...emptyState, pcs: [{ id: "kira", monitor }], npcs: [{ id: "g", name: "G", body: 3, willpower: 3, monitor }] };
     await writeFile(join(d, "state.json"), JSON.stringify(old));
     expect(await new CampaignStore(d).loadState()).toMatchObject({ pcs: [{ treated: [] }], npcs: [{ treated: [] }] });
+  });
+
+  it("reads a state saved before sessions had a number or an end as session 1, in play, with no wrap-up asked for", async () => {
+    const d = await dir();
+    const { sessionNumber: _n, wrapUpRequested: _w, ended: _e, ...old } = emptyState;
+    await writeFile(join(d, "state.json"), JSON.stringify(old));
+    expect(await new CampaignStore(d).loadState()).toEqual({ ...old, sessionNumber: 1, wrapUpRequested: false, ended: false });
+  });
+
+  it("keeps the number of the session, a wrap-up that was asked for, the end, and the mission, across a save", async () => {
+    const d = await dir();
+    const store = new CampaignStore(d);
+    const state = { ...emptyState, sessionNumber: 4, wrapUpRequested: true, ended: true, mission: "Steal the courier." };
+    await store.saveState(state);
+    expect(await store.loadState()).toEqual(state);
   });
 
   it("refuses a state file it cannot understand rather than starting over silently", async () => {

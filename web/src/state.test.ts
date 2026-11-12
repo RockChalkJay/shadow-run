@@ -12,10 +12,18 @@ const rollEntry = (id: number): TranscriptEntry =>
 describe("the table's state", () => {
   it("takes a snapshot whole, replacing what it had", () => {
     const before = apply(initialState, { type: "roll.requested", request });
-    const after = apply(before, { type: "snapshot", party: [], characters: [], pendingRolls: [], edge: [], combat: null, transcript: [gmEntry(1, "Hi")], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 4, stunOverflowPerPhysical: 2 }, testMode: true });
+    const after = apply(before, { type: "snapshot", party: [], characters: [], pendingRolls: [], edge: [], combat: null, transcript: [gmEntry(1, "Hi")], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 4, stunOverflowPerPhysical: 2 }, testMode: true, session: { number: 2, phase: "open" } });
     expect(after.rules).toEqual({ hitMinimum: 4, stunOverflowPerPhysical: 2 });
     expect(after.testMode).toBe(true);
+    expect(after.session).toEqual({ number: 2, phase: "open" });
     expect(after).toMatchObject({ ready: true, pending: [], transcript: [{ id: 1 }] });
+  });
+
+  it("follows the session as the server says it begins, is wrapped up and ends", () => {
+    expect(initialState.session).toEqual({ number: 0, phase: "idle" });
+    const open = apply(initialState, { type: "session.updated", session: { number: 3, phase: "open" } });
+    expect(open.session).toEqual({ number: 3, phase: "open" });
+    expect(apply(open, { type: "session.updated", session: { number: 3, phase: "ended" } }).session.phase).toBe("ended");
   });
 
   it("assumes the book's rules, and no test mode, until a snapshot says otherwise", () => {

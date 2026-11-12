@@ -119,6 +119,8 @@ function show(entry: TranscriptEntry) {
       line(`\n  ${entry.reason}: ${entry.after.name} heals ${entry.healed} ${entry.type}`);
       line(`  ${formatStanding(entry.after)}\n`);
       return;
+    case "session":
+      return line(entry.event === "start" ? `\n  -- Session ${entry.number} begins${entry.mission ? `: ${entry.mission}` : ""} --` : `  -- Session ${entry.number} is over --\n  ${entry.summary ?? ""}`);
     case "system":
       return line(`  [${entry.text}]`);
   }
@@ -204,7 +206,8 @@ ws.on("error", (err) => {
 const help = [
   "  text              say something as the active character",
   "  /as <id>          speak as another character",
-  "  /start            begin the session",
+  "  /start [mission]  begin the session, or the next one after /wrapup; the mission is what you want it to be about",
+  "  /wrapup           stop for now: the GM closes the scene and writes the session up",
   "  /app [n] [edge] [hold]   roll pending roll n (default 1) with the app's dice; edge = spend 4 Edge on Edge dice, hold = decide on Edge after",
   "  /dice [n:] f f f [x f f] [edge] [hold]   report dice rolled by hand, e.g. /dice 6 5 3 1 or /dice 2: 4 4 1; after x, the extra dice for 6s with edge",
   "  /edge <reroll|bump|buy|failed> ...   spend Edge on a held roll (see the roll for the forms)",
@@ -236,7 +239,9 @@ createInterface({ input: process.stdin }).on("line", (input) => {
     case "quit":
       return ws.close();
     case "start":
-      return send({ type: "session.start" });
+      return send({ type: "session.start", ...(args.length > 0 && { mission: args.join(" ") }) });
+    case "wrapup":
+      return send({ type: "session.wrapup" });
     case "status":
       if (combat) console.log(`  ${formatCombatStatus(combat, (m) => characters.find((c) => c.kind === m.kind && c.id === m.id)?.status)}`);
       if (edges.length > 0) console.log(`  Edge: ${edges.map((e) => `${name(e.id)} ${e.points}/${e.rank}${e.spentThisRound ? " (spent)" : ""}`).join(", ")}`);

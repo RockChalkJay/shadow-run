@@ -48,6 +48,13 @@ describe("a finished roll in the story", () => {
     expect(screen.queryByLabelText("rolling")).toBeNull();
   });
 
+  it("shows where a session begins, with its mission, and where it ends", () => {
+    const marker = (id: number, event: "start" | "end", mission?: string): TranscriptEntry => ({ id, ts: "t", kind: "session", event, number: 2, ...(mission && { mission }) });
+    render(<Story transcript={[marker(1, "start", "Steal the courier."), marker(2, "end")]} streaming={[]} fresh={[]} nameOf={(id) => id} />);
+    expect(screen.getByText("Session 2 begins: Steal the courier.")).toBeTruthy();
+    expect(screen.getByText("Session 2 is over")).toBeTruthy();
+  });
+
   it("shows narration as it streams", () => {
     render(<Story transcript={[]} streaming={["Rain falls.", "A door"]} fresh={[]} nameOf={nameOf} />);
     expect(screen.getByText("Rain falls.")).toBeTruthy();

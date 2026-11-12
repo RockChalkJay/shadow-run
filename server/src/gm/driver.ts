@@ -30,6 +30,8 @@ export interface GmTools {
   noteThread(input: unknown): Promise<ToolReply>;
   /** Reads the campaign's notes back: an NPC, all of them, the threads, or the last sessions. */
   recall(input: unknown): Promise<ToolReply>;
+  /** Writes up the session in the log, once the table has asked to wrap up; the session is then over. */
+  endSession(input: unknown): Promise<ToolReply>;
 }
 
 export interface GmTurnInput {

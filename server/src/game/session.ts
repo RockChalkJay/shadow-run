@@ -3,6 +3,7 @@ import {
   AwardEdgeInput,
   DealDamageInput,
   HealInput,
+  EndSessionInput,
   JoinCombatInput,
   NoteNpcInput,
   NoteThreadInput,
@@ -26,6 +27,7 @@ import {
   type RollRequest,
   type RollResult,
   type ServerEvent,
+  type SessionInfo,
   type Snapshot,
   type TranscriptEntry,
   type Usage,
@@ -105,6 +107,8 @@ interface Turn {
   results: Outcome[];
   held: Held[];
   openRequested: boolean;
+  /** The table asked to wrap the session up. */
+  wrapUp: boolean;
 }
 
 export interface SessionOptions {
@@ -125,6 +129,19 @@ export interface SessionOptions {
   now?: () => Date;
 }
 
+/** The date as the table writes it in the session log, in the server's own time zone. */
+const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** What the GM is told when the table wraps the session up, with the system's own account of the session to write from. */
+function wrapUpText(digest: string): string {
+  return [
+    "WRAP UP THE SESSION. The table is stopping here. Close the scene in a short beat that leaves the characters somewhere they can safely stop, with no new danger, and do not start anything new. Then call end_session once with the write-up. Update the notes with note_npc and note_thread first if anything changed that they do not yet say. Never mention the log or the notes to the players.",
+    digest ? `What the system recorded this session, to write from:\n${digest}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 /** What the GM is told when the notes cannot be read or saved: not why, and not to speak of it. */
 const NOTES_UNAVAILABLE = "The campaign notes cannot be used just now, so carry on without them. Do not mention this to the players.";
 
@@ -143,6 +160,18 @@ export class GameSession {
   private readonly memory: CampaignMemory;
   /** The problems with the notes the table has been told of. */
   private readonly reportedMemoryProblems = new Set<string>();
+  /** The session in play, or the one that just ended. */
+  private sessionNumber: number;
+  /** The session was wrapped up, and nothing happens until the next one begins. */
+  private ended: boolean;
+  /** The table asked to wrap up and the GM has not been given the turn for it yet. */
+  private wrapUpRequested: boolean;
+  /** What the table asked the next session to be about, until the GM has opened it. */
+  private mission: string | undefined;
+  /** The GM's opening turn is being taken, so the session has begun though `opened` is not set yet. */
+  private opening = false;
+  /** The wrap-up turn the GM is in, and the log entry it wrote in it. */
+  private wrapping: { logged?: { number: number; summary: string } } | null = null;
   /** The fight in progress, if any. */
   private combat: CombatState | null;
   /** Every player character's Edge points. They start at the Edge attribute whenever the server starts. */
@@ -216,6 +245,10 @@ export class GameSession {
     this.opened = saved?.opened ?? false;
     this.turnCounter = saved?.turnCounter ?? 0;
     this.claudeSessionId = saved?.claudeSessionId;
+    this.sessionNumber = saved?.sessionNumber ?? 1;
+    this.ended = saved?.ended ?? false;
+    this.wrapUpRequested = saved?.wrapUpRequested ?? false;
+    this.mission = saved?.mission;
     this.status = this.restingStatus();
   }
 
@@ -252,6 +285,10 @@ export class GameSession {
       ...(this.claudeSessionId !== undefined && { claudeSessionId: this.claudeSessionId }),
       opened: this.opened,
       openRequested: this.openRequested,
+      sessionNumber: this.sessionNumber,
+      wrapUpRequested: this.wrapUpRequested,
+      ended: this.ended,
+      ...(this.mission !== undefined && { mission: this.mission }),
       turnCounter: this.turnCounter,
       pending: this.rolls.list(),
       results: this.results,
@@ -294,17 +331,75 @@ export class GameSession {
       usage: this.usage,
       rules: screenRules(this.rules),
       testMode: this.opts.testMode ?? false,
+      session: this.sessionInfo(),
     };
+  }
+
+  private sessionInfo(): SessionInfo {
+    const phase = this.ended ? "ended" : this.wrapUpRequested || this.wrapping ? "wrapping" : this.opened || this.openRequested ? "open" : "idle";
+    return { number: phase === "idle" ? 0 : this.sessionNumber, phase };
+  }
+
+  private announceSession(): void {
+    this.opts.emit({ type: "session.updated", session: this.sessionInfo() });
   }
 
   // ---- what the table does -------------------------------------------------------------------
 
-  /** Begins the session: the GM opens the first scene. */
-  async start(): Promise<Ack> {
-    if (this.opened || this.openRequested) return { ok: false, error: "The session has already begun." };
+  /**
+   * Begins a session: the GM opens the first scene. After a session was wrapped up this begins the next one, with a new
+   * conversation, a fresh Edge for everyone and, if the table gave one, the mission it wants.
+   */
+  async start(mission?: string): Promise<Ack> {
+    if (!this.ended && (this.opened || this.openRequested || this.opening)) return { ok: false, error: "The session has already begun." };
+    const number = await this.nextSessionNumber();
+    if (this.ended) this.refreshEdge();
+    this.sessionNumber = number;
+    this.mission = mission?.trim() || undefined;
+    this.ended = false;
+    this.opened = false;
     this.openRequested = true;
     this.blocked = false;
+    await this.record({ kind: "session", event: "start", number, ...(this.mission !== undefined && { mission: this.mission }) });
     await this.persist();
+    this.announceSession();
+    this.schedule();
+    return { ok: true };
+  }
+
+  /** The number for the session about to begin: the next after the highest in the campaign's log. */
+  private async nextSessionNumber(): Promise<number> {
+    try {
+      const logged = await this.memory.sessions();
+      return Math.max(0, ...logged.map((s) => s.number)) + 1;
+    } catch (err) {
+      await this.memoryProblem(err);
+      return this.ended ? this.sessionNumber + 1 : this.sessionNumber;
+    }
+  }
+
+  /** Everyone starts a session with Edge points equal to their Edge attribute. */
+  private refreshEdge(): void {
+    for (const sheet of this.sheets) {
+      this.edge.set(sheet.id, startSession(sheet.attributes.edge));
+      this.announceEdge(sheet.id);
+    }
+  }
+
+  /**
+   * The table stops for now: the GM closes the scene and writes up the session. It waits for rolls to be answered or skipped, and
+   * for a turn in progress to end, so that nothing is cut off. A fight in progress carries over.
+   */
+  async wrapUp(): Promise<Ack> {
+    if (!this.opened || this.ended) return { ok: false, error: "There is no session in play to wrap up." };
+    if (this.wrapUpRequested || this.wrapping) return { ok: false, error: "The GM is already wrapping up the session." };
+    if (this.rolls.list().length > 0) return { ok: false, error: "Answer or skip the rolls that are waiting first." };
+    // A turn in progress, not the loop: the loop is still winding down for a moment after a turn ends, and picks the wrap-up up.
+    if (this.current) return { ok: false, error: "The GM is in the middle of a turn. Wrap up when it has finished." };
+    this.wrapUpRequested = true;
+    this.blocked = false;
+    await this.persist();
+    this.announceSession();
     this.schedule();
     return { ok: true };
   }
@@ -315,6 +410,7 @@ export class GameSession {
   }
 
   async say(characterId: string | undefined, text: string): Promise<Ack> {
+    if (this.ended) return { ok: false, error: "The session is over. Begin the next one first." };
     if (characterId !== undefined && !this.member(characterId)) return { ok: false, error: `There is no character "${characterId}" at the table.` };
     const name = this.nameOf(characterId);
     await this.record({ kind: "say", ...(characterId !== undefined && { characterId }), name, text });
@@ -771,20 +867,24 @@ export class GameSession {
       this.activeTurn?.id === turnId && !signal.aborted
         ? act()
         : Promise.resolve({ ok: false, text: "That turn is over, so nothing was done. Do not call tools now." });
+    // Once the session is written up nothing more happens in it, so the dice, damage and combat tools are refused; the notes tools still work.
+    const gameplay = (act: () => Promise<ToolReply>): Promise<ToolReply> =>
+      whileCurrent(() => (this.wrapping?.logged ? Promise.resolve({ ok: false, text: "The session is written up and over, so nothing more happens in it. Do not call tools now." }) : act()));
     return {
-      requestRoll: (input) => whileCurrent(() => this.requestRoll(input)),
-      rollNpc: (input) => whileCurrent(() => this.rollNpc(input)),
-      dealDamage: (input) => whileCurrent(() => this.dealDamage(input)),
-      attack: (input) => whileCurrent(() => this.attack(input)),
-      awardEdge: (input) => whileCurrent(() => this.awardEdge(input)),
-      startCombat: (input) => whileCurrent(() => this.startCombat(input)),
-      joinCombat: (input) => whileCurrent(() => this.joinCombat(input)),
-      nextRound: () => whileCurrent(() => this.nextRound()),
-      endCombat: () => whileCurrent(() => this.endCombat()),
-      heal: (input) => whileCurrent(() => this.heal(input)),
+      requestRoll: (input) => gameplay(() => this.requestRoll(input)),
+      rollNpc: (input) => gameplay(() => this.rollNpc(input)),
+      dealDamage: (input) => gameplay(() => this.dealDamage(input)),
+      attack: (input) => gameplay(() => this.attack(input)),
+      awardEdge: (input) => gameplay(() => this.awardEdge(input)),
+      startCombat: (input) => gameplay(() => this.startCombat(input)),
+      joinCombat: (input) => gameplay(() => this.joinCombat(input)),
+      nextRound: () => gameplay(() => this.nextRound()),
+      endCombat: () => gameplay(() => this.endCombat()),
+      heal: (input) => gameplay(() => this.heal(input)),
       noteNpc: (input) => whileCurrent(() => this.noteNpc(input)),
       noteThread: (input) => whileCurrent(() => this.noteThread(input)),
       recall: (input) => whileCurrent(() => this.recall(input)),
+      endSession: (input) => whileCurrent(() => this.endSession(input)),
     };
   }
 
@@ -824,6 +924,23 @@ export class GameSession {
     } catch (err) {
       await this.memoryProblem(err);
       return { ok: false, text: NOTES_UNAVAILABLE };
+    }
+  }
+
+  /** The GM's write-up of the session, which is only asked for when the table wraps it up. It goes in the log; the session ends when the turn does. */
+  private async endSession(input: unknown): Promise<ToolReply> {
+    if (!this.wrapping) return { ok: false, text: "The table has not asked to wrap up the session, so do not write it up now." };
+    if (this.wrapping.logged) return { ok: false, text: `Session ${this.wrapping.logged.number} is already written up.` };
+    const parsed = EndSessionInput.safeParse(input);
+    if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
+    const { summary, fictionDate, rolls, consequences } = parsed.data;
+    try {
+      const number = await this.memory.logSession({ date: localDate(this.opts.now?.() ?? new Date()), summary, ...(fictionDate !== undefined && { fictionDate }), ...(rolls !== undefined && { rolls }), ...(consequences !== undefined && { consequences }) });
+      this.wrapping.logged = { number, summary };
+      return { ok: true, text: `Session ${number} is written up and over. Give the players one last line if you have not already, and nothing more.` };
+    } catch (err) {
+      await this.memoryProblem(err);
+      return { ok: false, text: "The session log cannot be written just now. Do not mention this to the players." };
     }
   }
 
@@ -1417,6 +1534,23 @@ export class GameSession {
 
   // ---- the GM's turns ------------------------------------------------------------------------
 
+  /**
+   * The GM's wrap-up turn is over. If it wrote the session up, the session ends: a marker goes in the story, and the GM's conversation is
+   * let go, so the next session starts a new one from the notes. If it did not, the session stays open and the table is told.
+   */
+  private async finishWrapUp(logged: { number: number; summary: string } | undefined): Promise<void> {
+    if (!logged) {
+      await this.record({ kind: "system", text: "The GM did not write up the session, so it is still open. Wrap up again to try once more." });
+      this.announceSession();
+      return;
+    }
+    this.sessionNumber = logged.number;
+    this.ended = true;
+    this.claudeSessionId = undefined;
+    await this.record({ kind: "session", event: "end", number: logged.number, summary: logged.summary });
+    this.announceSession();
+  }
+
   /** Starts the turn loop if it is not running. A running loop looks for more work when its turn ends. */
   private schedule(): void {
     if (this.running) return;
@@ -1448,17 +1582,22 @@ export class GameSession {
   private takeNextTurn(): Turn | null {
     if (this.blocked || this.rolls.list().length > 0) return null;
     const opening = this.openRequested && !this.opened;
-    if (!opening && this.results.length === 0 && this.held.length === 0) return null;
-    const turn = { results: this.results, held: this.held, openRequested: this.openRequested };
+    if (!opening && !this.wrapUpRequested && this.results.length === 0 && this.held.length === 0) return null;
+    const turn = { results: this.results, held: this.held, openRequested: this.openRequested, wrapUp: this.wrapUpRequested };
+    this.opening = opening;
     this.results = [];
     this.held = [];
     this.openRequested = false;
+    this.wrapUpRequested = false;
     return turn;
   }
 
-  private turnInput(turn: Turn): GmTurnInput {
+  private turnInput(turn: Turn, digest = ""): GmTurnInput {
     const parts: string[] = [];
-    if (!this.opened) parts.push("BEGIN SESSION. Open the first scene.");
+    if (!this.opened) {
+      parts.push(this.sessionNumber === 1 ? "BEGIN SESSION. Open the first scene." : `BEGIN SESSION ${this.sessionNumber}. Open the first scene of this session, carrying on from your notes.`);
+      if (this.mission) parts.push(`What the table wants this session to be about: ${this.mission}`);
+    }
     if (this.combat) parts.push(formatCombatStatus(this.combat, this.statusOf));
     for (const outcome of turn.results) {
       if (outcome.kind === "report") parts.push(outcome.text);
@@ -1472,6 +1611,7 @@ export class GameSession {
       }
       else parts.push(formatCancelledForGm(outcome.request, this.nameOf(outcome.request.characterId)));
     }
+    if (turn.wrapUp) parts.push(wrapUpText(digest));
     if (turn.held.length > 0) parts.push(`The players say:\n${turn.held.map((m) => `- ${m.name}: ${m.text}`).join("\n")}`);
     return { kind: this.opened ? "continue" : "open", text: parts.join("\n\n") };
   }
@@ -1481,8 +1621,17 @@ export class GameSession {
    * leaving it out here keeps a GM that starts over from hearing it twice.
    */
   private recapBeforeThisTurn(): string {
-    const lastGm = this.recent.findLastIndex((entry) => entry.kind === "gm");
-    return formatRecap(this.recent.slice(0, lastGm + 1), (id) => this.nameOf(id));
+    // Only this session: an earlier one is in the notes the GM is given, and is not a conversation to carry on from.
+    const inSession = this.recent.slice(this.recent.findLastIndex((entry) => entry.kind === "session" && entry.event === "start") + 1);
+    const lastGm = inSession.findLastIndex((entry) => entry.kind === "gm");
+    return formatRecap(inSession.slice(0, lastGm + 1), (id) => this.nameOf(id));
+  }
+
+  /** The system's account of this session, for the GM to write it up from. */
+  private async sessionDigest(): Promise<string> {
+    const entries = await this.opts.store.recentEntries(500);
+    const inSession = entries.slice(entries.findLastIndex((entry) => entry.kind === "session" && entry.event === "start") + 1);
+    return formatRecap(inSession, (id) => this.nameOf(id), 4000);
   }
 
   /** Returns false when the turn failed and the GM should wait for the table. */
@@ -1495,6 +1644,7 @@ export class GameSession {
     const signal = AbortSignal.any([controller.signal, timeout]);
     this.activeTurn = { id: turnId, signal };
     this.setStatus({ phase: "thinking", turnId });
+    if (turn.wrapUp) this.wrapping = {};
     for (const outcome of turn.results) {
       const healing = outcome.kind === "resolved" ? outcome.resolved.request.healing : undefined;
       if (outcome.kind === "resolved" && healing && outcome.resolved.outcome.netHits > 0 && !this.healBudgets.has(outcome.resolved.request.id)) {
@@ -1535,8 +1685,10 @@ export class GameSession {
     };
 
     let failure: string | undefined;
+    let wrapped: GameSession["wrapping"] = null;
     try {
-      await this.opts.driver.takeTurn(this.turnInput(turn), {
+      const digest = turn.wrapUp ? await this.sessionDigest().catch(() => "") : "";
+      await this.opts.driver.takeTurn(this.turnInput(turn, digest), {
         turnId,
         signal,
         onEvent,
@@ -1554,6 +1706,8 @@ export class GameSession {
       active = false;
       this.current = null;
       this.activeTurn = null;
+      wrapped = this.wrapping;
+      this.wrapping = null;
     }
 
     if (narration.trim()) await this.record({ kind: "gm", text: narration.trim() });
@@ -1562,7 +1716,18 @@ export class GameSession {
     if (failure === undefined) {
       this.healBudgets.clear();
       this.opened = true;
+      this.opening = false;
+      this.mission = undefined;
       this.blocked = false;
+      if (turn.wrapUp) await this.finishWrapUp(wrapped?.logged);
+      await this.persist();
+      return true;
+    }
+
+    if (turn.wrapUp && wrapped?.logged) {
+      // The session was written up before the turn failed, so it is over; asking again would log it twice.
+      await this.finishWrapUp(wrapped.logged);
+      await this.record({ kind: "system", text: `The GM's turn ended with a problem after it had written the session up, so the session is over anyway: ${failure}` });
       await this.persist();
       return true;
     }
@@ -1571,6 +1736,8 @@ export class GameSession {
     this.results = [...turn.results, ...this.results];
     this.held = [...turn.held, ...this.held];
     this.openRequested = this.openRequested || (turn.openRequested && !this.opened);
+    this.opening = false;
+    this.wrapUpRequested = this.wrapUpRequested || turn.wrapUp;
     this.blocked = true;
     const resting = restingFrom(failure, this.usage, Math.floor((this.opts.now?.() ?? new Date()).getTime() / 1000));
     this.setStatus(resting ?? { phase: "error", message: failure });

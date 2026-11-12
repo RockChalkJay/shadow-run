@@ -124,7 +124,7 @@ describe("hurting a player character", () => {
     expect(driver.inputs[1]?.text).toContain("Kira resisted with Body 5 (dice at the table): 6 5 3 1 1 = 2 hits, so 6 physical damage got through.");
     expect(driver.inputs[1]?.text).toContain("Kira: Physical 6/11, Stun 0/10, Overflow 0/10. Wound penalty: -2 dice");
     expect(driver.inputs[1]?.text).not.toContain("ROLL RESULT");
-    expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["roll", "damage", "gm"]);
+    expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["session", "roll", "damage", "gm"]);
   });
 
   it("uses the app's dice when asked", async () => {

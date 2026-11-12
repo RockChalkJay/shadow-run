@@ -12,6 +12,8 @@ export interface ScriptedTurn {
   damage?: unknown[];
   /** Healing to give, in the shape of a `heal` call. */
   heals?: unknown[];
+  /** A write-up of the session, in the shape of an `end_session` call. */
+  endSession?: unknown;
   /** Fail the turn with this message instead of speaking. */
   fail?: string;
 }
@@ -67,6 +69,10 @@ export class ScriptedGmDriver implements GmDriver {
         if (!reply.ok) throw new Error(`The scripted ${tool} was refused: ${reply.text}`);
       }
     }
+    if (turn.endSession !== undefined) {
+      const reply = await ctx.tools.endSession(turn.endSession);
+      if (!reply.ok) throw new Error(`The scripted end_session was refused: ${reply.text}`);
+    }
     ctx.onEvent({ type: "done", sessionId: "scripted", costUsd: 0, stopReason: "end_turn" });
   }
 }
@@ -75,6 +81,9 @@ export class ScriptedGmDriver implements GmDriver {
 export function demoScript(party: readonly CharacterSheet[]): Script {
   const first = party[0];
   return (input) => {
+    if (input.text.includes("WRAP UP THE SESSION")) {
+      return { say: ["The rain keeps falling. For now, the night is quiet."], endSession: { summary: "The team took the courier job and began working the Renraku annex." } };
+    }
     if (input.kind === "open" && first) {
       return {
         say: [

@@ -28,6 +28,7 @@ describe("GM MCP server", () => {
       noteNpc: async (input) => (calls.push({ tool: "note_npc", input }), reply),
       noteThread: async (input) => (calls.push({ tool: "note_thread", input }), reply),
       recall: async (input) => (calls.push({ tool: "recall", input }), reply),
+      endSession: async (input) => (calls.push({ tool: "end_session", input }), reply),
     });
     client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(

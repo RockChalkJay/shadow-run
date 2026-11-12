@@ -47,13 +47,15 @@ function line(entry: TranscriptEntry, nameOf: (id: string) => string): string | 
       return `[Damage] ${entry.after.name} took ${entry.taken} ${entry.damageType} from ${entry.label}.${entry.after.status === "active" ? "" : ` ${entry.after.name} is ${entry.after.status}.`}${entry.composure && !entry.composure.held ? ` ${entry.after.name} bolted.` : ""}`;
     case "heal":
       return `[Heal] ${entry.after.name} healed ${entry.healed} ${entry.type}: ${entry.reason}.`;
+    case "session":
+      return entry.event === "start" ? `[Session ${entry.number} begins]` : `[Session ${entry.number} ends]`;
     case "system":
       return null;
   }
 }
 
 /** The conversation so far as plain text, for a GM that has lost its own session and must pick up from the transcript. */
-export function formatRecap(entries: readonly TranscriptEntry[], nameOf: (id: string) => string): string {
+export function formatRecap(entries: readonly TranscriptEntry[], nameOf: (id: string) => string, max = MAX_RECAP): string {
   const lines = entries.flatMap((entry) => {
     const text = line(entry, nameOf);
     return text === null ? [] : [text];
@@ -62,7 +64,7 @@ export function formatRecap(entries: readonly TranscriptEntry[], nameOf: (id: st
   const kept: string[] = [];
   for (const text of lines.reverse()) {
     total += text.length + 1;
-    if (total > MAX_RECAP) break;
+    if (total > max) break;
     kept.push(text);
   }
   return kept.reverse().join("\n");

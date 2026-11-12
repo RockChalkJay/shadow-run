@@ -439,7 +439,7 @@ describe("what the table reads afterwards", () => {
     await t.session.submitRoll(requestedId(t.events), { mode: "physical", dice: "6 6 6 5 3 3" });
     await t.session.whenIdle();
     const kinds = (await t.store.recentEntries(20)).map((e) => e.kind);
-    expect(kinds.filter((k) => k !== "gm")).toEqual(["roll", "attack", "damage"]);
+    expect(kinds.filter((k) => k !== "gm" && k !== "session")).toEqual(["roll", "attack", "damage"]);
     const attack = (await t.store.recentEntries(20)).find((e) => e.kind === "attack");
     expect(attack).toMatchObject({ attacker: "Kira", defender: "Ganger", hit: true, damageValue: 7, attackedBy: "physical", defendedBy: "system" });
   });

@@ -58,6 +58,7 @@ function plain(entry: TranscriptEntry): string | null {
     case "edge_use": return `${entry.name} spends ${entry.cost} Edge and ${entry.detail}`;
     case "edge_burn": return `${entry.name} burns Edge for ${entry.burn === "smackdown" ? "Smackdown" : "Not Dead Yet"}: rank ${entry.rank} left`;
     case "combat": return entry.event === "end" ? "The fight is over" : `Fight ${entry.event === "start" ? "begins" : entry.event === "join" ? "gains" : "moves to"} round ${entry.round}: ${entry.names.join(", ")}`;
+    case "session": return entry.event === "start" ? `Session ${entry.number} begins${entry.mission ? `: ${entry.mission}` : ""}` : `Session ${entry.number} is over`;
     case "system": return entry.text;
     default: return null;
   }
