@@ -57,4 +57,8 @@ The GM keeps the notes with three tools, and is told in its instructions when to
 
 When the GM starts a new conversation (the first turn of a campaign, or after its earlier session was lost) it is told what the notes hold before anything else: the threads, a line for each character, and how the last session ended, cut to a few thousand characters, with `recall` for the rest. A GM whose conversation goes on is not told again. If the notes cannot be read or saved (a table that cannot be rewritten, say), the GM is told only that they cannot be used and to carry on, and the table's story shows the reason.
 
-Nothing writes the session log during play yet; an entry is added by code, and ending a session is a later change.
+## Sessions
+
+A session ends when the table says so, not when the server stops. `/wrapup` in the command-line client (`npm run play`) asks the GM to close the scene and write the session up: it calls `end_session` with a summary, the date in the story, key rolls and consequences, and the system adds the real date and the next number to `session-log.md`. A fight in progress carries over. It waits if rolls are still waiting for dice (answer or skip them first) or the GM is in the middle of a turn. If the GM does not write the session up, the session stays open and the story says so; wrap up again to retry.
+
+After that the session is over until the next one is begun with `/start`, optionally followed by what you want it to be about (`/start steal the Renraku courier`). The next session is a new conversation for the GM, which is told what the notes hold, with the number after the highest in the log, and everyone's Edge starts again at their Edge attribute. Wounds, burned Edge and the fight, if one was on, stay as they were. Typing to the GM while a session is over is refused until the next one begins.

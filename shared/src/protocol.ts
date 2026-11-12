@@ -14,7 +14,10 @@ const RollEdge = z.enum(["dice", "widen_glitch"]);
 
 /** What the browser (or any client) may send. Everything is validated on the server. */
 export const ClientMessage = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("session.start") }),
+  /** Begin a session, or the next one after the last was wrapped up; `mission` is what the table wants it to be about. */
+  z.object({ type: z.literal("session.start"), mission: z.string().trim().max(1000).optional() }),
+  /** Stop for now: the GM closes the scene and writes up the session in the campaign's notes. */
+  z.object({ type: z.literal("session.wrapup") }),
   z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
   /**
    * Roll the pending request for the player with the app's dice. `edge: "dice"` spends 4 Edge to add the Edge
@@ -138,7 +141,16 @@ export type TranscriptEntry =
   | (EntryBase & { kind: "edge_burn"; characterId: string; name: string; burn: "smackdown" | "not_dead_yet"; lost: number; rank: number })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
+  /** A session began, or was wrapped up with the summary the GM wrote for the log. */
+  | (EntryBase & { kind: "session"; event: "start" | "end"; number: number; mission?: string; summary?: string })
   | (EntryBase & { kind: "system"; text: string });
+
+/** Where the table is in its sessions: not begun, in play, being wrapped up, or over until the next begins. */
+export interface SessionInfo {
+  /** The session in play, or the one that just ended; 0 before the first begins. */
+  number: number;
+  phase: "idle" | "open" | "wrapping" | "ended";
+}
 
 export interface Usage {
   /** Share of the five-hour plan window used, 0 to 1. */
@@ -175,6 +187,7 @@ export interface Snapshot {
   rules: ScreenRules;
   /** Whether the server was started for testing, which lets a held roll be rolled again. */
   testMode: boolean;
+  session: SessionInfo;
 }
 
 /**
@@ -198,6 +211,8 @@ export type ServerEvent =
   /** A pending roll changed: it was counted and is waiting for the player to decide on Edge. */
   | { type: "roll.updated"; request: RollRequest }
   | { type: "edge.updated"; edge: EdgeView }
+  /** The session began, is being wrapped up, or ended. */
+  | { type: "session.updated"; session: SessionInfo }
   | { type: "roll.cancelled"; requestId: string }
   /** Sent to the one client whose message was refused. */
   | { type: "error"; message: string };

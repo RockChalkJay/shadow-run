@@ -1,4 +1,4 @@
-import { DEFAULT_SCREEN_RULES, type CharacterView, type CombatState, type EdgeView, type GmStatus, type RollRequest, type ScreenRules, type ServerEvent, type TranscriptEntry } from "@shadow-run/shared";
+import { DEFAULT_SCREEN_RULES, type CharacterView, type CombatState, type EdgeView, type GmStatus, type RollRequest, type ScreenRules, type ServerEvent, type SessionInfo, type TranscriptEntry } from "@shadow-run/shared";
 import type { CharacterSheet } from "@shadow-run/shared";
 
 /** The GM's narration as it streams in, before the finished entry arrives. */
@@ -30,6 +30,8 @@ export interface TableState {
   rules: ScreenRules;
   /** Whether the server is in test mode, where a held roll can be rolled again. */
   testMode: boolean;
+  /** Where the table is in its sessions. */
+  session: SessionInfo;
 }
 
 export const initialState: TableState = {
@@ -48,6 +50,7 @@ export const initialState: TableState = {
   error: null,
   rules: DEFAULT_SCREEN_RULES,
   testMode: false,
+  session: { number: 0, phase: "idle" },
 };
 
 export type Action =
@@ -65,7 +68,7 @@ export function reduce(state: TableState, action: Action): TableState {
   const event = action.event;
   switch (event.type) {
     case "snapshot":
-      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null, rules: event.rules, testMode: event.testMode };
+      return { ...state, ready: true, party: event.party, characters: event.characters, edge: event.edge, combat: event.combat, pending: event.pendingRolls, transcript: event.transcript, gm: event.gm, streaming: null, fresh: [], error: null, rules: event.rules, testMode: event.testMode, session: event.session };
     case "gm.status":
       return { ...state, gm: event.status };
     case "gm.block":
@@ -91,6 +94,8 @@ export function reduce(state: TableState, action: Action): TableState {
       return { ...state, pending: replaceBy(state.pending, event.request) };
     case "roll.cancelled":
       return { ...state, pending: state.pending.filter((r) => r.id !== event.requestId) };
+    case "session.updated":
+      return { ...state, session: event.session };
     case "edge.updated": {
       const known = state.edge.some((e) => e.id === event.edge.id);
       return { ...state, edge: known ? state.edge.map((e) => (e.id === event.edge.id ? event.edge : e)) : [...state.edge, event.edge] };

@@ -67,6 +67,7 @@ export class ClaudeGmDriver implements GmDriver {
       noteNpc: (input) => driver?.current?.tools.noteNpc(input) ?? Promise.resolve(NO_TURN),
       noteThread: (input) => driver?.current?.tools.noteThread(input) ?? Promise.resolve(NO_TURN),
       recall: (input) => driver?.current?.tools.recall(input) ?? Promise.resolve(NO_TURN),
+      endSession: (input) => driver?.current?.tools.endSession(input) ?? Promise.resolve(NO_TURN),
     });
     const files = { systemPrompt: join(cwd, "system-prompt.md"), mcpConfig: join(cwd, "mcp.json") };
     await writePrivateFile(files.systemPrompt, buildSystemPrompt(opts));

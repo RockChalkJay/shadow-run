@@ -181,6 +181,9 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain('A message that begins "CAMPAIGN MEMORY"');
     expect(prompt).toContain("never tell the players about them");
     expect(prompt).toContain("Nameless grunts are not noted.");
+    expect(prompt).toContain('"BEGIN SESSION" with a number starts a new session');
+    expect(prompt).toContain('"WRAP UP THE SESSION" means the table is stopping for now');
+    expect(prompt).toContain("call end_session");
     // It comes before the privacy rule and the premise, so the premise stays last.
     expect(prompt.indexOf("# Campaign memory")).toBeLessThan(prompt.indexOf("# Privacy"));
     expect(prompt.indexOf("# Privacy")).toBeLessThan(prompt.indexOf("# This session"));

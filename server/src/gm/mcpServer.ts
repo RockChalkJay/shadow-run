@@ -3,14 +3,14 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { AttackInput, AwardEdgeInput, DealDamageInput, HealInput, JoinCombatInput, NoteNpcInput, NoteThreadInput, NpcRollInput, RecallInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
+import { AttackInput, AwardEdgeInput, DealDamageInput, HealInput, EndSessionInput, JoinCombatInput, NoteNpcInput, NoteThreadInput, NpcRollInput, RecallInput, RollRequestInput, StartCombatInput } from "@shadow-run/shared";
 import type { ToolReply } from "./driver.js";
 
 /** Name the GM process knows this server by; its tools appear as `mcp__gm__<tool>`. */
 export const GM_MCP_NAME = "gm";
 
 /** The tool names as the GM process calls them, for `--allowedTools`. */
-export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "award_edge", "start_combat", "join_combat", "next_round", "end_combat", "note_npc", "note_thread", "recall"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
+export const GM_TOOL_NAMES = ["request_roll", "roll_npc", "attack", "deal_damage", "heal", "award_edge", "start_combat", "join_combat", "next_round", "end_combat", "note_npc", "note_thread", "recall", "end_session"].map((name) => `mcp__${GM_MCP_NAME}__${name}`);
 
 export interface GmToolHandlers {
   requestRoll(input: unknown): Promise<ToolReply>;
@@ -26,6 +26,7 @@ export interface GmToolHandlers {
   noteNpc(input: unknown): Promise<ToolReply>;
   noteThread(input: unknown): Promise<ToolReply>;
   recall(input: unknown): Promise<ToolReply>;
+  endSession(input: unknown): Promise<ToolReply>;
 }
 
 const asResult = (reply: ToolReply) => ({
@@ -222,6 +223,20 @@ function buildServer(handlers: GmToolHandlers): McpServer {
       inputSchema: RecallInput.shape,
     },
     async (input) => asResult(await handlers.recall(input)),
+  );
+
+  server.registerTool(
+    "end_session",
+    {
+      description:
+        "Write up the session in the campaign's log. Use it only when the system tells you the table is wrapping up the " +
+        "session, after a short closing beat, and call it once: a summary of what the characters did and learned, who they " +
+        "met and what changed, the date in the story, the key rolls and how they came out, and what it cost or earned them " +
+        "(karma, nuyen, gear, condition, notoriety). Update the notes with note_npc and note_thread first. The session is " +
+        "over once you have called it. Never mention the log to the players.",
+      inputSchema: EndSessionInput.shape,
+    },
+    async (input) => asResult(await handlers.endSession(input)),
   );
 
   return server;

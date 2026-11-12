@@ -91,7 +91,7 @@ describe("a turn with the CLI", () => {
     expect(run).toMatchObject({
       stdin: "BEGIN SESSION. Open the first scene.",
       model: "haiku",
-      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__attack,mcp__gm__deal_damage,mcp__gm__heal,mcp__gm__award_edge,mcp__gm__start_combat,mcp__gm__join_combat,mcp__gm__next_round,mcp__gm__end_combat,mcp__gm__note_npc,mcp__gm__note_thread,mcp__gm__recall",
+      allowedTools: "mcp__gm__request_roll,mcp__gm__roll_npc,mcp__gm__attack,mcp__gm__deal_damage,mcp__gm__heal,mcp__gm__award_edge,mcp__gm__start_combat,mcp__gm__join_combat,mcp__gm__next_round,mcp__gm__end_combat,mcp__gm__note_npc,mcp__gm__note_thread,mcp__gm__recall,mcp__gm__end_session",
       settingSources: "",
     });
     expect(run?.systemPrompt).toContain("Kira (id: kira)");
@@ -303,6 +303,64 @@ describe("the campaign's notes", () => {
     await t.session.say("kira", "hello");
     await t.session.whenIdle();
     expect((await t.starts())[0]?.stdin).toMatch(/^CAMPAIGN MEMORY\./);
+  });
+});
+
+describe("sessions", () => {
+  const WRITE_UP = { summary: "The team met Mr. Smith and took the courier job.", fictionDate: "Tue 14 Mar 2081, night" };
+
+  it("end with the GM's write-up over the tool server, and the next begins as a new conversation that is told what the notes hold, and not the last session's chat", async () => {
+    const t = await table([
+      { steps: [{ say: "Rain falls." }] },
+      { steps: [{ say: "The night goes quiet." }, { tool: "end_session", args: WRITE_UP }] },
+      { steps: [{ say: "A new night." }] },
+      { lostSession: true, steps: [] },
+      { steps: [{ say: "Back again." }] },
+    ]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect((await t.tools()).map((r) => [r.tool, r.isError])).toEqual([["end_session", false]]);
+    expect(t.session.snapshot().session).toEqual({ number: 1, phase: "ended" });
+
+    await t.session.start("Steal the courier.");
+    await t.session.whenIdle();
+    const [first, wrap, second] = await t.starts();
+    expect(wrap?.stdin).toContain("WRAP UP THE SESSION");
+    expect(wrap?.resume).toBe("fake-session-1");
+    expect(second?.resume).toBeUndefined();
+    expect(second?.stdin).toMatch(/^CAMPAIGN MEMORY\./);
+    expect(second?.stdin).toContain("Last session, Session 1");
+    expect(second?.stdin).toContain("The team met Mr. Smith and took the courier job.");
+    expect(second?.stdin).toContain("BEGIN SESSION 2.");
+    expect(second?.stdin).toContain("What the table wants this session to be about: Steal the courier.");
+    expect(second?.stdin).not.toContain("GM: Rain falls.");
+    expect(second?.stdin).not.toContain("Carry on from it");
+    expect(first?.stdin).toBe("BEGIN SESSION. Open the first scene.");
+  });
+
+  it("are the only story a GM that lost its conversation is given again", async () => {
+    const t = await table([
+      { steps: [{ say: "Rain falls." }] },
+      { steps: [{ say: "Quiet." }, { tool: "end_session", args: WRITE_UP }] },
+      { steps: [{ say: "A new night." }] },
+      { lostSession: true, steps: [] },
+      { steps: [{ say: "Back again." }] },
+    ]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "hello");
+    await t.session.whenIdle();
+    const fresh = (await t.starts()).at(-1);
+    expect(fresh?.resume).toBeUndefined();
+    expect(fresh?.stdin).toContain("GM: A new night.");
+    expect(fresh?.stdin).not.toContain("GM: Rain falls.");
+    expect(fresh?.stdin).toContain("Last session, Session 1");
   });
 });
 

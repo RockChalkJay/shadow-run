@@ -24,7 +24,7 @@ class FakeSocket {
 }
 
 const sheet = (id: string, name: string) => ({ id, name, metatype: "human" }) as never;
-const snapshot = (over: object = {}): ServerEvent => ({ type: "snapshot", party: [sheet("kira", "Kira"), sheet("doc", "Doc")], characters: [], pendingRolls: [], edge: [{ id: "kira", points: 3, rank: 3, spentThisRound: false }], combat: null, transcript: [], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 5, stunOverflowPerPhysical: 1 }, testMode: false, ...over }) as ServerEvent;
+const snapshot = (over: object = {}): ServerEvent => ({ type: "snapshot", party: [sheet("kira", "Kira"), sheet("doc", "Doc")], characters: [], pendingRolls: [], edge: [{ id: "kira", points: 3, rank: 3, spentThisRound: false }], combat: null, transcript: [], gm: { phase: "idle" }, usage: null, rules: { hitMinimum: 5, stunOverflowPerPhysical: 1 }, testMode: false, session: { number: 0, phase: "idle" }, ...over }) as ServerEvent;
 const socket = () => FakeSocket.all.at(-1)!;
 
 beforeEach(() => {

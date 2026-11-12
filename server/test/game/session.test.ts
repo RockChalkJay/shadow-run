@@ -107,7 +107,7 @@ describe("a roll", () => {
     expect(driver.inputs[1]?.kind).toBe("continue");
     expect(driver.inputs[1]?.text).toContain("ROLL RESULT. Kira: Sneak past the guard.");
     expect(driver.inputs[1]?.text).toContain("6 5 3 1 = 2 hits");
-    expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["gm", "roll", "gm"]);
+    expect((await store.recentEntries(20)).map((e) => e.kind)).toEqual(["session", "gm", "roll", "gm"]);
     expect(session.snapshot().gm).toEqual({ phase: "idle" });
   });
 
@@ -531,7 +531,7 @@ describe("a restart", () => {
     const snapshot = second.session.snapshot();
     expect(snapshot.pendingRolls).toHaveLength(1);
     expect(snapshot.gm).toEqual({ phase: "waiting_for_rolls" });
-    expect(snapshot.transcript.map((e) => e.kind)).toEqual(["gm"]);
+    expect(snapshot.transcript.map((e) => e.kind)).toEqual(["session", "gm"]);
     expect(second.session.gmSessionId).toBe("scripted");
 
     await second.session.submitRoll(snapshot.pendingRolls[0]!.id, { mode: "physical", dice: "6 5 3 1" });

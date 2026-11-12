@@ -251,6 +251,31 @@ describe("playing", () => {
     expect(await client.until((e) => e.type === "error" && e.message.includes("Message not understood"))).toBeDefined();
   });
 
+  it("routes wrapping up a session and beginning the next with a mission, and refuses to talk in between", async () => {
+    const wrapUp = { say: ["The night goes quiet."], endSession: { summary: "The team met Mr. Smith and took the courier job." } };
+    const { port } = await startTable([{ say: ["Rain falls."] }, wrapUp, { say: ["A new night."] }], []);
+    const client = await connect(port);
+    await client.until((e) => e.type === "snapshot");
+    const phase = (p: string, n: number) => (e: ServerEvent) => e.type === "session.updated" && e.session.phase === p && e.session.number === n;
+    const refused = (message: string) => client.until((e) => e.type === "error" && e.message.includes(message));
+
+    client.send({ type: "session.wrapup" });
+    await refused("There is no session in play");
+    client.send({ type: "session.start", mission: "Steal the courier." });
+    await client.until((e) => e.type === "entry" && e.entry.kind === "session" && e.entry.event === "start" && e.entry.mission === "Steal the courier.");
+    await client.until(phase("open", 1));
+    await client.until((e) => e.type === "gm.turn_done");
+    client.send({ type: "session.wrapup" });
+    await client.until(phase("wrapping", 1));
+    await client.until(phase("ended", 1));
+    client.send({ type: "player.say", text: "hello?" });
+    await refused("The session is over");
+    client.send({ type: "session.start", mission: "x".repeat(1001) } as never);
+    await refused("Message not understood");
+    client.send({ type: "session.start" });
+    await client.until(phase("open", 2));
+  });
+
   it("routes a roll to be rolled again, in test mode, and refuses it otherwise", async () => {
     const asHeld = (e: ServerEvent, held: boolean) => e.type === "roll.updated" && (e.request.held !== undefined) === held;
     const testing = await startTable([{ say: ["The guard turns."], rolls: [rollInput()] }], [], undefined, true);

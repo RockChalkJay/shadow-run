@@ -27,3 +27,15 @@ export const RecallInput = z.object({
   last: z.number().int().min(1).max(5).optional(),
 });
 export type RecallInput = z.infer<typeof RecallInput>;
+
+/** The GM's write-up of a session, once the table has asked to wrap up. The system adds the date. */
+export const EndSessionInput = z.object({
+  summary: z.string().trim().min(20).max(1500),
+  /** The date and time in the story when it ended. */
+  fictionDate: z.string().trim().max(60).optional(),
+  /** Key rolls and how they came out. */
+  rolls: z.string().trim().max(600).optional(),
+  /** What changed: karma, nuyen, gear, condition, notoriety. */
+  consequences: z.string().trim().max(600).optional(),
+});
+export type EndSessionInput = z.infer<typeof EndSessionInput>;

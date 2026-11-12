@@ -43,6 +43,11 @@ function resolvedRoll(dice: string, opposed = false): TranscriptEntry {
 }
 
 describe("formatRecap", () => {
+  it("marks where a session begins and ends", () => {
+    const text = formatRecap([entry({ kind: "session", event: "start", number: 2 }), entry({ kind: "gm", text: "Rain." }), entry({ kind: "session", event: "end", number: 2, summary: "s" })], nameOf);
+    expect(text).toBe("[Session 2 begins]\nGM: Rain.\n[Session 2 ends]");
+  });
+
   it("turns the transcript into plain lines, leaving out system notices", () => {
     const text = formatRecap(
       [
