@@ -47,4 +47,14 @@ The number is the next after the highest in the file, and a number is used once.
 
 `npm run scenario:save` and a scenario start carry these three files with the rest of the game, so a scenario begins with the memory it was saved with.
 
-Nothing yet tells the GM about these files or writes them during play; that comes in later changes.
+## What the GM does with them
+
+The GM keeps the notes with three tools, and is told in its instructions when to use them:
+
+- `note_npc` writes a named character into the tracker (role, status, stats such as "PR 3, Body 3, Willpower 4", notes) or updates what is written; only what it gives is changed. A named character the GM first brings into a fight or hurts is also listed at once, with the Body and Willpower it gave, even if it never writes them up. Nameless grunts are not listed.
+- `note_thread` writes a plot thread as its title, a status (active, dormant, resolved) and a sentence or two, or updates the one of that title.
+- `recall` reads the notes back: one character, everyone, the threads, or the last few sessions.
+
+When the GM starts a new conversation (the first turn of a campaign, or after its earlier session was lost) it is told what the notes hold before anything else: the threads, a line for each character, and how the last session ended, cut to a few thousand characters, with `recall` for the rest. A GM whose conversation goes on is not told again. If the notes cannot be read or saved (a table that cannot be rewritten, say), the GM is told only that they cannot be used and to carry on, and the table's story shows the reason.
+
+Nothing writes the session log during play yet; an entry is added by code, and ending a session is a later change.

@@ -27,7 +27,7 @@ export const SCENARIO_NAME = /^[a-z0-9_-]+$/i;
 export const scenarioCampaign = (name: string) => `scenario-${name}`;
 
 /** Written into a folder this code made from a scenario, so it knows which folders it may wipe. */
-const MADE_FROM_SCENARIO = ".made-from-scenario";
+export const MADE_FROM_SCENARIO = ".made-from-scenario";
 
 const isMissing = (err: unknown) => (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 
