@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CharacterSheet, MAX_KARMA_PER_RUN, MAX_NUYEN_CHANGE, type Contact, type GearItem, type RunEntry } from "@shadow-run/shared";
+import { CharacterSheet, MAX_HISTORY, MAX_KARMA_PER_RUN, MAX_NUYEN_CHANGE, type Contact, type GearItem, type RunEntry } from "@shadow-run/shared";
 import { z } from "zod";
 import { CampaignStore } from "./store.js";
 
@@ -121,6 +121,9 @@ export function applyRunUpdate(sheet: CharacterSheet, update: RunUpdate, options
   }
 
   if (update.history) {
+    if ((next.history ?? []).length >= MAX_HISTORY) {
+      return { ok: false, error: `${sheet.name}'s history already holds ${MAX_HISTORY} runs, the most a sheet keeps. Trim the oldest from their sheet by hand, then write the session up again.` };
+    }
     const run = Math.max(0, ...(next.history ?? []).map((r) => r.run)) + 1;
     const consequences = [update.history.consequences?.trim(), gearNotes.length > 0 ? `Gear: ${gearNotes.join(", ")}` : ""].filter(Boolean).join(" ");
     const { consequences: _drop, ...rest } = update.history;

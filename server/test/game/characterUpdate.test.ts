@@ -109,6 +109,15 @@ describe("a run's changes to a sheet", () => {
     expect(ok(await apply({ history: { summary: "Next." } }, (s) => ({ ...s, history: [{ run: 7, date: "d", summary: "x" }, { run: 3, date: "d", summary: "y" }] }))).sheet.history?.at(-1)?.run).toBe(8);
   });
 
+  it("say plainly when a history is full, rather than that the sheet is not valid", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ run: i + 1, date: "d", summary: "s" }));
+    expect(await apply({ history: { summary: "One more." } }, (s) => ({ ...s, history: full }))).toEqual({
+      ok: false,
+      error: "Razor's history already holds 100 runs, the most a sheet keeps. Trim the oldest from their sheet by hand, then write the session up again.",
+    });
+    expect(ok(await apply({ history: { summary: "The hundredth." } }, (s) => ({ ...s, history: full.slice(0, 99) }))).sheet.history).toHaveLength(100);
+  });
+
   it("do everything in one go, and leave the sheet they were given alone", async () => {
     const sheet = await example();
     const before = structuredClone(sheet);
