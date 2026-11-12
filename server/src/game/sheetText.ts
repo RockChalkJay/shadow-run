@@ -123,7 +123,8 @@ function backstory(sheet: CharacterSheet): string[] {
 
 /** The latest runs, oldest first, one line each, and how many earlier ones there are. */
 function history(sheet: CharacterSheet): string[] {
-  const runs = sheet.history ?? [];
+  // By run number, so the latest are the highest numbers whatever order the list was written in.
+  const runs = [...(sheet.history ?? [])].sort((a, b) => a.run - b.run);
   if (runs.length === 0) return [];
   const latest = runs.slice(-RECENT_RUNS).map((r) => `Run ${r.run}${r.campaign ? ` in ${r.campaign}` : ""} (${r.date}): ${short(r.summary)}${r.consequences ? ` Came of it: ${short(r.consequences)}` : ""}`);
   const earlier = runs.length > RECENT_RUNS ? `; ${runs.length - RECENT_RUNS} earlier ${runs.length - RECENT_RUNS === 1 ? "run" : "runs"} not shown` : "";

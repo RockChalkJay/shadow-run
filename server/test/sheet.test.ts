@@ -92,6 +92,13 @@ describe("a character's backstory and history", () => {
     expect(describeCharacter({ ...sheet, history: runs.slice(0, 6) })).toContain("1 earlier run not shown.");
   });
 
+  it("are told in order of run number, so the latest are the highest numbers whatever order they were written in", async () => {
+    const sheet = CharacterSheet.parse(await example());
+    const runs = [6, 1, 8, 3, 7, 2, 5, 4].map((n) => ({ run: n, date: `d${n}`, summary: `Run ${n}.` }));
+    const text = describeCharacter({ ...sheet, history: runs });
+    expect(text).toContain("Run 4 (d4): Run 4.; Run 5 (d5): Run 5.; Run 6 (d6): Run 6.; Run 7 (d7): Run 7.; Run 8 (d8): Run 8.; 3 earlier runs not shown.");
+  });
+
   it("are left out of what the GM is told when empty", async () => {
     const text = describeCharacter({ ...CharacterSheet.parse(await example()), backstory: "  ", history: [] });
     expect(text).not.toContain("Backstory");
