@@ -5,7 +5,7 @@ import { Rail } from "./Rail";
 import { RulesContext, TestModeContext } from "./rules";
 import { RollCard } from "./RollCard";
 import { Story } from "./Story";
-import { MissionBox, SessionOver, type SessionMarker, SessionPill, WrapUpDialog, wrapUpBlock } from "./WrapUp";
+import { MissionBox, SavedNote, type SessionMarker, SessionPill, WrapUpDialog, wrapUpBlock } from "./WrapUp";
 
 function gmPill(gm: GmStatus) {
   switch (gm.phase) {
@@ -51,6 +51,7 @@ export function App({ url }: { url: string }) {
     setBegun(true);
     const trimmed = seed.trim();
     send({ type: "session.start", ...(trimmed !== "" && { mission: trimmed }) });
+    setMission("");
   };
 
   const notStarted = !begun && state.transcript.length === 0 && state.gm.phase === "idle";
@@ -62,7 +63,7 @@ export function App({ url }: { url: string }) {
           <div>
             <h1>SHADOW RUN</h1>
             <p className="dim">Party: {state.party.map((p) => `${p.name} (${p.metatype})`).join(" · ")}</p>
-            <div className="first"><MissionBox number={session.number + 1} value={mission} onChange={setMission} onSubmit={() => begin(mission)} /></div>
+            <div className="first"><MissionBox label="What should this first session be about?" value={mission} onChange={setMission} onSubmit={() => begin(mission)} /></div>
             <p><button className="pri big" disabled={!state.connected} onClick={() => begin(mission)}>Begin the session</button></p>
           </div>
         </div>
@@ -70,14 +71,17 @@ export function App({ url }: { url: string }) {
     );
   }
 
-  const typingOff = session.phase === "wrapping" || session.phase === "ended";
+  const typingOff = session.phase === "wrapping";
   const endMarker = session.phase === "ended" ? state.transcript.findLast((e): e is SessionMarker => e.kind === "session" && e.event === "end" && e.number === session.number) : undefined;
 
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    send({ type: "player.say", ...(who !== undefined && { characterId: who }), text: trimmed });
+    // After a save, the first words carry the story on, and the note about what to pick up with goes with them.
+    const note = mission.trim();
+    send({ type: "player.say", ...(who !== undefined && { characterId: who }), text: trimmed, ...(note !== "" && { mission: note }) });
     setText("");
+    setMission("");
   };
 
   return (
@@ -88,11 +92,11 @@ export function App({ url }: { url: string }) {
         <Top state={state} send={send} pill={pill} asking={asking} onAsk={() => setAsking(true)} />
         <div className="main">
           <div className="story">
-            <Story transcript={state.transcript} streaming={state.streaming?.blocks ?? []} fresh={state.fresh} nameOf={nameOf} summaryInCard={session.phase === "ended" ? session.number : undefined} />
+            <Story transcript={state.transcript} streaming={state.streaming?.blocks ?? []} fresh={state.fresh} nameOf={nameOf} summaryInNote={session.phase === "ended" ? session.number : undefined} />
             {state.pending.map((request) => (
               <RollCard key={request.id} request={request} name={nameOf(request.characterId)} character={state.characters.find((c) => c.kind === "pc" && c.id === request.characterId)} edge={state.edge.find((e) => e.id === request.characterId)} error={state.error} send={send} />
             ))}
-            {session.phase === "ended" && <SessionOver number={session.number} marker={endMarker} connected={state.connected} onBegin={begin} />}
+            {session.phase === "ended" && <SavedNote marker={endMarker} mission={mission} onMission={setMission} />}
             <div ref={end} />
           </div>
           <Rail party={state.party} characters={state.characters} edge={state.edge} combat={state.combat} speaking={who} onSpeak={setSpeaker} send={send} pending={state.pending} error={state.error} />
@@ -101,11 +105,11 @@ export function App({ url }: { url: string }) {
           <select aria-label="Speaking as" disabled={typingOff} value={who} onChange={(e) => setSpeaker(e.target.value)}>
             {state.party.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <input id="say" ref={sayBox} aria-label="Say or do something" disabled={typingOff} placeholder={session.phase === "wrapping" ? "The GM is wrapping up the session…" : session.phase === "ended" ? "The session is over. Begin the next one above." : "Say or do something…"} value={text} onChange={(e) => setText(e.target.value)} />
+          <input id="say" ref={sayBox} aria-label="Say or do something" disabled={typingOff} placeholder={session.phase === "wrapping" ? "The GM is saving the story so far…" : session.phase === "ended" ? "Pick up where you left off…" : "Say or do something…"} value={text} onChange={(e) => setText(e.target.value)} />
           <button className="pri" type="submit" disabled={typingOff || !state.connected || text.trim() === ""}>Send</button>
         </form>
         {asking && (
-          <WrapUpDialog number={session.number} error={state.error} connected={state.connected} onConfirm={() => send({ type: "session.wrapup" })} onClose={() => setAsking(false)} />
+          <WrapUpDialog error={state.error} connected={state.connected} onConfirm={() => send({ type: "session.wrapup" })} onClose={() => setAsking(false)} />
         )}
       </div>
       </TestModeContext.Provider>
@@ -129,7 +133,7 @@ function Top({ state, send, pill, asking, onAsk }: { state: ReturnType<typeof us
       {gm.phase === "error" && (
         <div className="banner err" role="alert">⚠ The GM hit a problem: {gm.message} <button onClick={() => send({ type: "turn.retry" })}>Retry</button></div>
       )}
-      {session.phase === "wrapping" && <div className="banner info" role="status">● Wrapping up session {session.number}. The GM is closing the scene and writing it up.</div>}
+      {session.phase === "wrapping" && <div className="banner info" role="status">● Saving your progress. The GM is writing the story so far into the campaign log.</div>}
       {gm.phase === "resting" && <div className="banner warn" role="status">⚠ {gm.message}</div>}
       {state.pending.length > 0 && gm.phase !== "thinking" && (
         <div className="banner info" role="status">● Waiting on {state.pending.length} {state.pending.length === 1 ? "roll" : "rolls"} before the GM continues</div>
