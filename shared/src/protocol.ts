@@ -21,7 +21,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session.start"), mission: z.string().trim().max(MAX_MISSION).optional() }),
   /** Stop for now: the GM closes the scene and writes up the session in the campaign's notes. */
   z.object({ type: z.literal("session.wrapup") }),
-  z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
+  /** What a player says. After a wrap-up it carries the story on in a new session, and `mission` is the table's note for that session. */
+  z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY), mission: z.string().trim().max(MAX_MISSION).optional() }),
   /**
    * Roll the pending request for the player with the app's dice. `edge: "dice"` spends 4 Edge to add the Edge
    * attribute to the pool and make 6s explode; `hold` counts the roll but waits for the player to decide on Edge.

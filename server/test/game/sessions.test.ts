@@ -56,7 +56,7 @@ describe("wrapping up a session", () => {
     expect(t.session.gmSessionId).toBeUndefined();
   });
 
-  it("gives the GM an account the system wrote of the session to write from, and tells it to close gently", async () => {
+  it("gives the GM an account the system wrote of the session to write from, and tells it to leave the scene where it stands", async () => {
     const driver = goodGm((text) => (text.includes("The players say") ? { say: ["A guard turns."], rolls: [rollInput()] } : undefined));
     const t = await table(driver);
     await t.session.start();
@@ -70,7 +70,9 @@ describe("wrapping up a session", () => {
     await t.session.whenIdle();
     const input = driver.inputs.at(-1)!.text;
     expect(input).toContain("WRAP UP THE SESSION");
-    expect(input).toContain("call end_session once");
+    expect(input).toContain("Call end_session once");
+    expect(input).toContain("leave it exactly where it stands");
+    expect(input).toContain("where the scene stands (who is where, and what is in progress)");
     expect(input).toContain("What the system recorded this session, to write from:");
     expect(input).toContain("Kira: I creep forward.");
     expect(input).toContain("[Roll] Kira, Sneak past the guard");
@@ -290,9 +292,66 @@ describe("the next session", () => {
     return { ...t, driver };
   }
 
-  it("is refused to talk to until it begins", async () => {
+  it("carries on when a player speaks: the next session begins with what was said, in one turn", async () => {
     const t = await ended();
-    expect(await t.session.say("kira", "hello?")).toEqual({ ok: false, error: "The session is over. Begin the next one first." });
+    expect(await t.session.say("kira", "I wait.")).toEqual({ ok: true });
+    await t.session.whenIdle();
+    const inputs = t.driver.inputs;
+    expect(inputs.at(-1)).toEqual({ kind: "open", text: "BEGIN SESSION 2. Carry on from your notes, picking the scene up where it stood.\n\nThe players say:\n- Kira: I wait." });
+    expect(t.session.snapshot().session).toEqual({ number: 2, phase: "open" });
+    const kinds = t.session.snapshot().transcript.map((e) => (e.kind === "session" ? `${e.event}${e.number}` : e.kind));
+    expect(kinds.slice(kinds.indexOf("end1"))).toEqual(["end1", "start2", "say", "gm"]);
+  });
+
+  it("begins the next session once when two players speak at the same moment, and hands the GM both", async () => {
+    const t = await ended();
+    const before = t.driver.inputs.length;
+    await Promise.all([t.session.say("kira", "One."), t.session.say("doc", "Two.")]);
+    await t.session.whenIdle();
+    expect(t.session.snapshot().transcript.filter((e) => e.kind === "session" && e.event === "start" && e.number === 2)).toHaveLength(1);
+    expect(t.driver.inputs.slice(before).map((i) => i.kind)).toEqual(["open"]);
+    expect(t.driver.inputs.at(-1)!.text).toContain("- Kira: One.\n- Doc: Two.");
+  });
+
+  it("begins once when /start and a player's words arrive together, and the first call's mission is kept", async () => {
+    const t = await ended();
+    await Promise.all([t.session.start("From start."), t.session.say("kira", "Hi.", "From say.")]);
+    await t.session.whenIdle();
+    const starts = t.session.snapshot().transcript.filter((e) => e.kind === "session" && e.event === "start" && e.number === 2);
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ mission: "From start." });
+  });
+
+  it("uses the mission sent with the first words of the next session, and ignores one sent later", async () => {
+    const t = await ended();
+    await t.session.say("kira", "Go.", "Follow Mr. Smith.");
+    await t.session.whenIdle();
+    expect(t.driver.inputs.at(-1)!.text).toContain("What the table wants this session to be about: Follow Mr. Smith.");
+    expect(t.session.snapshot().transcript.find((e) => e.kind === "session" && e.event === "start" && e.number === 2)).toMatchObject({ mission: "Follow Mr. Smith." });
+    const turns = t.driver.inputs.length;
+    await t.session.say("kira", "More.", "Something else.");
+    await t.session.whenIdle();
+    expect(t.driver.inputs.slice(turns).join()).not.toContain("Something else.");
+    expect(t.session.snapshot().transcript.filter((e) => e.kind === "session" && e.event === "start")).toHaveLength(2);
+  });
+
+  it("carries on again after a second save, as session 3", async () => {
+    const t = await ended();
+    await t.session.say("kira", "On we go.");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect(t.session.snapshot().session).toEqual({ number: 2, phase: "ended" });
+    await t.session.say("kira", "And again.");
+    await t.session.whenIdle();
+    expect(t.session.snapshot().session).toEqual({ number: 3, phase: "open" });
+    expect(t.driver.inputs.at(-1)!.text).toContain("BEGIN SESSION 3.");
+  });
+
+  it("does not begin the next session for a message that is refused", async () => {
+    const t = await ended();
+    expect(await t.session.say("nobody", "hello?")).toMatchObject({ ok: false });
+    expect(t.session.snapshot().session).toEqual({ number: 1, phase: "ended" });
   });
 
   it("begins as a new conversation, numbered after the log, with the mission the table gave and a marker in the story", async () => {
@@ -301,7 +360,7 @@ describe("the next session", () => {
     await t.session.whenIdle();
     const input = t.driver.inputs.at(-1)!;
     expect(input.kind).toBe("open");
-    expect(input.text).toBe("BEGIN SESSION 2. Open the first scene of this session, carrying on from your notes.\n\nWhat the table wants this session to be about: Steal the courier.");
+    expect(input.text).toBe("BEGIN SESSION 2. Carry on from your notes, picking the scene up where it stood.\n\nWhat the table wants this session to be about: Steal the courier.");
     expect(t.session.snapshot().transcript.filter((e) => e.kind === "session").map((e) => [e.kind === "session" && e.event, e.kind === "session" && e.number])).toEqual([["start", 1], ["end", 1], ["start", 2]]);
     expect(t.session.snapshot().transcript.at(-2)).toMatchObject({ kind: "session", event: "start", number: 2, mission: "Steal the courier." });
     expect(t.session.snapshot().session).toEqual({ number: 2, phase: "open" });
@@ -320,7 +379,7 @@ describe("the next session", () => {
     const t = await ended();
     await t.session.start("   ");
     await t.session.whenIdle();
-    expect(t.driver.inputs.at(-1)!.text).toBe("BEGIN SESSION 2. Open the first scene of this session, carrying on from your notes.");
+    expect(t.driver.inputs.at(-1)!.text).toBe("BEGIN SESSION 2. Carry on from your notes, picking the scene up where it stood.");
   });
 
   it("numbers a campaign's first session after the sessions already in its log", async () => {
@@ -329,7 +388,7 @@ describe("the next session", () => {
     const t = await table(driver, { [MEMORY_FILES.log]: log });
     await t.session.start("A new job.");
     await t.session.whenIdle();
-    expect(driver.inputs[0]!.text).toBe("BEGIN SESSION 4. Open the first scene of this session, carrying on from your notes.\n\nWhat the table wants this session to be about: A new job.");
+    expect(driver.inputs[0]!.text).toBe("BEGIN SESSION 4. Carry on from your notes, picking the scene up where it stood.\n\nWhat the table wants this session to be about: A new job.");
     await t.session.wrapUp();
     await t.session.whenIdle();
     expect(await t.log()).toContain("## Session 4 — 2026-11-12");
@@ -368,10 +427,10 @@ describe("the next session", () => {
     const driver = goodGm();
     const second = await newSession(driver, { store: first.store, now: () => NOW });
     expect(second.session.snapshot().session).toEqual({ number: 1, phase: "ended" });
-    expect(await second.session.say("kira", "hello")).toMatchObject({ ok: false });
-    await second.session.start();
+    expect(await second.session.say("kira", "hello")).toEqual({ ok: true });
     await second.session.whenIdle();
     expect(driver.inputs[0]!.text).toContain("BEGIN SESSION 2.");
+    expect(driver.inputs[0]!.text).toContain("- Kira: hello");
   });
 
   it("takes up a wrap-up that was asked for before a restart", async () => {

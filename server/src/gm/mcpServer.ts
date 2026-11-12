@@ -231,8 +231,8 @@ function buildServer(handlers: GmToolHandlers): McpServer {
     {
       description:
         "Write up the session in the campaign's log. Use it only when the system tells you the table is wrapping up the " +
-        "session, after a short closing beat, and call it once: a summary of what the characters did and learned, who they " +
-        "met and what changed, the date in the story, the key rolls and how they came out, and what it cost or earned them " +
+        "session, and call it once: a summary of what the characters did and learned, who they " +
+        "met and what changed, ending with where the scene stands, the date in the story, the key rolls and how they came out, and what it cost or earned them " +
         "(karma, nuyen, gear, condition, notoriety). Update the notes with note_npc and note_thread first. Put what each " +
         "player character earned in `rewards`, one entry per character with their characterId: Karma (the core rules suggest 1 or 2 " +
         "for a session with little progress, 3 or 4 for a significant one, 5 or 6 for an excellent one or a finished run, more only " +
@@ -241,7 +241,7 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "(a new one needs Loyalty and Connection), and their own part in the run in `summary`, `goal` and `consequences`. Give only " +
         "what the story earned. The system adds the run to every character's history, saves the changes to their sheets, and refuses " +
         "the whole call, telling you why, if any part cannot be applied (one run is at most 30 Karma and 500,000 nuyen, and nuyen " +
-        "cannot go below 0), so correct it and call again. The session is over once you have called it. Never mention the log or " +
+        "cannot go below 0), so correct it and call again. The table carries on afterwards in a new session. Never mention the log or " +
         "the sheets to the players.",
       inputSchema: EndSessionInput.shape,
     },

@@ -111,7 +111,7 @@ export class Hub {
       case "session.wrapup":
         return session.wrapUp();
       case "player.say":
-        return session.say(message.characterId, message.text);
+        return session.say(message.characterId, message.text, message.mission);
       case "roll.app":
         return session.submitRoll(message.requestId, { mode: "app", ...(message.edge && { edge: message.edge }), ...(message.hold && { hold: true }) });
       case "roll.physical":

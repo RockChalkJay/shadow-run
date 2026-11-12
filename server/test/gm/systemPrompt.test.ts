@@ -182,7 +182,7 @@ describe("the GM's system prompt", () => {
     expect(prompt).toContain("never tell the players about them");
     expect(prompt).toContain("Nameless grunts are not noted.");
     expect(prompt).toContain('"BEGIN SESSION" with a number starts a new session');
-    expect(prompt).toContain('"WRAP UP THE SESSION" means the table is stopping for now');
+    expect(prompt).toContain('"WRAP UP THE SESSION" means the table is saving the story so far');
     expect(prompt).toContain("call end_session");
     expect(prompt).toContain("a player character's earlier runs (history)");
     expect(prompt).toContain("end_session, at wrap-up, also carries what each player character earned in the run");
