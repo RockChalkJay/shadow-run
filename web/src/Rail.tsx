@@ -4,15 +4,18 @@ import { EdgeMenu, EdgeTableContext } from "./EdgeMenu";
 
 // ---- small pieces ----------------------------------------------------------------------------
 
-/** A word or chip that explains itself on hover, keyboard focus or tap. The text is always in the page, so a screen reader reads it with the chip. */
-export function Tip({ text, children, className = "" }: { text: string; children: React.ReactNode; className?: string }) {
-  const id = useId();
+/**
+ * A word or chip that explains itself on hover, keyboard focus or tap. The text is always in the page, so a screen reader reads it with the chip.
+ * Around something that is already focusable (a button), pass `focusable={false}` so there is one tab stop, and `id` so the button can point at the text with aria-describedby.
+ */
+export function Tip({ text, children, className = "", focusable = true, id }: { text: string; children: React.ReactNode; className?: string; focusable?: boolean; id?: string }) {
+  const generated = useId();
+  const textId = id ?? generated;
   const [open, setOpen] = useState(false);
   return (
     <span
       className={`tip ${className}`}
-      tabIndex={0}
-      aria-describedby={id}
+      {...(focusable && { tabIndex: 0, "aria-describedby": textId })}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -20,7 +23,7 @@ export function Tip({ text, children, className = "" }: { text: string; children
       onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
     >
       {children}
-      <span id={id} role="tooltip" className={`tip-text ${open ? "open" : ""}`}>{text}</span>
+      <span id={textId} role="tooltip" className={`tip-text ${open ? "open" : ""}`}>{text}</span>
     </span>
   );
 }
