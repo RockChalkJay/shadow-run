@@ -9,13 +9,16 @@ export type { Status };
 /** Longest message one player can say to the GM. */
 export const MAX_SAY = 2000;
 
+/** Longest note about what a session should be about. */
+export const MAX_MISSION = 1000;
+
 /** Edge spent before a roll: 4 for Edge dice (the Edge attribute added to the pool, 6s exploding), 5 to make 2s count as glitches on the opposing roll. */
 const RollEdge = z.enum(["dice", "widen_glitch"]);
 
 /** What the browser (or any client) may send. Everything is validated on the server. */
 export const ClientMessage = z.discriminatedUnion("type", [
   /** Begin a session, or the next one after the last was wrapped up; `mission` is what the table wants it to be about. */
-  z.object({ type: z.literal("session.start"), mission: z.string().trim().max(1000).optional() }),
+  z.object({ type: z.literal("session.start"), mission: z.string().trim().max(MAX_MISSION).optional() }),
   /** Stop for now: the GM closes the scene and writes up the session in the campaign's notes. */
   z.object({ type: z.literal("session.wrapup") }),
   z.object({ type: z.literal("player.say"), characterId: z.string().optional(), text: z.string().trim().min(1).max(MAX_SAY) }),
@@ -141,8 +144,8 @@ export type TranscriptEntry =
   | (EntryBase & { kind: "edge_burn"; characterId: string; name: string; burn: "smackdown" | "not_dead_yet"; lost: number; rank: number })
   | (EntryBase & { kind: "combat"; event: "start" | "join" | "round" | "end"; round: number; names: string[] })
   | (EntryBase & { kind: "heal"; reason: string; type: HealType; healed: number; after: CharacterView })
-  /** A session began, or was wrapped up with the summary the GM wrote for the log. */
-  | (EntryBase & { kind: "session"; event: "start" | "end"; number: number; mission?: string; summary?: string })
+  /** A session began, or was wrapped up with the summary the GM wrote for the log, the date in the story, and what it changed for each character. */
+  | (EntryBase & { kind: "session"; event: "start" | "end"; number: number; mission?: string; summary?: string; fictionDate?: string; changes?: Array<{ name: string; changes: string[] }> })
   | (EntryBase & { kind: "system"; text: string });
 
 /** Where the table is in its sessions: not begun, in play, being wrapped up, or over until the next begins. */

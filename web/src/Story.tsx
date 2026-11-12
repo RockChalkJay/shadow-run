@@ -58,13 +58,25 @@ function plain(entry: TranscriptEntry): string | null {
     case "edge_use": return `${entry.name} spends ${entry.cost} Edge and ${entry.detail}`;
     case "edge_burn": return `${entry.name} burns Edge for ${entry.burn === "smackdown" ? "Smackdown" : "Not Dead Yet"}: rank ${entry.rank} left`;
     case "combat": return entry.event === "end" ? "The fight is over" : `Fight ${entry.event === "start" ? "begins" : entry.event === "join" ? "gains" : "moves to"} round ${entry.round}: ${entry.names.join(", ")}`;
-    case "session": return entry.event === "start" ? `Session ${entry.number} begins${entry.mission ? `: ${entry.mission}` : ""}` : `Session ${entry.number} is over`;
     case "system": return entry.text;
     default: return null;
   }
 }
 
-export function Story({ transcript, streaming, fresh, nameOf }: { transcript: TranscriptEntry[]; streaming: string[]; fresh: number[]; nameOf: (id: string) => string }) {
+/** A session's start or end in the story: a divider, then the mission or the GM's write-up under it. */
+function SessionBreak({ entry, summaryInCard }: { entry: Extract<TranscriptEntry, { kind: "session" }>; summaryInCard: boolean }) {
+  const begins = entry.event === "start";
+  return (
+    <>
+      <div className="divider"><b>Session {entry.number} {begins ? "begins" : "ends"}</b></div>
+      {begins && entry.mission && <div className="mission">Mission: <em>{entry.mission}</em></div>}
+      {!begins && entry.summary && !summaryInCard && <div className="wrapnote">{entry.summary.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}</div>}
+    </>
+  );
+}
+
+/** `summaryInCard` is the session whose write-up the session-over card already shows, so the story does not say it twice. */
+export function Story({ transcript, streaming, fresh, nameOf, summaryInCard }: { transcript: TranscriptEntry[]; streaming: string[]; fresh: number[]; nameOf: (id: string) => string; summaryInCard?: number | undefined }) {
   return (
     <>
       {transcript.map((entry) => {
@@ -75,6 +87,8 @@ export function Story({ transcript, streaming, fresh, nameOf }: { transcript: Tr
             return <div key={entry.id} className="gm"><div className="who">The GM</div>{entry.text.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}</div>;
           case "roll":
             return <RollEntry key={entry.id} entry={entry} fresh={fresh.includes(entry.id)} nameOf={nameOf} />;
+          case "session":
+            return <SessionBreak key={entry.id} entry={entry} summaryInCard={entry.number === summaryInCard} />;
           default: {
             const text = plain(entry);
             return text ? <div key={entry.id} className="note">{text}</div> : null;

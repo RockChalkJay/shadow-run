@@ -120,7 +120,7 @@ function show(entry: TranscriptEntry) {
       line(`  ${formatStanding(entry.after)}\n`);
       return;
     case "session":
-      return line(entry.event === "start" ? `\n  -- Session ${entry.number} begins${entry.mission ? `: ${entry.mission}` : ""} --` : `  -- Session ${entry.number} is over --\n  ${entry.summary ?? ""}`);
+      return line(entry.event === "start" ? `\n  -- Session ${entry.number} begins${entry.mission ? `: ${entry.mission}` : ""} --` : `  -- Session ${entry.number} is over --\n  ${entry.summary ?? ""}${entry.fictionDate ? `\n  (${entry.fictionDate})` : ""}`);
     case "system":
       return line(`  [${entry.text}]`);
   }

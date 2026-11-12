@@ -21,6 +21,8 @@ The screen shows the story, lets any character speak (one person types for every
 
 Claude plays the GM through the `claude` command-line tool, so it needs to be installed and logged in to your plan. No API key is used. Type `/help` in the client for its commands: `/start` begins the session, `/app` rolls a pending roll with the app's dice, and `/dice 6 5 3 1` reports dice you rolled at the table.
 
+**Sessions.** The first screen can take a line about what the session should be about. While a session is open, the "Session N" pill in the header is the way to end it: click it (or Tab to it and press Enter) and confirm. It is greyed out, with the reason on hover or focus, while rolls are waiting or the GM is mid-turn. The GM then closes the scene and writes the session up in the campaign log, the story shows where it ended with the write-up and what changed on each character's sheet, the typing box closes, and a box asks what the next session should be about (optional; Ctrl or Cmd+Enter begins it). The command-line client does the same with `/wrapup` and `/start <mission>`.
+
 Settings, all optional:
 
 | Variable | Default | What it does |
