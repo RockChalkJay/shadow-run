@@ -199,7 +199,7 @@ export const Ability = z.strictObject({ name: label, level: wholeNumber.optional
 export type Ability = z.infer<typeof Ability>;
 
 /** The most runs a sheet's history may list. */
-const MAX_HISTORY = 100;
+export const MAX_HISTORY = 100;
 
 /** One run the character has been on: what it was, when, who was in it, and what came of it. */
 export const RunEntry = z.strictObject({

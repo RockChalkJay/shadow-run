@@ -1,10 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ServerEvent } from "@shadow-run/shared";
 import { MEMORY_FILES } from "../../src/game/campaignMemory.js";
 import type { GmDriver } from "../../src/gm/driver.js";
 import { ScriptedGmDriver, type ScriptedTurn } from "../../src/gm/scriptedDriver.js";
+import { demoParty } from "../../src/game/demoParty.js";
 import { always, newSession, rollInput, tempStore, toolRunner } from "../helpers.js";
 
 const NOW = new Date(2026, 10, 12, 12, 0, 0);
@@ -50,7 +51,7 @@ describe("wrapping up a session", () => {
     await t.session.wrapUp();
     await t.session.whenIdle();
     const kinds = t.session.snapshot().transcript.map((e) => e.kind);
-    expect(kinds).toEqual(["session", "gm", "gm", "session"]);
+    expect(kinds).toEqual(["session", "gm", "system", "system", "gm", "session"]);
     expect(t.session.snapshot().transcript.at(-1)).toMatchObject({ kind: "session", event: "end", number: 1, summary: WRITE_UP.summary });
     expect(t.session.gmSessionId).toBeUndefined();
   });
@@ -413,5 +414,255 @@ describe("the demo GM", () => {
     await t.session.whenIdle();
     expect(t.session.snapshot().session.phase).toBe("ended");
     expect(await t.log()).toContain("The team took the courier job and began working the Renraku annex.");
+  });
+});
+
+describe("what a run does for the characters", () => {
+  const sheetFile = async (dir: string, id: string) => JSON.parse(await readFile(join(dir, "characters", `${id}.json`), "utf8"));
+  const REWARDS = [
+    { characterId: "kira", karma: 4, nuyen: 3000, gear: { add: [{ name: "Medkit", rating: 4 }] }, contacts: [{ name: "Mr. Smith", loyalty: 2, connection: 3 }], summary: "Carried the case across the sprawl.", goal: "Deliver it unopened.", consequences: "Paid in full." },
+  ];
+  const wrapUpWith = (rewards: unknown, calls: Array<{ ok: boolean; text: string }> = []): GmDriver => ({
+    async takeTurn(input, ctx) {
+      if (wrapping(input)) calls.push(await ctx.tools.endSession({ ...WRITE_UP, rewards }));
+    },
+  });
+
+  async function wrapped(rewards: unknown, files: Record<string, string> = {}) {
+    const calls: Array<{ ok: boolean; text: string }> = [];
+    const t = await table(wrapUpWith(rewards, calls), files);
+    // The sheets are on disk, as they are in a real campaign.
+    await t.store.saveParty([...t.session.party]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    return { ...t, calls };
+  }
+
+  it("saves what the run earned to the sheet, after a dated copy of the old one, and adds the run to the history", async () => {
+    const t = await wrapped(REWARDS);
+    expect(t.calls[0]).toMatchObject({ ok: true });
+    const kira = await sheetFile(t.store.dir, "kira");
+    expect(kira.personal).toEqual({ karma: 4, totalKarma: 4 });
+    expect(kira.lifestyle).toEqual({ nuyen: 3000 });
+    expect(kira.gear).toBe("");
+    expect(kira.contacts).toEqual([{ name: "Mr. Smith", loyalty: 2, connection: 3 }]);
+    expect(kira.history).toEqual([{ summary: "Carried the case across the sprawl.", goal: "Deliver it unopened.", with: ["Doc"], campaign: expect.any(String), consequences: "Paid in full. Gear: + Medkit", run: 1, date: "2026-11-12" }]);
+    const copy = JSON.parse(await readFile(join(t.store.dir, "characters", "history", "kira-2026-11-12.json"), "utf8"));
+    expect(copy.personal).toBeUndefined();
+    expect(copy.history).toBeUndefined();
+  });
+
+  it("gives a character the run in their history even when the GM gave them no reward, from the session's summary", async () => {
+    const t = await wrapped(REWARDS);
+    const doc = await sheetFile(t.store.dir, "doc");
+    expect(doc.history).toEqual([{ run: 1, date: "2026-11-12", campaign: expect.any(String), summary: WRITE_UP.summary, with: ["Kira"] }]);
+    expect(doc.personal).toBeUndefined();
+  });
+
+  it("cuts the session's summary to fit a history entry for a character with no reward of their own", async () => {
+    const calls: Array<{ ok: boolean; text: string }> = [];
+    const driver: GmDriver = { async takeTurn(input, ctx) { if (wrapping(input)) calls.push(await ctx.tools.endSession({ ...WRITE_UP, summary: "x".repeat(1000), rewards: [] })); } };
+    const t = await table(driver);
+    await t.store.saveParty([...t.session.party]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect(calls[0]).toMatchObject({ ok: true });
+    expect((await sheetFile(t.store.dir, "doc")).history[0].summary).toBe(`${"x".repeat(599)}…`);
+  });
+
+  it("makes the updated sheets the ones in play, and tells the table what changed", async () => {
+    const t = await wrapped(REWARDS);
+    const kira = t.session.snapshot().party.find((s) => s.id === "kira")!;
+    expect(kira.personal?.karma).toBe(4);
+    const notices = t.session.snapshot().transcript.filter((e) => e.kind === "system").map((e) => e.kind === "system" && e.text);
+    expect(notices[0]).toBe("After session 1, Kira: Karma 0 → 4; Nuyen 0 → 3,000; Gear is written as text, so + Medkit is in the history only; Contact Mr. Smith added (Loyalty 2, Connection 3); History: run 1 added");
+    expect(notices[1]).toBe("After session 1, Doc: History: run 1 added");
+  });
+
+  it("gives the GM's driver the updated sheets, so it is told them next time", async () => {
+    const refreshed: Array<readonly { id: string; personal?: { karma?: number } | undefined }[]> = [];
+    const driver: GmDriver = { ...wrapUpWith(REWARDS), refreshParty: async (party) => void refreshed.push(party) };
+    const t = await table(driver);
+    await t.store.saveParty([...t.session.party]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]!.find((s) => s.id === "kira")?.personal?.karma).toBe(4);
+  });
+
+  it("refuses the whole write-up, saving and logging nothing, if any part cannot be applied, and says which", async () => {
+    const t = await wrapped([{ characterId: "kira", nuyen: -50 }, { characterId: "doc", contacts: [{ name: "Fixer", loyalty: 1 }] }]);
+    expect(t.calls[0]).toEqual({ ok: false, text: "The session was not written up, because: Kira: Kira has 0 nuyen and cannot spend 50. Doc: Fixer is a new contact, so give both Loyalty and Connection." });
+    expect(t.session.snapshot().session.phase).toBe("open");
+    await expect(t.log()).rejects.toThrow();
+    expect((await sheetFile(t.store.dir, "kira")).history).toBeUndefined();
+  });
+
+  it("tells the table why a write-up was refused, once, since some reasons are not the GM's to fix", async () => {
+    const calls: Array<{ ok: boolean; text: string }> = [];
+    const driver: GmDriver = {
+      async takeTurn(input, ctx) {
+        if (!wrapping(input)) return;
+        calls.push(await ctx.tools.endSession({ ...WRITE_UP, rewards: [{ characterId: "kira", nuyen: -50 }] }));
+        calls.push(await ctx.tools.endSession({ ...WRITE_UP, rewards: [{ characterId: "kira", nuyen: -50 }] }));
+      },
+    };
+    const t = await table(driver);
+    await t.store.saveParty([...t.session.party]);
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    const told = t.session.snapshot().transcript.filter((e) => e.kind === "system" && e.text.startsWith("The session was not written up, because: Kira: Kira has 0 nuyen"));
+    expect(told).toHaveLength(1);
+    expect(calls.every((c) => !c.ok)).toBe(true);
+  });
+
+  it("refuses a character that is not at the table, and one given twice", async () => {
+    const t = await wrapped([{ characterId: "nobody", karma: 1 }]);
+    expect(t.calls[0]).toEqual({ ok: false, text: 'There is no character "nobody" at the table. The ids are kira, doc.' });
+    const twice = await wrapped([{ characterId: "kira", karma: 1 }, { characterId: "kira", karma: 2 }]);
+    expect(twice.calls[0]).toEqual({ ok: false, text: "kira is in the rewards twice. Give each character once." });
+  });
+
+  it("refuses more Karma or nuyen than one run can give, before anything is applied", async () => {
+    const t = await wrapped([{ characterId: "kira", karma: 31 }]);
+    expect(t.calls[0]).toMatchObject({ ok: false, text: expect.stringContaining("karma") });
+    expect((await wrapped([{ characterId: "kira", nuyen: 500_001 }])).calls[0]).toMatchObject({ ok: false });
+  });
+
+  it("keeps the Edge rank a character burned out of their sheet file, and in play", async () => {
+    const t = await table(wrapUpWith([]));
+    const [kira, doc] = t.session.party as [(typeof t.session.party)[0], (typeof t.session.party)[0]];
+    // As played: Kira has burned a point of Edge rank, so her sheet in play has one less than her file.
+    await t.store.saveParty([kira, doc]);
+    await t.store.saveState({ ...(await t.store.loadState() ?? { version: 1, opened: false, openRequested: false, turnCounter: 0, pending: [], results: [], pcs: [], npcs: [], healBudgets: [], combat: null, burned: {}, sessionNumber: 1, wrapUpRequested: false, ended: false, held: [] }), burned: { kira: 1 } });
+    await t.session.close();
+    const burned = await newSession(wrapUpWith([{ characterId: "kira", karma: 2 }]), { store: t.store, now: () => NOW, party: [{ ...kira, attributes: { ...kira.attributes, edge: kira.attributes.edge - 1 } }, doc] });
+    await burned.session.start();
+    await burned.session.whenIdle();
+    await burned.session.say("kira", "x");
+    await burned.session.whenIdle();
+    await burned.session.wrapUp();
+    await burned.session.whenIdle();
+    expect((await sheetFile(t.store.dir, "kira")).attributes.edge).toBe(kira.attributes.edge);
+    expect(burned.session.snapshot().party.find((s) => s.id === "kira")?.attributes.edge).toBe(kira.attributes.edge - 1);
+  });
+
+  it("ends the session even when a sheet cannot be saved, and tells the table", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const t = await table(wrapUpWith(REWARDS));
+    await t.store.saveParty([...t.session.party]);
+    await writeFile(join(t.store.dir, "characters", "history"), "a file where the copy folder should be");
+    await t.session.start();
+    await t.session.whenIdle();
+    await t.session.say("kira", "x");
+    await t.session.whenIdle();
+    await t.session.wrapUp();
+    await t.session.whenIdle();
+    expect(t.session.snapshot().session.phase).toBe("ended");
+    expect(await t.log()).toContain("## Session 1");
+    expect(t.session.snapshot().transcript.some((e) => e.kind === "system" && e.text.includes("sheet could not be saved"))).toBe(true);
+    expect((await sheetFile(t.store.dir, "kira")).history).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it("adds a second run after the first, numbered by the history", async () => {
+    const calls: Array<{ ok: boolean; text: string }> = [];
+    const t = await table(wrapUpWith([], calls));
+    await t.store.saveParty([...t.session.party]);
+    for (const mission of ["First.", "Second."]) {
+      await t.session.start(mission);
+      await t.session.whenIdle();
+      await t.session.say("kira", "x");
+      await t.session.whenIdle();
+      await t.session.wrapUp();
+      await t.session.whenIdle();
+    }
+    expect((await sheetFile(t.store.dir, "kira")).history.map((r: { run: number }) => r.run)).toEqual([1, 2]);
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe("recalling a character's history", () => {
+  async function withRuns(count: number) {
+    const runs = Array.from({ length: count }, (_, i) => ({ run: i + 1, date: `2081-04-${String(i + 1).padStart(2, "0")}`, summary: `Run ${i + 1} happened.`, campaign: "night-one", with: ["Doc"] }));
+    const runner = toolRunner();
+    const made = await newSession(runner.driver, { party: demoParty.map((s) => (s.id === "kira" ? { ...s, history: runs } : s)) });
+    return { ask: (input: object) => runner.run(made.session, (ctx) => ctx.tools.recall(input)) };
+  }
+
+  it("reads back the latest five runs, newest first, and counts the earlier ones", async () => {
+    const { ask } = await withRuns(8);
+    const reply = await ask({ what: "history", name: "Kira" });
+    expect(reply.ok).toBe(true);
+    expect(reply.text.split("\n")).toEqual([
+      "Kira's runs, newest first (5 of 8; 3 earlier not shown):",
+      "Run 8 in night-one (2081-04-08): Run 8 happened. With: Doc.",
+      "Run 7 in night-one (2081-04-07): Run 7 happened. With: Doc.",
+      "Run 6 in night-one (2081-04-06): Run 6 happened. With: Doc.",
+      "Run 5 in night-one (2081-04-05): Run 5 happened. With: Doc.",
+      "Run 4 in night-one (2081-04-04): Run 4 happened. With: Doc.",
+    ]);
+  });
+
+  it("gives as many as asked for, at most twenty", async () => {
+    const { ask } = await withRuns(30);
+    expect((await ask({ what: "history", name: "kira", last: 12 })).text.split("\n")).toHaveLength(13);
+    const most = await ask({ what: "history", name: "kira", last: 20 });
+    expect(most.text.split("\n")).toHaveLength(21);
+    expect(most.text).toContain("(20 of 30; 10 earlier not shown)");
+    expect((await ask({ what: "history", name: "kira", last: 21 })).ok).toBe(false);
+  });
+
+  it("is found by name in any capitals or by id, and says who is at the table when it is not found", async () => {
+    const { ask } = await withRuns(1);
+    expect((await ask({ what: "history", name: "KIRA" })).text).toContain("Kira's runs");
+    expect((await ask({ what: "history", name: "ki" })).text).toContain("Kira's runs");
+    expect(await ask({ what: "history", name: "Ana" })).toEqual({ ok: false, text: 'No player character called "Ana". At the table: Kira, Doc.' });
+    expect(await ask({ what: "history" })).toEqual({ ok: false, text: "Say which character: give their name." });
+  });
+
+  it("says so when a character has no runs yet", async () => {
+    const { ask } = await withRuns(0);
+    expect(await ask({ what: "history", name: "Doc" })).toEqual({ ok: true, text: "Doc has no runs in their history yet." });
+  });
+
+  it("tells a run's goal and what came of it when it has them", async () => {
+    const runner = toolRunner();
+    const full = { run: 1, date: "2081-04-01", campaign: "night-one", summary: "Carried a case.", goal: "Deliver it unopened.", with: ["Doc"], consequences: "Paid 3,000 nuyen." };
+    const made = await newSession(runner.driver, { party: demoParty.map((s) => (s.id === "kira" ? { ...s, history: [full] } : s)) });
+    const reply = await runner.run(made.session, (ctx) => ctx.tools.recall({ what: "history", name: "kira" }));
+    expect(reply.text.split("\n")[1]).toBe("Run 1 in night-one (2081-04-01): Carried a case. Goal: Deliver it unopened. With: Doc. Came of it: Paid 3,000 nuyen.");
+  });
+
+  it("still reads the session log for sessions, at most five at a time, the latest five oldest first", async () => {
+    const log = "# Session Log\n\n" + Array.from({ length: 7 }, (_, i) => `## Session ${i + 1} — 2026-03-0${i + 1}\n\nBody ${i + 1}.\n`).join("\n");
+    const runner = toolRunner();
+    const store = await tempStore();
+    await mkdir(store.dir, { recursive: true });
+    await writeFile(join(store.dir, MEMORY_FILES.log), log);
+    const made = await newSession(runner.driver, { store });
+    const reply = await runner.run(made.session, (ctx) => ctx.tools.recall({ what: "sessions", last: 20 }));
+    expect(reply.text.split("\n\n").map((s) => s.split("\n")[0])).toEqual(["Session 3 — 2026-03-03", "Session 4 — 2026-03-04", "Session 5 — 2026-03-05", "Session 6 — 2026-03-06", "Session 7 — 2026-03-07"]);
+  });
+
+  it("reads the session log with nothing in it", async () => {
+    const { ask } = await withRuns(0);
+    expect((await ask({ what: "sessions", last: 20 })).text).toBe("No sessions are logged yet.");
   });
 });

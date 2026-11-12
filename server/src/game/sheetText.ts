@@ -130,3 +130,21 @@ function history(sheet: CharacterSheet): string[] {
   const earlier = runs.length > RECENT_RUNS ? `; ${runs.length - RECENT_RUNS} earlier ${runs.length - RECENT_RUNS === 1 ? "run" : "runs"} not shown` : "";
   return [sentence(`Previous runs: ${latest.join("; ")}${earlier}`)];
 }
+
+/** A character's earlier runs read back to the GM, newest first, for `recall`. */
+export function historyRecall(sheets: readonly CharacterSheet[], ask: { name?: string | undefined; last?: number | undefined }): { ok: boolean; text: string } {
+  if (!ask.name) return { ok: false, text: "Say which character: give their name." };
+  const wanted = ask.name.trim().toLowerCase();
+  const sheet = sheets.find((s) => s.id === wanted || s.name.toLowerCase() === wanted) ?? sheets.find((s) => s.name.toLowerCase().includes(wanted));
+  if (!sheet) return { ok: false, text: `No player character called "${ask.name}". At the table: ${sheets.map((s) => s.name).join(", ")}.` };
+  const runs = [...(sheet.history ?? [])].sort((a, b) => b.run - a.run);
+  if (runs.length === 0) return { ok: true, text: `${sheet.name} has no runs in their history yet.` };
+  const shown = runs.slice(0, ask.last ?? RECENT_RUNS);
+  const earlier = runs.length - shown.length;
+  const header = `${sheet.name}'s runs, newest first${earlier > 0 ? ` (${shown.length} of ${runs.length}; ${earlier} earlier not shown)` : ""}:`;
+  const lines = shown.map(
+    (r) =>
+      `Run ${r.run}${r.campaign ? ` in ${r.campaign}` : ""} (${r.date}): ${r.summary}${r.goal ? ` Goal: ${r.goal}` : ""}${r.with?.length ? ` With: ${r.with.join(", ")}.` : ""}${r.consequences ? ` Came of it: ${r.consequences}` : ""}`,
+  );
+  return { ok: true, text: [header, ...lines].join("\n") };
+}

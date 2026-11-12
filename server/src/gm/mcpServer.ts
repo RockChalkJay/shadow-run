@@ -218,7 +218,8 @@ function buildServer(handlers: GmToolHandlers): McpServer {
     {
       description:
         "Read the campaign's notes back before you bring someone or something back: `what` is npc (give their `name`), npcs " +
-        "(everyone noted), threads, or sessions (the last `last` entries of the session log, 1 to 5). Use it instead of " +
+        "(everyone noted), threads, sessions (the last `last` entries of the session log, 1 to 5), or history (a player " +
+        "character's earlier runs, newest first: give their `name` or id, and `last` up to 20, 5 by default). Use it instead of " +
         "guessing at what happened earlier, and keep what it says to yourself.",
       inputSchema: RecallInput.shape,
     },
@@ -232,8 +233,16 @@ function buildServer(handlers: GmToolHandlers): McpServer {
         "Write up the session in the campaign's log. Use it only when the system tells you the table is wrapping up the " +
         "session, after a short closing beat, and call it once: a summary of what the characters did and learned, who they " +
         "met and what changed, the date in the story, the key rolls and how they came out, and what it cost or earned them " +
-        "(karma, nuyen, gear, condition, notoriety). Update the notes with note_npc and note_thread first. The session is " +
-        "over once you have called it. Never mention the log to the players.",
+        "(karma, nuyen, gear, condition, notoriety). Update the notes with note_npc and note_thread first. Put what each " +
+        "player character earned in `rewards`, one entry per character with their characterId: Karma (the core rules suggest 1 or 2 " +
+        "for a session with little progress, 3 or 4 for a significant one, 5 or 6 for an excellent one or a finished run, more only " +
+        "rarely), nuyen gained or spent (the book's unit is 5,000, a month of a Middle lifestyle: a simple night's work pays less, a " +
+        "long dangerous run two or three months, a huge score six figures), gear gained or lost by name, contacts made or changed " +
+        "(a new one needs Loyalty and Connection), and their own part in the run in `summary`, `goal` and `consequences`. Give only " +
+        "what the story earned. The system adds the run to every character's history, saves the changes to their sheets, and refuses " +
+        "the whole call, telling you why, if any part cannot be applied (one run is at most 30 Karma and 500,000 nuyen, and nuyen " +
+        "cannot go below 0), so correct it and call again. The session is over once you have called it. Never mention the log or " +
+        "the sheets to the players.",
       inputSchema: EndSessionInput.shape,
     },
     async (input) => asResult(await handlers.endSession(input)),

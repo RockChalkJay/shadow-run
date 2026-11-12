@@ -9,6 +9,7 @@ import {
   NoteThreadInput,
   NpcRollInput,
   RecallInput,
+  type RewardInput,
   StartCombatInput,
   RollRequestInput,
   type CharacterRef,
@@ -34,7 +35,11 @@ import {
   type Weapon,
 } from "@shadow-run/shared";
 import { z } from "zod";
+import { basename } from "node:path";
 import { CampaignMemory, memoryBrief, npcLine, recallText } from "./campaignMemory.js";
+import { applyRunUpdate, describeChanges, saveSheetWithCopy, type RunUpdate } from "./characterUpdate.js";
+import { withBurnedEdge } from "./burned.js";
+import { historyRecall } from "./sheetText.js";
 import type { GmDriver, GmTools, GmTurnInput, ToolReply } from "../gm/driver.js";
 import { restingFrom } from "../gm/limits.js";
 import { attackDamage, burnEdge, COMPOSURE_THRESHOLD, cryptoD6, cryptoFlip, edgeFromRatings, endConfrontation, findEdgeEntry, gainEdge, loseEdge, spendEdge, startRound, startSession, type EdgeState, type Flip, defaultEdgeCatalog, defaultRuleset, groupBonusDice, screenRules, passedRating, damageAfterResistance, damageResistancePool, healingAutoHit, healingThreshold, hitsPerBox, isTreatment, METHOD_NAMES, rollPool, simpleTest, type D6, type Ruleset } from "../rules/index.js";
@@ -927,29 +932,110 @@ export class GameSession {
     }
   }
 
-  /** The GM's write-up of the session, which is only asked for when the table wraps it up. It goes in the log; the session ends when the turn does. */
+  /**
+   * The GM's write-up of the session, which is only asked for when the table wraps it up. It goes in the log, and what the run
+   * earned and changed goes on each player character's sheet (with a dated copy of the old one saved first), and the run goes in
+   * every character's history. If anything cannot be applied, nothing is: the GM is told why and can write it up again. The session
+   * ends when the turn does.
+   */
   private async endSession(input: unknown): Promise<ToolReply> {
     if (!this.wrapping) return { ok: false, text: "The table has not asked to wrap up the session, so do not write it up now." };
     if (this.wrapping.logged) return { ok: false, text: `Session ${this.wrapping.logged.number} is already written up.` };
     const parsed = EndSessionInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
-    const { summary, fictionDate, rolls, consequences } = parsed.data;
+    const { summary, fictionDate, rolls, consequences, rewards = [] } = parsed.data;
+
+    const unknown = rewards.filter((r) => !this.member(r.characterId)).map((r) => r.characterId);
+    if (unknown.length > 0) return { ok: false, text: `There is no character ${unknown.map((id) => `"${id}"`).join(", ")} at the table. The ids are ${this.sheets.map((s) => s.id).join(", ")}.` };
+    const twice = rewards.find((r, i) => rewards.findIndex((other) => other.characterId === r.characterId) !== i);
+    if (twice) return { ok: false, text: `${twice.characterId} is in the rewards twice. Give each character once.` };
+
+    const date = localDate(this.opts.now?.() ?? new Date());
+    let planned: Array<{ sheet: CharacterSheet; changes: string[] }>;
     try {
-      const number = await this.memory.logSession({ date: localDate(this.opts.now?.() ?? new Date()), summary, ...(fictionDate !== undefined && { fictionDate }), ...(rolls !== undefined && { rolls }), ...(consequences !== undefined && { consequences }) });
-      this.wrapping.logged = { number, summary };
-      return { ok: true, text: `Session ${number} is written up and over. Give the players one last line if you have not already, and nothing more.` };
+      planned = await this.planRewards({ rewards, summary, date });
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      // The table is told too, once, since some of these (a sheet that is full) are not the GM's to fix.
+      if (!this.reportedMemoryProblems.has(text)) {
+        this.reportedMemoryProblems.add(text);
+        await this.record({ kind: "system", text });
+      }
+      return { ok: false, text };
+    }
+
+    let number: number;
+    try {
+      number = await this.memory.logSession({ date, summary, ...(fictionDate !== undefined && { fictionDate }), ...(rolls !== undefined && { rolls }), ...(consequences !== undefined && { consequences }) });
     } catch (err) {
       await this.memoryProblem(err);
       return { ok: false, text: "The session log cannot be written just now. Do not mention this to the players." };
     }
+    // The log is the commit: from here the session is over, whether or not the sheets can be saved.
+    this.wrapping.logged = { number, summary };
+    await this.applyRewards(planned, date, number);
+    return { ok: true, text: `Session ${number} is written up and over. Give the players one last line if you have not already, and nothing more.` };
+  }
+
+  /** The sheets after the run, worked out for every player character without saving anything; throws the GM's refusal if any part cannot be applied. */
+  private async planRewards(opts: { rewards: RewardInput[]; summary: string; date: string }): Promise<Array<{ sheet: CharacterSheet; changes: string[] }>> {
+    // Updates are made to the sheets as they are on disk, without the Edge rank burned, which is taken off whenever they are loaded.
+    const onDisk = new Map((await this.opts.store.loadParty().catch(() => null))?.map((sheet) => [sheet.id, sheet]) ?? []);
+    const campaign = basename(this.opts.store.dir).slice(0, 60);
+    const problems: string[] = [];
+    const planned: Array<{ sheet: CharacterSheet; changes: string[] }> = [];
+    for (const member of this.sheets) {
+      const reward = opts.rewards.find((r) => r.characterId === member.id);
+      const base = onDisk.get(member.id) ?? { ...member, attributes: { ...member.attributes, edge: member.attributes.edge + (this.burned[member.id] ?? 0) } };
+      const update: RunUpdate = {
+        ...(reward?.karma !== undefined && { karma: reward.karma }),
+        ...(reward?.nuyen !== undefined && { nuyen: reward.nuyen }),
+        ...(reward?.gear && { gear: { ...(reward.gear.add && { add: reward.gear.add }), ...(reward.gear.remove && { remove: reward.gear.remove }) } }),
+        ...(reward?.contacts && { contacts: reward.contacts.map((c) => ({ name: c.name, ...(c.loyalty !== undefined && { loyalty: c.loyalty }), ...(c.connection !== undefined && { connection: c.connection }), ...(c.notes !== undefined && { notes: c.notes }) })) }),
+        ...(reward?.note && { note: reward.note }),
+        history: {
+          summary: reward?.summary ?? (opts.summary.length > 600 ? `${opts.summary.slice(0, 599)}…` : opts.summary),
+          ...(reward?.goal && { goal: reward.goal }),
+          with: this.sheets.filter((s) => s.id !== member.id).map((s) => s.name).slice(0, 12),
+          campaign,
+          ...(reward?.consequences && { consequences: reward.consequences }),
+        },
+      };
+      const applied = applyRunUpdate(base, update, { date: opts.date });
+      if (applied.ok) planned.push({ sheet: applied.sheet, changes: applied.changes });
+      else problems.push(`${member.name}: ${applied.error}`);
+    }
+    if (problems.length > 0) throw new Error(`The session was not written up, because: ${problems.join(" ")}`);
+    return planned;
+  }
+
+  /** Saves the sheets, each after a dated copy of the old one, makes them the sheets in play, tells the GM's driver and tells the table what changed. */
+  private async applyRewards(planned: Array<{ sheet: CharacterSheet; changes: string[] }>, date: string, number: number): Promise<void> {
+    const saved: CharacterSheet[] = [];
+    for (const { sheet, changes } of planned) {
+      try {
+        await saveSheetWithCopy({ dir: this.opts.store.dir, sheet, date });
+      } catch (err) {
+        await this.memoryProblem(new Error(`${sheet.name}'s sheet could not be saved, so what the run changed for them is lost: ${err instanceof Error ? err.message : err}`));
+        continue;
+      }
+      saved.push(sheet);
+      await this.record({ kind: "system", text: `After session ${number}, ${describeChanges(sheet.name, changes)}` });
+    }
+    if (saved.length === 0) return;
+    const played = withBurnedEdge(saved, this.burned);
+    this.sheets = this.sheets.map((sheet) => played.find((p) => p.id === sheet.id) ?? sheet);
+    await this.opts.driver.refreshParty?.(this.sheets).catch((err) => console.warn(`The GM could not be given the updated sheets: ${err instanceof Error ? err.message : err}`));
   }
 
   private async recall(input: unknown): Promise<ToolReply> {
     const parsed = RecallInput.safeParse(input);
     if (!parsed.success) return { ok: false, text: z.prettifyError(parsed.error) };
     try {
+      const { what, name, last } = parsed.data;
+      if (what === "history") return historyRecall(this.sheets, { name, last });
       const [threads, npcs, sessions] = await Promise.all([this.memory.threads(), this.memory.npcs(), this.memory.sessions()]);
-      return recallText(parsed.data, { threads, npcs, sessions });
+      return recallText({ what, name, last }, { threads, npcs, sessions });
     } catch (err) {
       await this.memoryProblem(err);
       return { ok: false, text: NOTES_UNAVAILABLE };
